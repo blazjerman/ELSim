@@ -4,12 +4,14 @@
 Linux-only diagnostic. This measures browser process memory, not ELSim-only
 allocation. The worker-profile log marks the end of the ngspice solve/result
 transfer; later samples include result validation and plot/cursor interaction.
+Use --repeats to collect a bounded same-host range and median for each phase.
 """
 
 import argparse
 import json
 import os
 import queue
+import statistics
 import subprocess
 import sys
 import threading
@@ -86,20 +88,11 @@ def firefox_memory(root_pid):
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plot-windows", type=int, default=8, choices=range(1, 9))
-    parser.add_argument("--interval-ms", type=int, default=100)
-    args = parser.parse_args()
-    if not Path("/proc/self/smaps_rollup").exists():
-        parser.error("this sampler requires Linux /proc with smaps_rollup support")
-    if args.interval_ms < 20:
-        parser.error("--interval-ms must be at least 20 to limit sampler overhead")
-
+def run_once(plot_windows, interval_ms):
     env = os.environ.copy()
     env["VITE_ELSIM_PROFILE"] = "1"
     env["ELSIM_PERF_MEMORY_PHASES"] = "1"
-    env["ELSIM_PERF_PLOT_WINDOWS"] = str(args.plot_windows)
+    env["ELSIM_PERF_PLOT_WINDOWS"] = str(plot_windows)
     env["ELSIM_PERF_HOLD_MS"] = "2000"
     command = [
         "npx", "playwright", "test", "--config", "playwright.performance.config.ts",
@@ -125,7 +118,7 @@ def main():
     overall = {"pssMiB": 0.0, "rssMiB": 0.0, "samples": 0}
     wasm_bytes = None
     output_closed = False
-    interval = args.interval_ms / 1000
+    interval = interval_ms / 1000
 
     def record_memory_sample(sample_phase):
         memory = firefox_memory(process.pid)
@@ -174,11 +167,11 @@ def main():
 
     return_code = process.wait()
     missing_markers = {"beforeRun", "workerProfile", "resultReady"} - observed_markers
-    print(json.dumps({
+    report = {
         "benchmark": "firefox-million-sample-process-memory-v2",
-        "plotWindows": args.plot_windows,
+        "plotWindows": plot_windows,
         "tracesPerWindow": 4,
-        "sampleIntervalMs": args.interval_ms,
+        "sampleIntervalMs": interval_ms,
         "wasmLinearMemoryBytes": wasm_bytes,
         "phasePeaks": peaks,
         "overallPeak": overall,
@@ -194,8 +187,73 @@ def main():
             "This local run does not provide a second-hardware baseline.",
         ],
         "exitCode": return_code or (3 if missing_markers else 0),
-    }, indent=2))
-    return return_code or (3 if missing_markers else 0)
+    }
+    print(json.dumps(report, indent=2))
+    return report
+
+
+def summarize_peak(reports, phase, key):
+    values = [report["phasePeaks"][phase][key] for report in reports]
+    return {
+        "median": round(statistics.median(values), 1),
+        "min": min(values),
+        "max": max(values),
+        "runs": len(values),
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--plot-windows", type=int, default=8, choices=range(1, 9))
+    parser.add_argument("--interval-ms", type=int, default=100)
+    parser.add_argument("--repeats", type=int, default=1, choices=range(1, 6), help="run the focused Firefox profile 1–5 times and summarize phase peaks")
+    args = parser.parse_args()
+    if not Path("/proc/self/smaps_rollup").exists():
+        parser.error("this sampler requires Linux /proc with smaps_rollup support")
+    if args.interval_ms < 20:
+        parser.error("--interval-ms must be at least 20 to limit sampler overhead")
+
+    reports = []
+    for run_index in range(args.repeats):
+        if args.repeats > 1:
+            print(f"Firefox memory profile {run_index + 1}/{args.repeats}", flush=True)
+        report = run_once(args.plot_windows, args.interval_ms)
+        reports.append(report)
+        if report["exitCode"]:
+            return report["exitCode"]
+
+    if args.repeats > 1:
+        phases = ["startup", "solverAndResultTransfer", "resultValidationAndTransfer", "plotValidationAndInteraction"]
+        summary = {
+            "benchmark": "firefox-million-sample-process-memory-repeat-v1",
+            "plotWindows": args.plot_windows,
+            "tracesPerWindow": 4,
+            "repeatCount": len(reports),
+            "sampleIntervalMs": args.interval_ms,
+            "wasmLinearMemoryBytes": sorted(report["wasmLinearMemoryBytes"] for report in reports),
+            "phasePeakMiB": {
+                phase: {key: summarize_peak(reports, phase, key) for key in ("pssMiB", "rssMiB")}
+                for phase in phases
+            },
+            "overallPeakMiB": {
+                key: {
+                    "median": round(statistics.median(report["overallPeak"][key] for report in reports), 1),
+                    "min": min(report["overallPeak"][key] for report in reports),
+                    "max": max(report["overallPeak"][key] for report in reports),
+                    "runs": len(reports),
+                }
+                for key in ("pssMiB", "rssMiB")
+            },
+            "allPhaseMarkersObserved": all(not report["missingPhaseMarkers"] for report in reports),
+            "limitations": [
+                "Each run starts a fresh Playwright/Firefox process tree but shares the same host and runtime.",
+                "PSS/RSS sum Firefox and its descendants, not ELSim-only allocations.",
+                "WASM linear-memory capacity is not the same as peak process memory.",
+                "Same-host repeats do not provide a second-hardware baseline.",
+            ],
+        }
+        print(json.dumps(summary, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
