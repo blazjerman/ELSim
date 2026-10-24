@@ -1011,6 +1011,18 @@ test('keeps the last duplicate .MODEL parameter value, matching ngspice', () => 
   assert.equal(parsed.modelText, source, 'retain the original model card unchanged for ngspice')
 })
 
+test('parses ngspice punctuation-bearing .MODEL parameter identifiers', () => {
+  const parsed = parseSubcircuitLibrary('.MODEL DPUNCT D(IS#=1n GAIN[1]=2 FOO%=3 CUSTOM$=4)')
+  assert.deepEqual(parsed.models[0].parameters, [
+    { name: 'IS#', defaultValue: '1n' },
+    { name: 'GAIN[1]', defaultValue: '2' },
+    { name: 'FOO%', defaultValue: '3' },
+    { name: 'CUSTOM$', defaultValue: '4' },
+  ])
+  assert.equal(parsed.models[0].unparsedParameters, undefined)
+  assert.equal(parsed.modelText, '.MODEL DPUNCT D(IS#=1n GAIN[1]=2 FOO%=3 CUSTOM$=4)')
+})
+
 test('indexes large native model cards and conditional variants without changing parameter order', () => {
   const count = 1200
   const defaults = Array.from({ length: count }, (_, index) => `P${index}=${index}`).join(' ')

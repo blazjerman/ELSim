@@ -586,7 +586,7 @@ export function parseModelCard(text: string, line: LogicalLine, scope?: string, 
     ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
   const name = modelHeader?.[1], type = akoHeader?.[3] ?? modelHeader?.[2]
   if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
-  const rawParameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/\$[^\r\n]*$/, '').trim()
+  const rawParameterSource = withoutInlineComment(text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0))).trim()
   const parameterSource = rawParameterSource.replace(/^\s*\(/, '').replace(/\)\s*$/, '')
   const vdmosChannelFlags = type.toLowerCase() === 'vdmos' ? [...parameterSource.matchAll(/\b(pchan|nchan)\b/gi)] : []
   const vdmosChannel = type.toLowerCase() === 'vdmos'
@@ -594,7 +594,9 @@ export function parseModelCard(text: string, line: LogicalLine, scope?: string, 
     : undefined
   const assignmentsByName = new Map<string, { name: string; sourceValue: string; sourceIndex: number; parsed?: SubcircuitParameter }>()
   let assignmentIndex = 0
-  for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g)) {
+  // Keep model-card parameter names in the same native ngspice identifier
+  // grammar as .PARAM and .FUNC names, including punctuation-bearing names.
+  for (const match of parameterSource.matchAll(/([A-Za-z][A-Za-z0-9!#$%_\[\]]*)\s*=\s*(\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g)) {
     if (/\bvec\s*\(\s*"/i.test(match[2])) {
       throw new Error(`Line ${line.start}: quoted vec("name") references are not supported in .MODEL values by the browser ngspice engine. Use vec(name) when the vector name is a bare identifier.`)
     }
@@ -610,9 +612,9 @@ export function parseModelCard(text: string, line: LogicalLine, scope?: string, 
   const assignments = [...assignmentsByName.values()].sort((left, right) => left.sourceIndex - right.sourceIndex)
   const parameters = assignments.flatMap((assignment) => assignment.parsed ? [assignment.parsed] : [])
   const unparsedParameters = assignments.flatMap((assignment) => assignment.parsed ? [] : [{ name: assignment.name, sourceValue: assignment.sourceValue }])
-  const rawAssignmentNames = [...parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=/g)].map((match) => match[1].toLowerCase())
+  const rawAssignmentNames = [...parameterSource.matchAll(/([A-Za-z][A-Za-z0-9!#$%_\[\]]*)\s*=/g)].map((match) => match[1].toLowerCase())
   const uniqueAssignments = new Set(rawAssignmentNames).size
-  let residualPayload = rawParameterSource.replace(/[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g, '')
+  let residualPayload = rawParameterSource.replace(/[A-Za-z][A-Za-z0-9!#$%_\[\]]*\s*=\s*(?:\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g, '')
   if (type.toLowerCase() === 'vdmos') residualPayload = residualPayload.replace(/\b(?:pchan|nchan)\b/gi, '')
   const safeAkoPayload = vdmosChannelFlags.length <= 1 && residualPayload.replace(/[\s(),+]/g, '') === ''
   const definition: SpiceModelDefinition = { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), ...(vdmosChannelFlags.length ? { channelExplicit: true } : {}), parameters, ...(unparsedParameters.length ? { unparsedParameters } : {}), ...(akoHeader ? { akoBaseName: akoHeader[2] } : {}), ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
