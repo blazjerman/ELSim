@@ -608,7 +608,7 @@ export function parseModelCard(text: string, line: LogicalLine, scope?: string, 
   // grammar as .PARAM and .FUNC names, including punctuation-bearing names.
   for (const match of parameterSource.matchAll(/([A-Za-z][A-Za-z0-9!#$%_\[\]]*)\s*=\s*(\{[^{}]*\}|"(?:\\.|[^"\\\r\n])*"|'[^']*'|[^\s,)]+)/g)) {
     if (/\bvec\s*\(\s*"/i.test(match[2])) {
-      throw new Error(`Line ${line.start}: quoted vec("name") references are not supported in .MODEL values by the browser ngspice engine. Use vec(name) when the vector name is a bare identifier.`)
+      throw new Error(`Line ${line.start}: quoted vec("name") references are not supported in imported .MODEL values by the browser ngspice runtime. They may silently fall back to a device default instead of resolving the requested vector; replace this only with a value whose intended result is clear and supported.`)
     }
     const value = match[2].replace(/^\{([\s\S]*)\}$|^'([\s\S]*)'$/, (_whole, braced: string | undefined, quoted: string | undefined) => braced ?? quoted ?? _whole)
     const parsed = isSafeSubcircuitParameterValue(match[2], functions)

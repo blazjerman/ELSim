@@ -2380,6 +2380,21 @@ test('model importer explains word-form ngspice operators unsupported by the bro
   await expect(page.getByRole('button', { name: 'Remove library file word-operators.lib' })).toHaveCount(0)
 })
 
+test('model importer warns that quoted vec values can silently use device defaults', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'quoted-vector.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.MODEL RUSER R(R={vec("v(in)")})'),
+  })
+  const error = page.locator('.toast[role="status"]')
+  await expect(error).toContainText('quoted vec("name") references are not supported in imported .MODEL values')
+  await expect(error).toContainText('They may silently fall back to a device default instead of resolving the requested vector')
+  await expect(error).toContainText('replace this only with a value whose intended result is clear and supported')
+  await expect(page.getByRole('button', { name: 'Remove library file quoted-vector.lib' })).toHaveCount(0)
+})
+
 test('model importer preserves polarity markers in IC pin names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')

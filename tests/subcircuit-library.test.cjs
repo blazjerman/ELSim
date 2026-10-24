@@ -286,7 +286,7 @@ test('retains ngspice interpreter functions in imported .MODEL parameters', () =
   const expression = 'vec(pi)*1p+var(foo)*1p'
   const parsed = parseSubcircuitLibrary(`.MODEL DFAST D(IS={${expression}})\n`)
   assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: expression, defaultIsExpression: true }])
-  assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(IS={vec("pi")*1p})\n'), /Line 1: quoted vec\("name"\) references are not supported in \.MODEL values/)
+  assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(IS={vec("pi")*1p})\n'), /Line 1: quoted vec\("name"\) references are not supported in imported \.MODEL values by the browser ngspice runtime\. They may silently fall back to a device default instead of resolving the requested vector/)
 })
 
 test('rejects ground node zero as an imported subcircuit external pin', () => {
