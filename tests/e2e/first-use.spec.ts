@@ -14638,6 +14638,29 @@ test('opening a project asks before replacing the current circuit', async ({ pag
   await expect(page.getByText('Opened Imported round-trip design')).toBeVisible()
 })
 
+test('opening a project explains unsupported native block parameter names and preserves the current circuit', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  const originalName = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)
+  const incompatibleProject = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.name = 'Unsupported block parameter example'
+    project.sheets[0].parameters = [{ id: 'gain-param', name: 'GAIN#', defaultValue: '2' }]
+    return project
+  })
+
+  await page.locator('input[accept^=".elsim,.json"]').setInputFiles({
+    name: 'unsupported-block-parameter.elsim.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(incompatibleProject)),
+  })
+
+  await expect(page.locator('.toast')).toContainText('block parameter GAIN# uses punctuation')
+  await expect(page.locator('.toast')).toContainText('bundled browser ngspice 47 runtime cannot parse')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)).toBe(originalName)
+  await expect(page.locator('.project-title')).toHaveText(originalName)
+})
+
 test('LTspice export preview gates unknown-license model ZIPs and reports blockers', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const content = '.MODEL USER_D D(Is=1e-14)\n'
