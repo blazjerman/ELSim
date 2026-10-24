@@ -506,6 +506,26 @@ test('optional ngspice convergence controls validate and emit independent solver
   }
 })
 
+test('ngspice iteration limits are analysis-aware positive integers', () => {
+  const project = createStarterProject()
+  project.simulation.transientIterationLimit = '20'
+  project.simulation.dcIterationLimit = '120'
+  project.simulation.dcTransferIterationLimit = '60'
+  let artifact = createNetlistArtifact(validateProject(project))
+  assert.match(artifact.text, /^\.options itl1=120$/mi)
+  assert.match(artifact.text, /^\.options itl4=20$/mi)
+  assert.doesNotMatch(artifact.text, /^\.options itl2=/mi)
+  project.simulation.analysis = 'dc'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.match(artifact.text, /^\.options itl2=60$/mi)
+  assert.doesNotMatch(artifact.text, /^\.options itl4=/mi)
+  for (const field of ['dcIterationLimit', 'dcTransferIterationLimit', 'transientIterationLimit']) {
+    project.simulation[field] = '1.5'
+    assert.throws(() => validateProject(project), /must be an integer from 1 to 1000000/i)
+    assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === `analysis:${field}`))
+  }
+})
+
 test('transient integration method defaults to ngspice and can opt into trapezoidal or Gear', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options method=/mi)

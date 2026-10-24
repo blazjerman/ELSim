@@ -172,7 +172,7 @@ export type Project = {
   symbolAssets?: SymbolAsset[]
   importedSchematicSource?: LtspiceSchematicSource
   importedChildSchematicSources?: LtspiceSchematicSource[]
-  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; startSavingTime?: string; temperature?: string; nominalTemperature?: string; relativeTolerance?: string; absoluteCurrentTolerance?: string; absoluteVoltageTolerance?: string; minimumConductance?: string; shuntResistance?: string; shuntCapacitance?: string; integrationMethod?: 'trap' | 'gear'; integrationMaxOrder?: number; skipAcOperatingPoint?: boolean; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; startSavingTime?: string; temperature?: string; nominalTemperature?: string; relativeTolerance?: string; absoluteCurrentTolerance?: string; absoluteVoltageTolerance?: string; minimumConductance?: string; dcIterationLimit?: string; dcTransferIterationLimit?: string; transientIterationLimit?: string; shuntResistance?: string; shuntCapacitance?: string; integrationMethod?: 'trap' | 'gear'; integrationMaxOrder?: number; skipAcOperatingPoint?: boolean; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
   rootSheetId: string
   activeSheetId: string
   sheets: ProjectSheet[]
@@ -705,6 +705,10 @@ export function validateProject(input: unknown): Project {
   for (const [field, label] of [['relativeTolerance', 'relative tolerance'], ['absoluteCurrentTolerance', 'absolute current tolerance'], ['absoluteVoltageTolerance', 'absolute voltage tolerance'], ['minimumConductance', 'minimum conductance']] as const) {
     const value = simulation[field]
     if (value !== undefined && (typeof value !== 'string' || value.length > 64 || !/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) || !Number.isFinite(Number(value)) || Number(value) <= 0)) throw new Error(`Ngspice ${label} must be a positive finite number.`)
+  }
+  for (const [field, label] of [['dcIterationLimit', 'DC iteration limit'], ['dcTransferIterationLimit', 'DC transfer-curve iteration limit'], ['transientIterationLimit', 'transient per-timepoint iteration limit']] as const) {
+    const value = simulation[field]
+    if (value !== undefined && (typeof value !== 'string' || !/^\d+$/.test(value.trim()) || !Number.isSafeInteger(Number(value)) || Number(value) < 1 || Number(value) > 1_000_000)) throw new Error(`Ngspice ${label} must be an integer from 1 to 1000000.`)
   }
   if (simulation.shuntResistance !== undefined) {
     const shuntResistance = typeof simulation.shuntResistance === 'string' && simulation.shuntResistance.length <= 64 ? componentMagnitude(simulation.shuntResistance, 'resistor') : null

@@ -365,6 +365,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.simulation.properties.shuntResistance.maxLength, 64)
   assert.equal(schema.$defs.simulation.properties.nominalTemperature.maxLength, 64)
   for (const name of ['relativeTolerance', 'absoluteCurrentTolerance', 'absoluteVoltageTolerance', 'minimumConductance']) assert.equal(schema.$defs.simulation.properties[name].maxLength, 64)
+  for (const name of ['dcIterationLimit', 'dcTransferIterationLimit', 'transientIterationLimit']) assert.equal(schema.$defs.simulation.properties[name].pattern, '^\\s*[0-9]+\\s*$')
   assert.equal(schema.$defs.simulation.properties.shuntCapacitance.maxLength, 64)
   assert.deepEqual(schema.$defs.simulation.properties.integrationMethod.enum, ['trap', 'gear'])
   assert.equal(schema.$defs.simulation.properties.integrationMaxOrder.minimum, 2)

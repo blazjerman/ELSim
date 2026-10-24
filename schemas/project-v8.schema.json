@@ -1333,10 +1333,13 @@
           "maxLength": 64,
           "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$"
         },
-        "relativeTolerance": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?$" },
-        "absoluteCurrentTolerance": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?$" },
-        "absoluteVoltageTolerance": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?$" },
-        "minimumConductance": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?$" },
+        "relativeTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "absoluteCurrentTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "absoluteVoltageTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "minimumConductance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "dcIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "dcTransferIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "transientIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "shuntResistance": {
           "type": "string",
           "minLength": 1,

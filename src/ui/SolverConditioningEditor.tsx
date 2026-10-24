@@ -9,18 +9,21 @@ type NumericSettingProps = {
   placeholder?: string
   hint: string
   example: string
+  integer?: boolean
   onChange: (value?: string) => void
 }
 
-function NumericSetting({ label, ariaLabel, dataSetting, value, placeholder, hint, example, onChange }: NumericSettingProps) {
+function NumericSetting({ label, ariaLabel, dataSetting, value, placeholder, hint, example, integer = false, onChange }: NumericSettingProps) {
   const text = value?.trim() ?? ''
-  const valid = !text || (/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text) && Number.isFinite(Number(text)) && Number(text) > 0)
+  const valid = !text || (integer
+    ? /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) && Number(text) >= 1 && Number(text) <= 1_000_000
+    : /^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text) && Number.isFinite(Number(text)) && Number(text) > 0)
   const errorId = `error-${dataSetting}`
   const hintId = `hint-${dataSetting}`
   return <label className="field-label">
     {label}
     <input data-analysis-setting={dataSetting} aria-label={ariaLabel} aria-invalid={!valid} aria-describedby={!valid ? errorId : hintId} value={value ?? ''} placeholder={placeholder ?? 'Ngspice default'} onChange={(event) => onChange(event.target.value || undefined)} />
-    {!valid && <small id={errorId} className="field-error" role="alert">Enter a positive finite number, such as {example}, or leave blank for ngspice’s default.</small>}
+    {!valid && <small id={errorId} className="field-error" role="alert">{integer ? 'Enter an integer from 1 to 1000000' : 'Enter a positive finite number'}, such as {example}, or leave blank for ngspice’s default.</small>}
     <small id={hintId} className="field-hint">{hint}</small>
   </label>
 }
@@ -33,6 +36,9 @@ export default function SolverConditioningEditor({
   absoluteCurrentTolerance,
   absoluteVoltageTolerance,
   minimumConductance,
+  dcIterationLimit,
+  dcTransferIterationLimit,
+  transientIterationLimit,
   integrationMethod,
   integrationMaxOrder,
   skipAcOperatingPoint,
@@ -44,6 +50,9 @@ export default function SolverConditioningEditor({
   onAbsoluteCurrentToleranceChange,
   onAbsoluteVoltageToleranceChange,
   onMinimumConductanceChange,
+  onDcIterationLimitChange,
+  onDcTransferIterationLimitChange,
+  onTransientIterationLimitChange,
   onIntegrationMethodChange,
   onIntegrationMaxOrderChange,
   onSkipAcOperatingPointChange,
@@ -55,6 +64,9 @@ export default function SolverConditioningEditor({
   absoluteCurrentTolerance?: string
   absoluteVoltageTolerance?: string
   minimumConductance?: string
+  dcIterationLimit?: string
+  dcTransferIterationLimit?: string
+  transientIterationLimit?: string
   integrationMethod?: 'trap' | 'gear'
   integrationMaxOrder?: number
   skipAcOperatingPoint?: boolean
@@ -66,6 +78,9 @@ export default function SolverConditioningEditor({
   onAbsoluteCurrentToleranceChange: (value?: string) => void
   onAbsoluteVoltageToleranceChange: (value?: string) => void
   onMinimumConductanceChange: (value?: string) => void
+  onDcIterationLimitChange: (value?: string) => void
+  onDcTransferIterationLimitChange: (value?: string) => void
+  onTransientIterationLimitChange: (value?: string) => void
   onIntegrationMethodChange: (value?: 'trap' | 'gear') => void
   onIntegrationMaxOrderChange: (value?: number) => void
   onSkipAcOperatingPointChange: (value: boolean) => void
@@ -110,6 +125,12 @@ export default function SolverConditioningEditor({
       <NumericSetting label="Absolute current tolerance (ABSTOL)" ariaLabel="Absolute current convergence tolerance" dataSetting="absoluteCurrentTolerance" value={absoluteCurrentTolerance} example="1e-12" hint="Absolute error limit for nonlinear device currents, in amperes. Ngspice default: 1e-12 A." onChange={onAbsoluteCurrentToleranceChange} />
       <NumericSetting label="Absolute voltage tolerance (VNTOL)" ariaLabel="Absolute voltage convergence tolerance" dataSetting="absoluteVoltageTolerance" value={absoluteVoltageTolerance} example="1e-6" hint="Absolute error limit for node voltages, in volts. Ngspice default: 1e-6 V." onChange={onAbsoluteVoltageToleranceChange} />
       <NumericSetting label="Minimum conductance (GMIN)" ariaLabel="Minimum conductance" dataSetting="minimumConductance" value={minimumConductance} example="1e-12" hint="Minimum conductance used by ngspice to help nonlinear devices converge, in siemens. Ngspice default: 1e-12 S." onChange={onMinimumConductanceChange} />
+    </details>
+    <details className="solver-iteration-settings"><summary>Iteration limits (advanced)</summary>
+      <p className="field-hint">Raising a limit can let a difficult circuit continue iterating longer, but may increase run time. Blank keeps ngspice defaults.</p>
+      <NumericSetting label="DC solution iterations (ITL1)" ariaLabel="DC solution iteration limit" dataSetting="dcIterationLimit" value={dcIterationLimit} example="100" integer hint="Maximum iterations for each operating-point/DC solution. Ngspice default: 100." onChange={onDcIterationLimitChange} />
+      {analysis === 'dc' && <NumericSetting label="DC transfer-curve iterations (ITL2)" ariaLabel="DC transfer-curve iteration limit" dataSetting="dcTransferIterationLimit" value={dcTransferIterationLimit} example="50" integer hint="Maximum iterations at each point in a DC source sweep. Ngspice default: 50." onChange={onDcTransferIterationLimitChange} />}
+      {analysis === 'tran' && <NumericSetting label="Transient timepoint iterations (ITL4)" ariaLabel="Transient timepoint iteration limit" dataSetting="transientIterationLimit" value={transientIterationLimit} example="10" integer hint="Maximum iterations when solving each transient timepoint. Ngspice default: 10." onChange={onTransientIterationLimitChange} />}
     </details>
 
     <label className="field-label">Floating-node resistance (optional)

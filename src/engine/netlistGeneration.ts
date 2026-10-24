@@ -1159,6 +1159,20 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: `analysis:${field}`, line: rows.length })
     } else append(`.options ${option}=${Number(value)}`, `analysis:${field}`, 'generated')
   }
+  const iterationSettings = [
+    ['dcIterationLimit', 'itl1', true],
+    ['dcTransferIterationLimit', 'itl2', project.simulation.analysis === 'dc'],
+    ['transientIterationLimit', 'itl4', project.simulation.analysis === 'tran'],
+  ] as const
+  if (includeHierarchyProbes) for (const [field, option, applies] of iterationSettings) {
+    const value = project.simulation[field]
+    if (value === undefined) continue
+    if (!/^\d+$/.test(value.trim()) || !Number.isSafeInteger(Number(value)) || Number(value) < 1 || Number(value) > 1_000_000) {
+      const message = `Ngspice ${field === 'dcIterationLimit' ? 'DC iteration limit' : field === 'dcTransferIterationLimit' ? 'DC transfer-curve iteration limit' : 'transient per-timepoint iteration limit'} must be an integer from 1 to 1000000.`
+      append(`* ERROR: ${cleanComment(message)}`, `analysis:${field}`, 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: `analysis:${field}`, line: rows.length })
+    } else if (applies) append(`.options ${option}=${Number(value)}`, `analysis:${field}`, 'generated')
+  }
   if (includeHierarchyProbes && project.simulation.shuntResistance?.trim()) {
     const shuntResistance = componentMagnitude(project.simulation.shuntResistance, 'resistor')
     if (shuntResistance === null || shuntResistance <= 0) {

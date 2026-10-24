@@ -6445,6 +6445,9 @@ test('transient solver options are editable and run in the browser engine', { ta
   await page.getByLabel('Absolute current convergence tolerance').fill('1e-12')
   await page.getByLabel('Absolute voltage convergence tolerance').fill('1e-6')
   await page.getByLabel('Minimum conductance').fill('1e-12')
+  await page.getByText('Iteration limits (advanced)').click()
+  await page.getByLabel('DC solution iteration limit').fill('120')
+  await page.getByLabel('Transient timepoint iteration limit').fill('20')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
@@ -6456,6 +6459,8 @@ test('transient solver options are editable and run in the browser engine', { ta
   await expect(page.locator('.netlist-modal pre')).toContainText('.options abstol=1e-12')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options vntol=0.000001')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options gmin=1e-12')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options itl1=120')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options itl4=20')
 })
 
 test('linear AC analysis can opt out of its preliminary operating point', { tag: '@ngspice' }, async ({ page }) => {
