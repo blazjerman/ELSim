@@ -816,13 +816,6 @@ export function validateProject(input: unknown): Project {
       const positiveTimeField = ['period', 'riseTau', 'fallTau'].includes(sourceField ?? '')
       if (!validListValues) throw new Error(`${globalParameterSweep ? parameterTarget : component?.ref ?? 'Parameter'} discrete sweep values must be numeric SPICE scalars.`)
       if (listSweep && dcSourceSweep && sweep.listValues!.some((value) => parseComponentValue(value) === null)) throw new Error(`${component!.ref} DC sweep list values must use the source's voltage or current units.`)
-      if (listSweep && dcSourceSweep) {
-        const values = sweep.listValues!.map((value) => parseComponentValue(value)!)
-        const from = parseComponentValue(sweep.start), to = parseComponentValue(sweep.stop)
-        const delta = values[1] - values[0]
-        const close = (left: number, right: number) => Math.abs(left - right) <= Math.max(1e-15, Math.max(Math.abs(left), Math.abs(right)) * 1e-10)
-        if (from === null || to === null || delta === 0 || !close(values[0], from) || (to - from) * delta < 0 || values.some((value, index) => !close(value, from + delta * index) || (value - to) * delta > Math.max(1e-15, Math.abs(to - from) * 1e-10))) throw new Error(`${component!.ref} DC sweep list must be an arithmetic sequence from its start toward its stop value.`)
-      }
       if (listSweep && modelSweep && new Set(sweep.listValues!.map((value) => parseComponentValue(value))).size !== sweep.listValues!.length) throw new Error(`${component!.ref}.${sweep.parameter} discrete values must be distinct numeric SPICE scalars.`)
       if (start === null || stop === null || (!listSweep && start === stop) || (frequencyField && (start <= 0 || stop <= 0)) || (timeField && (start < 0 || stop < 0 || (positiveTimeField && (start <= 0 || stop <= 0)))) || (!globalParameterSweep && !sweep.parameter && !sourceFieldSweep && !['source', 'currentSource'].includes(component!.kind) && (start <= 0 || stop <= 0))) throw new Error(`${globalParameterSweep ? parameterTarget : component!.ref} needs valid, different parameter start and stop values; passive values, source frequencies, and positive time constants must be positive.`)
       sweepRefs.add(sweep.component.toLowerCase())
