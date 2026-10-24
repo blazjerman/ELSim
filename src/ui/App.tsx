@@ -2770,6 +2770,9 @@ export default function App() {
             return { ...panel, selectedTraceIds, traceReferences, traceColors, componentVoltageProbes: Object.keys(componentVoltageProbes).length ? componentVoltageProbes : undefined }
           })
           saveAdditionalPlotPanels(nextPanels)
+          const defaultTraceIds = new Set(initialTraces)
+          const hasPanelForThisAnalysis = nextPanels.some((panel) => panel.selectedTraceIds.some((traceId) => defaultTraceIds.has(traceId)))
+          if ((response.result.analysis === 'noise' || response.result.analysis === 'tf') && initialTraces.length && !hasPanelForThisAnalysis) createWaveformWindow(initialTraces)
         }
         else {
           saveAdditionalPlotPanels([])

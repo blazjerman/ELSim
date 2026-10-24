@@ -2751,6 +2751,28 @@ test('transfer-function analysis runs in browser ngspice and reports gain and im
   await expect(plot.locator('.op-table')).toContainText('Input impedance at V1')
 })
 
+test('transfer-function results open a new window when saved waveform windows have unrelated traces', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const existingPlot = await openWireVoltagePlot(page, 430, 290)
+  const existingPlotId = await existingPlot.getAttribute('data-plot-panel-id')
+  const existingBounds = await existingPlot.boundingBox()
+  await page.getByLabel('Analysis type').first().selectOption('tf')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByLabel('Output node').selectOption('vout')
+  await page.getByLabel('Input source').selectOption('V1')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.plot-window')).toHaveCount(2)
+  await expect(page.locator('.plot-window').filter({ hasText: 'Small-signal transfer function' }).locator('.op-table')).toContainText('DC transfer gain')
+  const retainedPlot = page.locator(`.plot-window[data-plot-panel-id="${existingPlotId}"]`)
+  await expect(retainedPlot).toBeVisible()
+  const retainedBounds = await retainedPlot.boundingBox()
+  expect(retainedBounds).not.toBeNull()
+  for (const coordinate of ['x', 'y', 'width', 'height'] as const) expect(retainedBounds![coordinate]).toBeCloseTo(existingBounds![coordinate], 0)
+})
+
 test('transient FFT dialog supports window selection and time intervals', { tag: ['@ngspice', '@engine-smoke'], timeout: 90_000 }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
