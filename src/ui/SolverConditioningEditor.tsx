@@ -41,6 +41,7 @@ export default function SolverConditioningEditor({
   minimumConductance,
   dcIterationLimit,
   dcTransferIterationLimit,
+  transientLowerIterationLimit,
   transientIterationLimit,
   transientTotalIterationLimit,
   transientErrorTolerance,
@@ -58,6 +59,7 @@ export default function SolverConditioningEditor({
   onMinimumConductanceChange,
   onDcIterationLimitChange,
   onDcTransferIterationLimitChange,
+  onTransientLowerIterationLimitChange,
   onTransientIterationLimitChange,
   onTransientTotalIterationLimitChange,
   onTransientErrorToleranceChange,
@@ -75,6 +77,7 @@ export default function SolverConditioningEditor({
   minimumConductance?: string
   dcIterationLimit?: string
   dcTransferIterationLimit?: string
+  transientLowerIterationLimit?: string
   transientIterationLimit?: string
   transientTotalIterationLimit?: string
   transientErrorTolerance?: string
@@ -92,6 +95,7 @@ export default function SolverConditioningEditor({
   onMinimumConductanceChange: (value?: string) => void
   onDcIterationLimitChange: (value?: string) => void
   onDcTransferIterationLimitChange: (value?: string) => void
+  onTransientLowerIterationLimitChange: (value?: string) => void
   onTransientIterationLimitChange: (value?: string) => void
   onTransientTotalIterationLimitChange: (value?: string) => void
   onTransientErrorToleranceChange: (value?: string) => void
@@ -147,6 +151,7 @@ export default function SolverConditioningEditor({
       <p className="field-hint">Raising a limit can let a difficult circuit continue iterating longer, but may increase run time. Blank keeps ngspice defaults.</p>
       <NumericSetting label="DC solution iterations (ITL1)" ariaLabel="DC solution iteration limit" dataSetting="dcIterationLimit" value={dcIterationLimit} example="100" integer hint="Maximum iterations for each operating-point/DC solution. Ngspice default: 100." onChange={onDcIterationLimitChange} />
       {analysis === 'dc' && <NumericSetting label="DC transfer-curve iterations (ITL2)" ariaLabel="DC transfer-curve iteration limit" dataSetting="dcTransferIterationLimit" value={dcTransferIterationLimit} example="50" integer hint="Maximum iterations at each point in a DC source sweep. Ngspice default: 50." onChange={onDcTransferIterationLimitChange} />}
+      {analysis === 'tran' && <NumericSetting label="Transient lower iteration limit (ITL3)" ariaLabel="Transient lower iteration limit" dataSetting="transientLowerIterationLimit" value={transientLowerIterationLimit} example="4" integer hint="Ngspice’s lower transient-analysis iteration limit. Default: 4. Leave blank to keep the default." onChange={onTransientLowerIterationLimitChange} />}
       {analysis === 'tran' && <NumericSetting label="Transient timepoint iterations (ITL4)" ariaLabel="Transient timepoint iteration limit" dataSetting="transientIterationLimit" value={transientIterationLimit} example="10" integer hint="Maximum iterations when solving each transient timepoint. Ngspice default: 10." onChange={onTransientIterationLimitChange} />}
       {analysis === 'tran' && <NumericSetting label="Transient total iterations (ITL5)" ariaLabel="Transient total iteration limit" dataSetting="transientTotalIterationLimit" value={transientTotalIterationLimit} example="5000" integer integerMinimum={0} invalidMessage="Enter a whole number from 0 to 1000000, or leave blank for ngspice’s default." hint="Maximum total iterations for a transient analysis. Ngspice default: 5000. Set 0 to disable this limit." onChange={onTransientTotalIterationLimitChange} />}
     </details>
