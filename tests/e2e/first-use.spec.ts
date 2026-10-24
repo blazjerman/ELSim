@@ -3496,6 +3496,51 @@ test('imported IC parameters can be swept across solved browser runs', { tag: '@
   expect(new Set(plottedCases).size).toBe(3)
 })
 
+test('bracketed imported IC parameters sweep through browser ngspice', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createStarterProject()
+  const modelContent = '.SUBCKT GAIN_CELL IN OUT GAIN[1]=2\nE1 OUT 0 IN 0 {GAIN[1]}\n.ENDS GAIN_CELL\n'
+  const parts = [
+    { id: 'gain-sweep-source', kind: 'source' as const, ref: 'V1', value: '1 V', sourceMode: 'dc' as const, x: 200, y: 300, rotation: 0 as const },
+    { id: 'gain-sweep-ic', kind: 'subcircuit' as const, ref: 'XGAIN', value: 'GAIN_CELL', modelName: 'GAIN_CELL', modelPins: ['IN', 'OUT'], x: 400, y: 300, rotation: 0 as const },
+    { id: 'gain-sweep-load', kind: 'resistor' as const, ref: 'R1', value: '1 kΩ', x: 600, y: 300, rotation: 0 as const },
+    { id: 'gain-sweep-ground', kind: 'ground' as const, ref: 'GND1', value: '0', x: 600, y: 500, rotation: 0 as const },
+  ]
+  const nodeForPin = (partId: string, pin: number) => partId === 'gain-sweep-source' ? (pin === 0 ? 'VIN' : '0')
+    : partId === 'gain-sweep-ic' ? (pin === 0 ? 'VIN' : 'VOUT')
+      : partId === 'gain-sweep-load' ? (pin === 0 ? 'VOUT' : '0') : '0'
+  const netLabels = parts.flatMap((part) => componentPins(part).map((pin) => ({
+    id: `${part.id}-net-${pin.index}`, name: nodeForPin(part.id, pin.index), x: pin.x, y: pin.y, visible: false,
+  })))
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [{ id: 'gain-bracket-model', filename: 'gain-cell.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('XGAIN')
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 IC parameter' })).toHaveValue('GAIN[1]')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('2')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('4')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('3')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 3 cases/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openComponentVoltagePlot(page, 'R1')
+  const labels = await plot.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('XGAIN.GAIN[1]=2'))).toBe(true)
+  expect(labels.some((label) => label.includes('XGAIN.GAIN[1]=3'))).toBe(true)
+  expect(labels.some((label) => label.includes('XGAIN.GAIN[1]=4'))).toBe(true)
+  expect(labels.filter((label) => label.includes('XGAIN.GAIN[1]='))).toHaveLength(3)
+})
+
 test('coupled-line example opens from Advanced examples and solves crosstalk', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
