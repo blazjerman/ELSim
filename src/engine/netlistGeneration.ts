@@ -294,11 +294,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     })
   }
   const reportedAmbiguousSubcircuits = new Set<string>()
-  for (const part of project.parts) {
-    if (part.deviceModel) reportAmbiguousDeviceModel(part, part.deviceModel)
-    if (part.kind !== 'subcircuit' || !part.modelName || part.sheetId) continue
-    reportAmbiguousSubcircuit(part, part.modelName)
-    const queue = [...(importedSubcircuitsByName.get(part.modelName.toLowerCase()) ?? [])]
+  const ambiguousSubcircuitDependencyCache = new Map<string, { deviceModels: string[]; subcircuits: string[] }>()
+  const ambiguousSubcircuitDependencies = (rootModelName: string) => {
+    const rootKey = rootModelName.toLowerCase()
+    const cached = ambiguousSubcircuitDependencyCache.get(rootKey)
+    if (cached) return cached
+    const deviceModels = new Set<string>()
+    const subcircuits = new Set<string>()
+    const queue = [...(importedSubcircuitsByName.get(rootKey) ?? [])]
     const visited = new Set<string>()
     while (queue.length) {
       const current = queue.pop()!
@@ -306,13 +309,25 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       if (visited.has(key)) continue
       visited.add(key)
       for (const dependency of current.definition.dependencies) {
-        if (dependency.kind === 'device') reportAmbiguousDeviceModel(part, dependency.modelName)
-        else {
-          reportAmbiguousSubcircuit(part, dependency.modelName)
+        if (dependency.kind === 'device') {
+          if ((globalDeviceModelDefinitions.get(dependency.modelName.toLowerCase())?.length ?? 0) > 1) deviceModels.add(dependency.modelName)
+        } else {
+          if ((importedSubcircuitsByName.get(dependency.modelName.toLowerCase())?.length ?? 0) > 1) subcircuits.add(dependency.modelName)
           queue.push(...(importedSubcircuitsByName.get(dependency.modelName.toLowerCase()) ?? []))
         }
       }
     }
+    const result = { deviceModels: [...deviceModels], subcircuits: [...subcircuits] }
+    ambiguousSubcircuitDependencyCache.set(rootKey, result)
+    return result
+  }
+  for (const part of project.parts) {
+    if (part.deviceModel) reportAmbiguousDeviceModel(part, part.deviceModel)
+    if (part.kind !== 'subcircuit' || !part.modelName || part.sheetId) continue
+    reportAmbiguousSubcircuit(part, part.modelName)
+    const dependencies = ambiguousSubcircuitDependencies(part.modelName)
+    for (const modelName of dependencies.deviceModels) reportAmbiguousDeviceModel(part, modelName)
+    for (const modelName of dependencies.subcircuits) reportAmbiguousSubcircuit(part, modelName)
   }
   const akoExpansion = expandNgspiceAkoModels(parsedModelLibraryEntries)
   for (const issue of akoExpansion.issues) diagnostics.push({ severity: 'error', message: issue.message, sourceId: `model-file:${issue.assetId}`, assetId: issue.assetId, assetLine: issue.sourceLine, line: issue.sourceLine })
