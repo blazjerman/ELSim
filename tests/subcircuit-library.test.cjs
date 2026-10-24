@@ -1459,6 +1459,7 @@ test('diagnoses reached LTspice helper limit() and if() constructs at their defi
     '.FUNC clamp_value(x) {limit(x, 0, 1)}',
     '.FUNC choose_value(x) {if(x > 0, 1, 0)}',
     '.FUNC wrapper(x) {choose_value(x)}',
+    '.FUNC unused_clamp(x) {limit(x, -1, 1)}',
     '.SUBCKT helpers IN OUT',
     'B1 OUT 0 V=clamp_value(V(IN))',
     'B2 OUT 0 V=wrapper(V(IN))',
@@ -1466,6 +1467,10 @@ test('diagnoses reached LTspice helper limit() and if() constructs at their defi
   ].join('\n')
   const warnings = analyzeLtspiceModelDialect(source)
   const helperWarnings = warnings.filter(({ feature }) => feature.startsWith('Imported .FUNC'))
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'Imported .FUNC uses LTspice limit()'],
+    [2, 'Imported .FUNC uses LTspice if()'],
+  ])
   assert.deepEqual(helperWarnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
     [1, 'Imported .FUNC uses LTspice limit()'],
     [2, 'Imported .FUNC uses LTspice if()'],

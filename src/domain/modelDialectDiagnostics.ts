@@ -128,6 +128,9 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
   ]
   const sourceLibrary = options.supportingLibraries?.find(({ assetId }) => assetId === options.sourceAssetId)
   const logical = sourceLibrary ? selectedLinesForLibrary(sourceLibrary) : selectedLibraryLines(source, options.selectedSections)
+  const helperDefinitionLines = new Set(logical
+    .filter(({ text }) => /^\s*\.func\s+[A-Za-z_][A-Za-z0-9_.$]*\s*(?:\([^)]*\))?\s*=?\s*\{/i.test(withoutInlineComment(text)))
+    .map(({ sourceLine }) => sourceLine))
   const conditionalModelLines = new Set<number>()
   let conditionalDepth = 0
   for (const { sourceLine, text } of logical) {
@@ -140,6 +143,10 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
     const line = withoutInlineComment(text)
     if (!line || line.startsWith('*')) return []
     return features.flatMap(({ pattern, name, impact, suggestion }) => {
+      // Diagnose incompatible expressions in a helper only when an imported
+      // B source reaches that helper; broad syntax scans must not warn on dead
+      // .FUNC declarations before the reachability pass below.
+      if (helperDefinitionLines.has(sourceLine) && helperCompatibilityRules.some(({ pattern: helperPattern }) => helperPattern.test(line))) return []
       const match = pattern.exec(line)
       if (!match) return []
       if (name === 'PSpice VSWITCH model outside supported numeric subset' && !conditionalModelLines.has(sourceLine)) {
