@@ -981,3 +981,7 @@ A fresh version-14 `npm run benchmark:performance:quick` run on the same i7-1270
 ### Firefox 5,000-part editor benchmark repeat (2026-10-24)
 
 The focused large-project benchmark passed in Firefox using 5,000 parts and 10,000 labels. It mounted 64 parts and 105 labels (921 SVG elements); editor readiness was 679.15 ms and first contentful paint was 435 ms. Select-all input-to-frame was 24 ms, full-selection drag input-to-frame was 26 ms, and zoom-to-two-frames measured 23 ms median / 24 ms maximum across six changed samples. The 100/500/1,000-part cases also completed, with editor readiness of 374.05/545.81/460.8 ms. This is a single same-host observation, not a performance budget, repeat distribution, or before/after gain; it revealed no reproducible interaction hotspot. No WASM rebuild or Pages workflow ran.
+
+### Production startup bundle recheck (2026-10-24)
+
+`npm run build` passed TypeScript, Vite, and the startup-budget guard. The entry's startup-critical gzip transfer was 234.2 KiB JavaScript and 14.2 KiB CSS, 248.4 KiB combined, against 239.1/15/254 KiB limits. This is 4.9 KiB below the combined JavaScript/CSS cap; it is a single build measurement, not a cross-build stability guarantee. The generated main chunk is 542.25 kB minified (151.64 KiB gzip); Vite emits its generic 500 kB minified-chunk advisory, while the project's gzip budget passes. No WASM rebuild or Pages workflow ran.
