@@ -152,6 +152,18 @@ test('a placed IC cannot call an ambiguous global function from its behavioral b
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported subcircuit FUNCTION_STAGE body that calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
 })
 
+test('a placed IC cannot call an ambiguous global function from a formal parameter default', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'parameter-stage', filename: 'stage.lib', content: '.SUBCKT FUNCTION_STAGE IN OUT PARAMS: GAIN={SCALE!(1)}\nR1 IN OUT {GAIN}\n.ENDS FUNCTION_STAGE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'one-argument-function', filename: 'helpers.lib', content: '.FUNC SCALE!(x$) {x$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'two-argument-function', filename: 'unrelated.lib', content: '.FUNC SCALE!(x$, y$) {x$+y$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported subcircuit FUNCTION_STAGE parameter that calls ambiguous global \.FUNC SCALE!/i.test(diagnostic.message)), true)
+})
+
 test('a scoped function in a placed IC shadows an ambiguous global function name', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })

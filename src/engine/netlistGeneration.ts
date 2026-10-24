@@ -347,7 +347,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     })
   }
   const reportedAmbiguousSubcircuits = new Set<string>()
-  const ambiguousSubcircuitDependencyCache = new Map<string, { deviceModels: string[]; subcircuits: string[]; modelsCallingAmbiguousFunctions: string[]; subcircuitsCallingAmbiguousFunctions: { name: string; functions: string[] }[] }>()
+  const ambiguousSubcircuitDependencyCache = new Map<string, { deviceModels: string[]; subcircuits: string[]; modelsCallingAmbiguousFunctions: string[]; subcircuitsCallingAmbiguousFunctions: { name: string; usage: 'body' | 'parameter'; functions: string[] }[] }>()
   const ambiguousSubcircuitDependencies = (rootModelName: string) => {
     const rootKey = rootModelName.toLowerCase()
     const cached = ambiguousSubcircuitDependencyCache.get(rootKey)
@@ -355,7 +355,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const deviceModels = new Set<string>()
     const subcircuits = new Set<string>()
     const modelsCallingAmbiguousFunctions = new Set<string>()
-    const subcircuitsCallingAmbiguousFunctions: { name: string; functions: string[] }[] = []
+    const subcircuitsCallingAmbiguousFunctions: { name: string; usage: 'body' | 'parameter'; functions: string[] }[] = []
     const queue = [...(importedSubcircuitsByName.get(rootKey) ?? [])]
     const visited = new Set<string>()
     while (queue.length) {
@@ -373,6 +373,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           for (const definition of scope.functions ?? []) shadowedFunctions.add(definition.name.toLowerCase())
           scope = scope.parentName ? importedSubcircuitsByAssetAndName.get(`${current.assetId}:${scope.parentName.toLowerCase()}`) : undefined
         }
+        const parameterFunctions = [...new Set(current.definition.parameters.flatMap((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue, shadowedFunctions)))]
+        if (parameterFunctions.length) subcircuitsCallingAmbiguousFunctions.push({ name: current.definition.name, usage: 'parameter', functions: parameterFunctions })
         const nestedRanges = nestedSubcircuitRangesByParent.get(`${current.assetId}:${current.definition.name.toLowerCase()}`) ?? []
         let skippingFunctionContinuation = false
         const body = currentLibrary.modelRecords
@@ -388,7 +390,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           .filter(Boolean)
           .join(' ')
         const functions = ambiguousFunctionCallsInText(body, shadowedFunctions)
-        if (functions.length) subcircuitsCallingAmbiguousFunctions.push({ name: current.definition.name, functions })
+        if (functions.length) subcircuitsCallingAmbiguousFunctions.push({ name: current.definition.name, usage: 'body', functions })
       }
       for (const dependency of current.definition.dependencies) {
         if (dependency.kind === 'device') {
@@ -416,8 +418,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     for (const modelName of dependencies.deviceModels) reportAmbiguousDeviceModel(part, modelName)
     for (const modelName of dependencies.subcircuits) reportAmbiguousSubcircuit(part, modelName)
     for (const modelName of dependencies.modelsCallingAmbiguousFunctions) reportAmbiguousModelFunctions(part, modelName)
-    for (const { name, functions } of dependencies.subcircuitsCallingAmbiguousFunctions) {
-      for (const functionName of functions) reportAmbiguousFunctionCall(part, functionName, `imported subcircuit ${name} body that calls`)
+    for (const { name, usage, functions } of dependencies.subcircuitsCallingAmbiguousFunctions) {
+      const source = usage === 'parameter' ? `imported subcircuit ${name} parameter that calls` : `imported subcircuit ${name} body that calls`
+      for (const functionName of functions) reportAmbiguousFunctionCall(part, functionName, source)
     }
   }
   const akoExpansion = expandNgspiceAkoModels(parsedModelLibraryEntries)
