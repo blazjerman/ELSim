@@ -667,17 +667,17 @@ function AcCursorReadout({ result, frequencies, first, last, shown, colors, trac
   const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1)
   const hasA = cursorIndex !== null && cursorIndex >= first && cursorIndex <= last
   const hasB = secondCursorIndex !== null && secondCursorIndex >= first && secondCursorIndex <= last
-  const unit = mode === 'noise' || mode === 'sensitivity' ? shown[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'
+  const unitForTrace = (trace: Trace) => mode === 'noise' || mode === 'sensitivity' ? trace.unit : mode === 'magnitude' ? 'dB' : '°'
   const valueFor = (trace: Trace, index: number) => {
     const samples = phaseSamplesById.get(trace.id)
     return unwrapPhase && mode === 'phase' && samples
       ? unwrappedPhaseAt(trace.values, trace.imaginaryValues, samples, index)
       : acTraceValue(trace, index, mode)
   }
-  return <div className="cursor-readout" aria-live="polite" aria-atomic="true">{hasA && <><span className="sr-only">Frequency A {frequencies[cursorIndex].toPrecision(5)} hertz. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} A = {valueFor(trace, cursorIndex).toPrecision(5)} {mode === 'noise' ? trace.unit : unit}</span>)}</>}{hasA && hasB && <><span className="cursor-delta-time">Δf = {formatEngineeringTick(frequencies[secondCursorIndex] - frequencies[cursorIndex], 'Hz')}</span>{shown.map((trace) => {
+  return <div className="cursor-readout" aria-live="polite" aria-atomic="true">{hasA && <><span className="sr-only">Frequency A {frequencies[cursorIndex].toPrecision(5)} hertz. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} A = {valueFor(trace, cursorIndex).toPrecision(5)} {unitForTrace(trace)}</span>)}</>}{hasA && hasB && <><span className="cursor-delta-time">Δf = {formatEngineeringTick(frequencies[secondCursorIndex] - frequencies[cursorIndex], 'Hz')}</span>{shown.map((trace) => {
     const valueA = valueFor(trace, cursorIndex), valueB = valueFor(trace, secondCursorIndex)
     const delta = mode === 'phase' && !unwrapPhase ? phaseDifference(valueB, valueA) : valueB - valueA
-    const traceUnit = mode === 'noise' || mode === 'sensitivity' ? trace.unit : unit
+    const traceUnit = unitForTrace(trace)
     const color = colors[(traceIndexById.get(trace.id) ?? 0) % colors.length]
     return <span key={`delta-${trace.id}`} style={{ color }}>{trace.label} B = {valueB.toPrecision(5)} {traceUnit} · Δ{trace.label} = {delta.toPrecision(5)} {traceUnit}</span>
   })}</>}</div>
@@ -810,6 +810,8 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     : `Harmonic distortion · ${result.traces[0]?.label.match(/\b[23](?:nd|rd) harmonic/i)?.[0] ?? 'selected harmonic'}`
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
+  const visibleTraceUnits = [...new Set(shown.map((trace) => trace.unit))]
+  const primaryTraceUnit = visibleTraceUnits.length === 1 ? visibleTraceUnits[0] : visibleTraceUnits.length > 1 ? 'mixed units' : traces[0]?.unit ?? ''
   const visibleNoiseUnits = useMemo(() => isNoise ? [...new Set(shown.map((trace) => trace.unit))] : [], [isNoise, shown])
   const noiseAxisUnit = visibleNoiseUnits.length === 1 ? visibleNoiseUnits[0] : visibleNoiseUnits.length > 1 ? 'mixed units' : 'noise density'
   const traceIndexById = useTraceIndexById(traces)
@@ -957,7 +959,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' || mode === 'sensitivity' ? 'active' : ''} onClick={() => setAcMode('magnitude')}>{isSensitivity ? 'Magnitude (linear)' : isDistortion ? 'Magnitude (linear)' : 'Magnitude (dB)'}</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setAcMode('phase')}>Phase (°)</button>{mode === 'phase' && <button type="button" className={unwrapPhase ? 'active' : ''} aria-pressed={unwrapPhase} onClick={() => { setUnwrapPhase((value) => !value); updateValueRange(undefined) }}>Unwrap phase</button>}</>}</div>
     {isNoise && result.noiseSummaries?.length ? <div className="noise-summary" aria-label="Integrated noise results">{result.noiseSummaries.map((summary) => <span key={summary.sweep?.index ?? 'single'}>{summary.sweep ? `${summary.sweep.label}: ` : ''}Output RMS {formatEngineeringTick(summary.outputRms, 'V')} · Input-referred RMS {formatEngineeringTick(summary.inputRms, summary.inputUnit)}</span>)}</div> : null}
     <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : isIntermodulation ? `Intermodulation ${mode === 'phase' ? 'phase' : 'magnitude'}` : isDistortion ? `Harmonic distortion ${mode === 'phase' ? 'phase' : 'magnitude'}` : `AC ${mode}${mode === 'phase' && unwrapPhase ? ', unwrapped' : ''}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Cursor ${activeCursor} is selected. Use Left and Right arrows to move it, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handleAcCursorKeys} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={handleAcCursorClick}>
-      {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value, primaryNoiseUnit)} y2={yFor(value, primaryNoiseUnit)} className="plot-grid"/><text data-value-unit={isNoise ? primaryNoiseUnit : mode === 'sensitivity' ? traces[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'} x={left - 6} y={yFor(value, primaryNoiseUnit) + 3} textAnchor="end" className="plot-tick">{isNoise || mode === 'sensitivity' ? formatEngineeringTick(value, mode === 'sensitivity' ? traces[0]?.unit ?? '' : primaryNoiseUnit) : `${value.toPrecision(3)} ${mode === 'magnitude' ? 'dB' : '°'}`}</text></g> })}
+      {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value, primaryNoiseUnit)} y2={yFor(value, primaryNoiseUnit)} className="plot-grid"/><text data-value-unit={isNoise ? primaryNoiseUnit : mode === 'sensitivity' ? primaryTraceUnit : mode === 'magnitude' ? 'dB' : '°'} x={left - 6} y={yFor(value, primaryNoiseUnit) + 3} textAnchor="end" className="plot-tick">{isNoise || mode === 'sensitivity' ? formatEngineeringTick(value, mode === 'sensitivity' ? primaryTraceUnit : primaryNoiseUnit) : `${value.toPrecision(3)} ${mode === 'magnitude' ? 'dB' : '°'}`}</text></g> })}
       {isNoise && visibleNoiseUnits.filter((unit) => unit !== primaryNoiseUnit).flatMap((unit) => {
         const axisRange = noiseWindows.ranges.get(unit)
         if (!axisRange) return []
