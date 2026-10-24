@@ -306,6 +306,15 @@ test('keyboard users can skip the header and toolbar to reach the schematic', { 
   await expect.poll(() => skipLink.evaluate((element) => Number.parseFloat(getComputedStyle(element).top))).toBeGreaterThanOrEqual(0)
   await page.keyboard.press('Enter')
   await expect(page.getByRole('main', { name: 'Schematic workspace' })).toBeFocused()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.reload()
+  await page.getByRole('navigation', { name: 'Workspace panels' }).getByRole('button', { name: 'Components' }).click()
+  await page.locator('.skip-link').focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('navigation', { name: 'Workspace panels' }).getByRole('button', { name: 'Schematic' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('main', { name: 'Schematic workspace' })).toBeVisible()
+  await expect(page.getByRole('main', { name: 'Schematic workspace' })).toBeFocused()
 })
 
 test('quick tour explains the current workspace and project save flow', { tag: '@ui-smoke' }, async ({ page }) => {

@@ -3197,7 +3197,12 @@ export default function App() {
     const animationTuning = animationTuningRef.current
     if (animationTuning?.open && !target?.closest('.animation-tuning')) animationTuning.open = false
   }}>
-    <a className="skip-link" href="#schematic-workspace">Skip to schematic workspace</a>
+    <a className="skip-link" href="#schematic-workspace" onClick={(event) => {
+      event.preventDefault()
+      if (mobilePane !== 'schematic') setMobilePane('schematic')
+      window.history.replaceState(null, '', '#schematic-workspace')
+      window.requestAnimationFrame(() => workspaceMainRef.current?.focus())
+    }}>Skip to schematic workspace</a>
     <header className="topbar">
       <div className="brand"><div className="brand-mark"><Zap size={18} fill="currentColor"/></div><span>elsim</span><span className="brand-beta">PREVIEW</span></div>
       <div className="topbar-divider"/>
