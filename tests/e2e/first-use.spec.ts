@@ -13107,7 +13107,6 @@ test('imported device model parameters can be stepped through the browser ngspic
   await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
 
   await page.getByRole('button', { name: 'Add another parameter' }).click()
-  await page.getByRole('combobox', { name: 'Parameter 2 component' }).selectOption('Q1')
   await expect(page.getByRole('combobox', { name: 'Parameter 2 component' })).toHaveValue('Q1')
   const secondModelParameter = page.getByRole('combobox', { name: 'Parameter 2 model parameter' })
   await expect(secondModelParameter.locator('option')).toHaveCount(3)

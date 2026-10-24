@@ -2837,14 +2837,23 @@ export default function App() {
       : sweep)
     return { ...current, simulation: { ...current.simulation, parameterSweeps: updated } }
   })
-  const addParameterSweep = () => {
+  const addParameterSweep = async () => {
     const configured = project.simulation.parameterSweeps ?? []
     if (project.simulation.analysis === 'dc' && configured.length > 0) { setNotice('A two-source DC sweep supports one secondary source. Remove the current secondary sweep before choosing another.'); return }
     if (configured.reduce((total, sweep) => total * sweep.points, 1) * 2 > 10) { setNotice('Reduce the number of values before adding another parameter. A sweep can run at most 10 cases.'); return }
-    const eligibleParts = eligibleParameterSweepParts({ parts: project.parts, analysis: project.simulation.analysis, dcSweepSource: project.simulation.dcSweep?.source, models: importedDeviceModels, subcircuits: importedModels, sheets: project.sheets })
-    const parts = unusedSweepTargets(eligibleParts, configured, importedDeviceModels, importedModels, project.sheets)
+    let sweepModels = importedDeviceModels
+    if (modelLibraryAnalysis.assets.some(({ parsed }) => parsed.models.some((model) => model.akoBaseName))) {
+      const { expandNgspiceAkoModels } = await import('../domain/ngspiceAko')
+      const inheritedParameters = expandNgspiceAkoModels(modelLibraryAnalysis.assets).parameters
+      sweepModels = importedDeviceModels.map((model) => {
+        const parameters = inheritedParameters.get(`${model.assetId}:${model.startLine}`)
+        return parameters ? { ...model, parameters } : model
+      })
+    }
+    const eligibleParts = eligibleParameterSweepParts({ parts: project.parts, analysis: project.simulation.analysis, dcSweepSource: project.simulation.dcSweep?.source, models: sweepModels, subcircuits: importedModels, sheets: project.sheets })
+    const parts = unusedSweepTargets(eligibleParts, configured, sweepModels, importedModels, project.sheets)
     const availableInstanceParameters = (part: Part) => subcircuitSweepParameters(part, importedModels, project.sheets).filter((parameter) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase() && sweep.instanceParameter && sweep.parameter?.toLowerCase() === parameter.name.toLowerCase()))
-    const availableModelParameters = (part: Part) => importedModelSweepParameters(part, importedDeviceModels).filter((parameter) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase() && !sweep.instanceParameter && sweep.parameter?.toLowerCase() === parameter.name.toLowerCase()))
+    const availableModelParameters = (part: Part) => importedModelSweepParameters(part, sweepModels).filter((parameter) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase() && !sweep.instanceParameter && sweep.parameter?.toLowerCase() === parameter.name.toLowerCase()))
     const hasSweepableInstanceParameter = (part: Part) => availableInstanceParameters(part).length > 0
     const parameters = project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []
     const availableParameter = parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null && !configured.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase()))
