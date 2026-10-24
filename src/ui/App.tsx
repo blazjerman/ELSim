@@ -17,7 +17,7 @@ import { fitEditorView } from '../domain/editorView'
 import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelProvenanceForReplacement, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
-import type { ModelDefinitionConflict, SpiceModelDefinition } from '../domain/subcircuitLibrary'
+import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseSymbolAsset } from '../domain/symbolAsset'
 import { createDefaultElsimSymbol, defaultElsimPinSides, type ElsimPinSide } from '../domain/elsimSymbol'
@@ -68,23 +68,6 @@ function fetThresholdValue(part: Part | undefined, thresholdsByModelName: Readon
 
 type ImportedDeviceModel = SpiceModelDefinition & { assetId: string; filename: string; binCount?: number }
 
-function modelConflictLabel(conflict: ModelDefinitionConflict): string {
-  if (conflict.kind === 'subcircuit') return `.SUBCKT ${conflict.name}`
-  if (conflict.kind === 'measurement') return `.MEAS ${conflict.analysis?.toUpperCase() ?? ''} ${conflict.name}`.trim()
-  if (conflict.kind === 'function') return `.FUNC ${conflict.name}`
-  if (conflict.kind === 'parameter') return `.PARAM ${conflict.name}`
-  return `.MODEL ${conflict.name}`
-}
-
-function modelConflictDescription(conflict: ModelDefinitionConflict): string {
-  if (conflict.kind === 'measurement') return `More than one imported library defines the ${conflict.analysis?.toUpperCase() ?? ''} measurement name ${conflict.name}. ngspice prints multiple values with this same name, so ELSim omits the ambiguous result. Rename one card before relying on it.`
-  if (conflict.kind === 'function') return `The imported sources define .FUNC ${conflict.name} more than once. ngspice uses one global function namespace and does not overload a name by argument count; calls may resolve to the wrong definition or fail with a parameter mismatch. Review the source lines and rename or remove one definition before running circuits that use this function.`
-  if (conflict.kind === 'parameter') return `Global .PARAM ${conflict.name} is declared more than once; rename it if the values should be independent.`
-  return `More than one imported library defines ${conflict.name}. Review the source lines and rename entries that should be independent.`
-}
-
-const MODEL_DIAGNOSTIC_PAGE_SIZE = 20
-
 function mutualCouplingsForPart(part: Part) {
   return part.mutualCouplings ?? (part.mutualCoupling ? [part.mutualCoupling] : [])
 }
@@ -111,6 +94,7 @@ const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
 const ExamplesDialog = lazy(() => import('./ExamplesDialog').then((module) => ({ default: module.ExamplesDialog })))
 const BeginnerPrediction = lazy(() => import('./BeginnerPredictions').then((module) => ({ default: module.BeginnerPrediction })))
 const ModelDependencyReport = lazy(() => import('./ModelDependencyReport').then((module) => ({ default: module.ModelDependencyReport })))
+const ModelConflictReport = lazy(() => import('./ModelDependencyReport').then((module) => ({ default: module.ModelConflictReport })))
 const EngineSetupDialog = lazy(() => import('./EngineSetupDialog').then((module) => ({ default: module.EngineSetupDialog })))
 const HierarchyWalkthrough = lazy(() => import('./HierarchyWalkthrough').then((module) => ({ default: module.HierarchyWalkthrough })))
 const SheetSettingsDialog = lazy(() => import('./SheetSettingsDialog').then((module) => ({ default: module.SheetSettingsDialog })))
@@ -411,7 +395,6 @@ export default function App() {
   const [compatibilityDiagnostic, setCompatibilityDiagnostic] = useState<SimulationDiagnostic | null>(null)
   const [modelSourceReview, setModelSourceReview] = useState<{ assetId: string; line: number } | null>(null)
   const [compatibilityWarningLimit, setCompatibilityWarningLimit] = useState(20)
-  const [modelConflictLimit, setModelConflictLimit] = useState(MODEL_DIAGNOSTIC_PAGE_SIZE)
   const reviewModelDefinition = useCallback((assetId: string, line: number) => setModelSourceReview({ assetId, line }), [])
   const [replacementModelAssetId, setReplacementModelAssetId] = useState<string | null>(null)
   const [pendingModelImport, setPendingModelImport] = useState<{ filename: string; content: string; replaceId: string | null; sections: string[]; selectedSections: string[] } | null>(null)
@@ -869,8 +852,6 @@ export default function App() {
   }, [importedDeviceModels, importedDeviceModelQuery])
   const visibleImportedDeviceModels = filteredImportedDeviceModels.slice(0, visibleImportedDeviceModelCount)
   const modelDependencyAnalysis = modelLibraryAnalysis.dependencies
-  const visibleModelConflicts = modelDependencyAnalysis.conflicts.slice(0, modelConflictLimit)
-  useEffect(() => { setModelConflictLimit(MODEL_DIAGNOSTIC_PAGE_SIZE) }, [modelDependencyAnalysis.conflicts])
   const modelDialectWarnings = useMemo(() => (project.modelAssets ?? []).flatMap((asset) => analyzeLtspiceModelDialect(asset.content).map((warning) => ({ ...warning, filename: asset.filename, assetId: asset.id }))), [modelLibraryRevision])
   const schematicCompatibilityWarnings = useMemo(() => {
     const sources = [project.importedSchematicSource, ...(project.importedChildSchematicSources ?? [])].filter((source): source is NonNullable<typeof project.importedSchematicSource> => Boolean(source))
@@ -3220,20 +3201,7 @@ export default function App() {
           </div>)}
         </div>}
         {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.missingIncludes.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <Suspense fallback={<div className="field-hint">Loading model dependency details…</div>}><ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker} onChooseSection={chooseSectionForImportedLibrary}/></Suspense>}
-        {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions">
-          <strong>CONFLICTING IMPORTED NAMES</strong>
-          <p>Duplicate imported names may conflict. Review the original source lines and rename unintended duplicates.</p>
-          <ul>{visibleModelConflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.analysis ?? ''}:${conflict.name}`}>
-            <code>{modelConflictLabel(conflict)}</code>
-            <p>{modelConflictDescription(conflict)}</p>
-            <ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>
-              {definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => reviewModelDefinition(definition.assetId, definition.sourceLine)}>Review definition</button>
-            </li>)}</ul>
-          </li>)}</ul>
-          {modelDependencyAnalysis.conflicts.length > visibleModelConflicts.length && <button className="place-model" onClick={() => setModelConflictLimit((count) => Math.min(count + MODEL_DIAGNOSTIC_PAGE_SIZE, modelDependencyAnalysis.conflicts.length))}>
-            Show {Math.min(MODEL_DIAGNOSTIC_PAGE_SIZE, modelDependencyAnalysis.conflicts.length - visibleModelConflicts.length)} more imported conflict{modelDependencyAnalysis.conflicts.length - visibleModelConflicts.length === 1 ? '' : 's'}
-          </button>}
-        </div>}
+        {modelDependencyAnalysis.conflicts.length > 0 && <Suspense fallback={<div className="field-hint">Loading conflicting model details…</div>}><ModelConflictReport conflicts={modelDependencyAnalysis.conflicts} onReview={reviewModelDefinition}/></Suspense>}
         {compatibilityWarnings.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Imported model compatibility warnings"><strong>MODEL COMPATIBILITY CHECKS</strong><p>These source-line checks identify imported model or schematic constructs that may behave differently in the browser engine or affect the whole circuit. Imported source text is preserved unchanged; review the impact and suggested next step before editing or replacing a model.</p><ul>{visibleCompatibilityWarnings.map((warning, index) => <li key={`${warning.key}:${warning.sourceLine}:${index}`}><code>{warning.feature}</code> · {warning.sourceFilename}:{warning.sourceLine}<br/><code>{warning.excerpt}</code><p>{warning.impact}</p><small>Next step: {warning.suggestion}</small>{'assetId' in warning && typeof warning.assetId === 'string' && <button className="place-model" onClick={() => setModelSourceReview({ assetId: String(warning.assetId), line: Number(warning.sourceLine) })}>Review source line {warning.sourceLine}</button>}{/^Unresolved \.(?:include|inc|lib)/i.test(warning.feature) && <button className="place-model" onClick={(event) => chooseLibraryForCompatibilityWarning(warning.excerpt, event)}>{warning.feature.includes('section') ? 'Choose referenced library section' : 'Select referenced model library'}</button>}</li>)}</ul>{compatibilityWarnings.length > visibleCompatibilityWarnings.length && <button className="place-model" onClick={() => setCompatibilityWarningLimit((current) => Math.min(current + 20, compatibilityWarnings.length))}>Show {Math.min(20, compatibilityWarnings.length - visibleCompatibilityWarnings.length)} more compatibility warning{compatibilityWarnings.length - visibleCompatibilityWarnings.length === 1 ? '' : 's'}</button>}</div>}
         {importedModels.length > 0 && <div className="imported-models"><div className="component-list-label">{importedSubcircuitQuery ? `${filteredImportedModels.length} MATCHING IMPORTED ICs` : `IMPORTED SUBCIRCUITS · ${importedModels.length}`}</div><label className="search-box imported-model-search"><Search size={14}/><input aria-label="Find an imported IC" placeholder="Find an imported IC" value={importedSubcircuitQuery} onChange={(event) => { setImportedSubcircuitQuery(event.target.value); setVisibleImportedSubcircuits(50) }}/>{importedSubcircuitQuery && <button type="button" aria-label="Clear imported IC search" onClick={() => { setImportedSubcircuitQuery(''); setVisibleImportedSubcircuits(50) }}><X size={12}/></button>}</label>{visibleImportedModels.map((model) => {
           const used = modelAssetInUse(model.assetId)

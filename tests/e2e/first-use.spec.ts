@@ -13644,7 +13644,7 @@ test('different-arity imported .FUNC conflicts give actionable guidance when ngs
   await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
   const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
   await expect(conflicts).toContainText('.FUNC SCALE!')
-  await expect(conflicts).toContainText('ngspice uses one global function namespace and does not overload a name by argument count')
+  await expect(conflicts).toContainText('ngspice does not overload global .FUNC names')
   await expect(conflicts).toContainText('helpers.lib:1')
   await expect(conflicts).toContainText('unrelated.lib:1')
   await expect(page.locator('.imported-model').filter({ hasText: 'DLOCAL' })).toBeVisible()

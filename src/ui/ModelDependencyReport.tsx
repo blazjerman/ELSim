@@ -1,8 +1,47 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { MouseEvent } from 'react'
-import type { ModelDependencyAnalysis } from '../domain/subcircuitLibrary'
+import type { ModelDefinitionConflict, ModelDependencyAnalysis } from '../domain/subcircuitLibrary'
 
 const PAGE_SIZE = 20
+
+function conflictLabel(conflict: ModelDefinitionConflict): string {
+  if (conflict.kind === 'subcircuit') return `.SUBCKT ${conflict.name}`
+  if (conflict.kind === 'measurement') return `.MEAS ${conflict.analysis?.toUpperCase() ?? ''} ${conflict.name}`.trim()
+  if (conflict.kind === 'function') return `.FUNC ${conflict.name}`
+  if (conflict.kind === 'parameter') return `.PARAM ${conflict.name}`
+  return `.MODEL ${conflict.name}`
+}
+
+function conflictDescription(conflict: ModelDefinitionConflict): string {
+  if (conflict.kind === 'measurement') return `More than one imported library defines the ${conflict.analysis?.toUpperCase() ?? ''} measurement name ${conflict.name}. ngspice prints multiple values with this same name, so ELSim omits the ambiguous result. Rename one card before relying on it.`
+  if (conflict.kind === 'function') return `ngspice does not overload global .FUNC names; duplicate definitions can break calls. Rename one definition.`
+  if (conflict.kind === 'parameter') return `Global .PARAM ${conflict.name} is declared more than once; rename it if the values should be independent.`
+  return `More than one imported library defines ${conflict.name}. Review the source lines and rename entries that should be independent.`
+}
+
+export function ModelConflictReport({ conflicts, onReview }: {
+  conflicts: ModelDefinitionConflict[]
+  onReview: (assetId: string, sourceLine: number) => void
+}) {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  useEffect(() => setVisibleCount(PAGE_SIZE), [conflicts])
+  const visibleConflicts = conflicts.slice(0, visibleCount)
+  if (!conflicts.length) return null
+  return <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions">
+    <strong>CONFLICTING IMPORTED NAMES</strong>
+    <p>Duplicate imported names may conflict. Review the original source lines and rename unintended duplicates.</p>
+    <ul>{visibleConflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.analysis ?? ''}:${conflict.name}`}>
+      <code>{conflictLabel(conflict)}</code>
+      <p>{conflictDescription(conflict)}</p>
+      <ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>
+        {definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => onReview(definition.assetId, definition.sourceLine)}>Review definition</button>
+      </li>)}</ul>
+    </li>)}</ul>
+    {conflicts.length > visibleConflicts.length && <button className="place-model" onClick={() => setVisibleCount((count) => Math.min(count + PAGE_SIZE, conflicts.length))}>
+      Show {Math.min(PAGE_SIZE, conflicts.length - visibleConflicts.length)} more imported conflict{conflicts.length - visibleConflicts.length === 1 ? '' : 's'}
+    </button>}
+  </div>
+}
 
 export function ModelDependencyReport({ analysis, onImport, onChooseSection }: {
   analysis: ModelDependencyAnalysis
