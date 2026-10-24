@@ -3,6 +3,8 @@ import { X } from 'lucide-react'
 import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
 import { kindNames, type ParameterSweep, type Part, type Project } from '../domain/project'
 import { eligibleParameterSweepParts, importedModelSweepParameters, subcircuitSweepParameters, sweepParameterValue, unusedSweepTargets } from '../domain/parameterSweepTargets'
+import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 
 const sourceParameterLabels: Record<string, string> = {
   'pulse.initial': 'Initial level', 'pulse.high': 'High level', 'pulse.delay': 'Delay', 'pulse.rise': 'Rise time', 'pulse.fall': 'Fall time', 'pulse.width': 'Pulse width', 'pulse.period': 'Period',
@@ -14,12 +16,21 @@ const sourceParameterLabels: Record<string, string> = {
   'trnoise.gaussianRms': 'Gaussian RMS', 'trnoise.timeStep': 'Noise sample interval', 'trnoise.flickerExponent': 'Flicker exponent', 'trnoise.flickerAmplitude': '1/f noise amplitude', 'trnoise.rtsAmplitude': 'RTS noise amplitude', 'trnoise.rtsCaptureTime': 'RTS capture time', 'trnoise.rtsEmissionTime': 'RTS emission time',
 }
 
-export default function ParameterSweepEditor({ parts, sweeps, models, subcircuits, sheets, parameters: globalParameters, analysis, dcSweepSource, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; subcircuits: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; sheets: Project['sheets']; parameters: { name: string; defaultValue: string }[]; analysis: Project['simulation']['analysis']; dcSweepSource?: string; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
+export default function ParameterSweepEditor({ parts, sweeps, models, modelAssets, subcircuits, sheets, parameters: globalParameters, analysis, dcSweepSource, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; assetId?: string; startLine?: number; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; modelAssets: NonNullable<Project['modelAssets']>; subcircuits: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; sheets: Project['sheets']; parameters: { name: string; defaultValue: string }[]; analysis: Project['simulation']['analysis']; dcSweepSource?: string; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
   const [listDrafts, setListDrafts] = useState<Record<number, string>>({})
   const [listErrors, setListErrors] = useState<Record<number, string>>({})
   const [componentSearches, setComponentSearches] = useState<Record<number, string>>({})
+  const resolvedModels = useMemo(() => {
+    if (!modelAssets.length || !models.some((model) => model.startLine !== undefined)) return models
+    const parsed = modelAssets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) }))
+    const inherited = expandNgspiceAkoModels(parsed).parameters
+    return models.map((model) => {
+      const parameters = model.assetId && model.startLine !== undefined ? inherited.get(`${model.assetId}:${model.startLine}`) : undefined
+      return parameters ? { ...model, parameters } : model
+    })
+  }, [modelAssets, models])
   const partsByRef = useMemo(() => new Map(parts.map((part) => [part.ref.toLowerCase(), part])), [parts])
-  const numericModelParameters = (part?: Part) => importedModelSweepParameters(part, models)
+  const numericModelParameters = (part?: Part) => importedModelSweepParameters(part, resolvedModels)
   const numericSubcircuitParameters = (part?: Part) => subcircuitSweepParameters(part, subcircuits, sheets)
   const parameterDefault = (part: Part, name: string, fallback: string) => sweepParameterValue(part, { name, defaultValue: fallback })
   const discreteValueMagnitude = (sweep: ParameterSweep, part: Part | undefined, value: string) => {
@@ -65,8 +76,8 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
     const next = magnitude === 0 ? (unit === 's' ? 1e-6 : 1) : magnitude * 2
     return { start, stop: Number.isFinite(magnitude) ? `${next.toExponential(5)}${unit ? ` ${unit}` : ''}` : start }
   }
-  const eligible = useMemo(() => eligibleParameterSweepParts({ parts, analysis, dcSweepSource, models, subcircuits, sheets }), [analysis, dcSweepSource, models, parts, sheets, subcircuits])
-  const unusedEligible = useMemo(() => unusedSweepTargets(eligible, sweeps, models, subcircuits, sheets), [eligible, models, sheets, subcircuits, sweeps])
+  const eligible = useMemo(() => eligibleParameterSweepParts({ parts, analysis, dcSweepSource, models: resolvedModels, subcircuits, sheets }), [analysis, dcSweepSource, resolvedModels, parts, sheets, subcircuits])
+  const unusedEligible = useMemo(() => unusedSweepTargets(eligible, sweeps, resolvedModels, subcircuits, sheets), [eligible, resolvedModels, sheets, subcircuits, sweeps])
   const numericParameters = useMemo(() => analysis === 'dc' ? [] : globalParameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null), [analysis, globalParameters])
   const targetCount = unusedEligible.length + numericParameters.filter((parameter) => !sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase())).length
   const parameterOptions = useMemo(() => globalParameters.filter((parameter) => numericParameters.includes(parameter) || sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase())), [globalParameters, numericParameters, sweeps])
@@ -78,7 +89,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
       const otherSweeps = sweeps.filter((_, item) => item !== index)
-      const availableForSweep = unusedSweepTargets(eligible, otherSweeps, models, subcircuits, sheets)
+      const availableForSweep = unusedSweepTargets(eligible, otherSweeps, resolvedModels, subcircuits, sheets)
       const availablePartIds = new Set(availableForSweep.map((part) => part.id))
       const query = componentSearches[index] ?? ''
       const normalizedQuery = query.trim().toLowerCase()

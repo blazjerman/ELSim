@@ -1,6 +1,7 @@
 import type { ParameterSweep, Project, SourceSweepParameter } from '../domain/project'
 import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { translateVoltageSwitchModel } from '../domain/voltageSwitchModel'
 
 type VoltageSwitchSweepBase = { von: number; voff: number; ron: number; roff: number }
@@ -145,9 +146,13 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (sweep.parameter) {
-    const model = project.modelAssets?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.filter((definition) => !definition.scope))
-      .find((candidate) => candidate.name.toLowerCase() === part?.deviceModel?.toLowerCase())
-    const parameter = model?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
+    const modelAssets = project.modelAssets ?? []
+    const parsedModels = modelAssets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) }))
+    const inheritedParameters = expandNgspiceAkoModels(parsedModels).parameters
+    const model = parsedModels.flatMap(({ asset, parsed }) => parsed.models.filter((definition) => !definition.scope).map((definition) => ({ asset, definition })))
+      .find(({ definition }) => definition.name.toLowerCase() === part?.deviceModel?.toLowerCase())
+    const parameters = model ? inheritedParameters.get(`${model.asset.id}:${model.definition.startLine}`) ?? model.definition.parameters : []
+    const parameter = parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
     if (!part || !parameter) throw new Error(`${sweep.component}.${sweep.parameter} is not a numeric parameter on its selected imported device model.`)
     const start = spiceModelParameterMagnitude(sweep.start), stop = spiceModelParameterMagnitude(sweep.stop)
     if (sweep.listValues) {

@@ -2,6 +2,7 @@ import type { ModelLibraryInput, ParsedSubcircuitLibrary, SpiceModelDefinition, 
 
 export type NgspiceAkoExpansion = {
   cards: Map<string, string>
+  parameters: Map<string, SubcircuitParameter[]>
   issues: { modelName: string; sourceLine: number; message: string; assetId: string }[]
 }
 
@@ -13,9 +14,10 @@ function canonicalType(type: string): string {
 /** Expand unconditional global AKO chains without changing imported libraries. */
 export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[]): NgspiceAkoExpansion {
   const cards = new Map<string, string>()
+  const parametersByModel = new Map<string, SubcircuitParameter[]>()
   const issues: NgspiceAkoExpansion['issues'] = []
   const all = assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => model.akoBaseName).map((model) => ({ asset, model })))
-  if (!all.length) return { cards, issues }
+  if (!all.length) return { cards, parameters: parametersByModel, issues }
   const byName = new Map<string, { asset: T; model: SpiceModelDefinition }[]>()
   for (const { asset, parsed } of assets) for (const model of parsed.models) if (!model.scope) {
     const matches = byName.get(model.name.toLowerCase()) ?? []
@@ -58,7 +60,9 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
     const parameters = resolve(asset, model)
     if (!parameters) continue
     const values = parameters.map(({ name, defaultValue, defaultIsExpression }) => `${name}=${defaultIsExpression ? `{${defaultValue}}` : defaultValue}`)
-    cards.set(`${asset.id}:${model.startLine}`, `.model ${model.name} ${model.type}(${values.join(' ')})`)
+    const key = `${asset.id}:${model.startLine}`
+    cards.set(key, `.model ${model.name} ${model.type}(${values.join(' ')})`)
+    parametersByModel.set(key, parameters)
   }
-  return { cards, issues }
+  return { cards, parameters: parametersByModel, issues }
 }

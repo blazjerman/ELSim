@@ -13084,12 +13084,12 @@ test('imported device model parameters can be stepped through the browser ngspic
   await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
 
-  const modelLibrary = '.MODEL USER_NPN NPN (IS=1e-14 BF={5+5} VAF=100)\n'
+  const modelLibrary = '.MODEL BASE_NPN NPN (IS=1e-14 BF=80 VAF=100)\n.MODEL USER_NPN AKO:BASE_NPN NPN (BF={5+5})\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-npn.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
   })
-  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from user-npn\.lib/)).toBeVisible()
+  await expect(page.getByText(/Imported 0 subcircuits and 2 device models from user-npn\.lib/)).toBeVisible()
   await page.locator('.circuit-part[aria-label^="Q1,"]').click()
   await page.getByLabel('Device model for Q1').selectOption('USER_NPN')
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
@@ -13107,6 +13107,7 @@ test('imported device model parameters can be stepped through the browser ngspic
   await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
 
   await page.getByRole('button', { name: 'Add another parameter' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 2 component' }).selectOption('Q1')
   await expect(page.getByRole('combobox', { name: 'Parameter 2 component' })).toHaveValue('Q1')
   const secondModelParameter = page.getByRole('combobox', { name: 'Parameter 2 model parameter' })
   await expect(secondModelParameter.locator('option')).toHaveCount(3)

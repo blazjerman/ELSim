@@ -249,6 +249,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
   const akoExpansion = expandNgspiceAkoModels(parsedModelLibraryEntries)
   for (const issue of akoExpansion.issues) diagnostics.push({ severity: 'error', message: issue.message, sourceId: `model-file:${issue.assetId}`, assetId: issue.assetId, assetLine: issue.sourceLine, line: issue.sourceLine })
+  for (const entry of parsedModelLibraryEntries) for (const model of entry.parsed.models) {
+    const parameters = akoExpansion.parameters.get(`${entry.asset.id}:${model.startLine}`)
+    if (parameters) model.parameters = parameters
+  }
   const modelFunctionResolver = createModelFunctionResolver(parsedModelLibraryEntries)
   const projectModelFunctions = modelFunctionsForProject(parsedModelLibraryEntries)
   const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models.filter((model) => !model.scope))
