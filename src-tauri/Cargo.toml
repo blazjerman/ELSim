@@ -11,3 +11,5 @@ tauri-build = { version = "2" }
 
 [dependencies]
 tauri = { version = "2" }
+tauri-plugin-dialog = "2.8.3"
+tauri-plugin-fs = "2.7.1"

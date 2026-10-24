@@ -245,6 +245,15 @@
       "licenseFileSha256": "2328664c1b9ecddacf91567b9dc1e4667ba68d39d8e76836ec91576984c6861c"
     },
     {
+      "name": "@tauri-apps/api",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/api/package.json",
+      "licenseFileSha256": "3e8dd9fbaa647151ea6179115c9e83918f46e951fcbb7fb9e998346337a05b48",
+      "licenseEvidence": "package-metadata"
+    },
+    {
       "name": "@tauri-apps/cli",
       "version": "2.12.4",
       "license": "Apache-2.0 OR MIT",
@@ -340,6 +349,24 @@
       "repository": "https://github.com/tauri-apps/tauri",
       "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
       "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/plugin-dialog",
+      "version": "2.8.3",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/tauri-apps/plugins-workspace",
+      "licenseFile": "node_modules/@tauri-apps/plugin-dialog/package.json",
+      "licenseFileSha256": "9e1a8648b3ed43c0dd3e6029a7677644238c6d4d97613e1af45863ebb5319759",
+      "licenseEvidence": "package-metadata"
+    },
+    {
+      "name": "@tauri-apps/plugin-fs",
+      "version": "2.7.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/tauri-apps/plugins-workspace",
+      "licenseFile": "node_modules/@tauri-apps/plugin-fs/package.json",
+      "licenseFileSha256": "11901195241ea5b58b49ae293c094f0c5b62a42267699adb84b7604cdaf7cce8",
+      "licenseEvidence": "package-metadata"
     },
     {
       "name": "@types/babel__core",

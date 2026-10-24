@@ -1593,10 +1593,15 @@ export default function App() {
     try {
       const { createProjectArchive } = await import('../domain/projectArchive')
       const bytes = await createProjectArchive(projectRef.current)
+      const filename = `${projectRef.current.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.elsim`
+      const { saveDesktopProject } = await import('./desktopProjectFiles')
+      const desktopSave = await saveDesktopProject(bytes, filename)
+      if (desktopSave === 'saved') { setNotice(`Saved ${filename}`); return }
+      if (desktopSave === 'cancelled') return
       const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/vnd.elsim.project+zip' })
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
-      link.download = `${projectRef.current.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.elsim`
+      link.download = filename
       link.click()
       window.setTimeout(() => URL.revokeObjectURL(link.href), 1000)
       setNotice('Project saved as a portable .elsim file')
@@ -1629,6 +1634,37 @@ export default function App() {
     if (exportProvenanceFiles().length) { setSaveWarningOpen(true); return }
     downloadProjectArchive()
   }
+  const applyProjectBytes = async (bytes: Uint8Array) => {
+    if (bytes.byteLength > 50 * 1024 * 1024) throw new Error('Project file exceeds the 50 MiB size limit.')
+    const { isProjectArchive, readProjectArchive } = await import('../domain/projectArchive')
+    const projectData = isProjectArchive(bytes) ? await readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
+    const parsed = validateProject(projectData)
+    await verifyModelAssetHashes([...(parsed.modelAssets ?? []), ...(parsed.symbolAssets ?? [])])
+    if (!window.confirm(`Open “${parsed.name}”? This will replace the circuit in this tab. Save your current circuit first if you want to keep it.`)) return
+    setSheetInstancePath(findSheetInstancePath(parsed.activeSheetId, parsed.rootSheetId, [], new Set(), parsed) ?? [])
+    pendingViewRef.current = null
+    setProjectState(parsed)
+    resetDocumentInteractionState()
+    setExampleLesson(null)
+    setImportWarnings([])
+    setCompatibilityDiagnostic(null)
+    setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
+    history.current = { past: [], future: [] }
+    setSelection(null)
+    setSelectedPartIds([])
+    setSelectedWireId(null)
+    setSelectedNetLabelIds([])
+    sheetSelectionState.current.clear()
+    setNotice(`Opened ${parsed.name}`)
+  }
+  const openProject = async () => {
+    try {
+      const { openDesktopProject } = await import('./desktopProjectFiles')
+      const result = await openDesktopProject()
+      if (result.status === 'file') await applyProjectBytes(result.bytes)
+      else if (result.status === 'unavailable') fileInput.current?.click()
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not open this project') }
+  }
   const prepareLtspiceExport = async () => {
     setLtspiceExportBusy(true)
     setUnknownRightsConfirmed(false)
@@ -1658,28 +1694,8 @@ export default function App() {
     const file = event.target.files?.[0]
     if (!file) return
     try {
-      if (file.size > 50 * 1024 * 1024) throw new Error('Project file exceeds the 50 MiB size limit.')
       const bytes = new Uint8Array(await file.arrayBuffer())
-      const { isProjectArchive, readProjectArchive } = await import('../domain/projectArchive')
-      const projectData = isProjectArchive(bytes) ? await readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
-      const parsed = validateProject(projectData)
-      await verifyModelAssetHashes([...(parsed.modelAssets ?? []), ...(parsed.symbolAssets ?? [])])
-      if (!window.confirm(`Open “${parsed.name}”? This will replace the circuit in this tab. Save your current circuit first if you want to keep it.`)) { event.target.value = ''; return }
-      setSheetInstancePath(findSheetInstancePath(parsed.activeSheetId, parsed.rootSheetId, [], new Set(), parsed) ?? [])
-      pendingViewRef.current = null
-      setProjectState(parsed)
-      resetDocumentInteractionState()
-    setExampleLesson(null)
-      setImportWarnings([])
-      setCompatibilityDiagnostic(null)
-      setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
-      history.current = { past: [], future: [] }
-      setSelection(null)
-      setSelectedPartIds([])
-      setSelectedWireId(null)
-      setSelectedNetLabelIds([])
-      sheetSelectionState.current.clear()
-      setNotice(`Opened ${parsed.name}`)
+      await applyProjectBytes(bytes)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not open this project') }
     event.target.value = ''
   }
@@ -3232,7 +3248,7 @@ export default function App() {
     </header>
 
     <div className="main-toolbar">
-      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc, matching child .asc/.asy files, referenced PWL data, and optional .lib/.sub model files"><FolderOpen size={15}/> Import LTspice</button><button ref={saveProjectTriggerRef} onClick={saveProject}><Save size={15}/> Save</button><button ref={ltspiceExportTriggerRef} onClick={prepareLtspiceExport} disabled={ltspiceExportBusy}><Download size={15}/> Export LTspice</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
+      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={openProject}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc, matching child .asc/.asy files, referenced PWL data, and optional .lib/.sub model files"><FolderOpen size={15}/> Import LTspice</button><button ref={saveProjectTriggerRef} onClick={saveProject}><Save size={15}/> Save</button><button ref={ltspiceExportTriggerRef} onClick={prepareLtspiceExport} disabled={ltspiceExportBusy}><Download size={15}/> Export LTspice</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>

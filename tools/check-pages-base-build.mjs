@@ -25,7 +25,8 @@ assert.match(html, /href="\/ELSim\/manifest\.webmanifest"/)
 assert.match(html, /href="\/ELSim\/icon\.svg"/)
 
 const assetFiles = await readdir(path.join(output, 'assets'))
-const mainBundle = assetFiles.find((name) => /^index-.*\.js$/.test(name))
+const mainEntry = html.match(/src="[^\"]*\/assets\/(index-[^\"]+\.js)"/)?.[1]
+const mainBundle = mainEntry && assetFiles.includes(mainEntry) ? mainEntry : undefined
 const workerBundle = assetFiles.find((name) => /^ngspice\.worker-.*\.js$/.test(name))
 assert.ok(mainBundle && workerBundle, 'the app and simulation worker bundles must both exist')
 const main = await readFile(path.join(output, 'assets', mainBundle), 'utf8')
