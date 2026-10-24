@@ -13646,7 +13646,7 @@ test('different-arity imported .FUNC conflicts stop before ngspice runs', { tag:
   await expect(conflicts).toContainText('unrelated.lib:1')
   await expect(page.locator('.imported-model').filter({ hasText: 'DLOCAL' })).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
-  await expect(page.getByText(/X1 uses imported model DLOCAL, whose parameter calls ambiguous global \.FUNC SCALE!/i)).toBeVisible()
+  await expect(page.getByText(/X1 uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE!/i)).toBeVisible()
 })
 
 test('nested native ngspice .IF model branches import and select the active diode model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
