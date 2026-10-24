@@ -14223,7 +14223,7 @@ test('AKO model inspector shows conditional defaults inherited from each matchin
     name: 'conditional-ako.lib', mimeType: 'text/plain', buffer: Buffer.from([
       '.PARAM branch=0',
       '.IF (branch == 0)',
-      '.MODEL BASECOND D(IS=1n N=2)',
+      '.MODEL BASECOND D(IS=1n N=2 ONLY=7)',
       '.MODEL CHILD AKO:BASECOND D(IS=2n)',
       '.ELSE',
       '.MODEL BASECOND D(IS=1n N=5)',
@@ -14232,12 +14232,17 @@ test('AKO model inspector shows conditional defaults inherited from each matchin
     ].join('\n')),
   })
   await page.getByLabel('Device model for D1').selectOption('CHILD')
-  const modelDetails = page.getByText('CHILD · AKO:BASECOND · 2 model parameters', { exact: true })
+  const modelDetails = page.getByText('CHILD · AKO:BASECOND · 2 model parameters · 1 branch-only', { exact: true })
   await expect(modelDetails).toBeVisible()
   await modelDetails.click()
   const inheritedDefaults = page.getByLabel('N conditional defaults')
   await expect(inheritedDefaults).toContainText('Conditional default at line 4: 2')
   await expect(inheritedDefaults).toContainText('Conditional default at line 7: 5')
+  const inheritedBranchOnly = page.getByLabel('Branch-only model parameters')
+  await expect(inheritedBranchOnly).toContainText('ONLY · inherited')
+  await expect(inheritedBranchOnly).toContainText('line 3: 7')
+  await page.getByRole('searchbox', { name: 'Search parameters for CHILD' }).fill('7')
+  await expect(inheritedBranchOnly).toContainText('line 3: 7')
   await page.getByRole('searchbox', { name: 'Search parameters for CHILD' }).fill('5')
   await expect(inheritedDefaults).toContainText('Conditional default at line 7: 5')
 })
