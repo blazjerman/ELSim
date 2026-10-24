@@ -106,6 +106,22 @@ function createBlockProject() {
   return project
 }
 
+test('mutual inductor coupling is emitted inside its reusable sheet definition', () => {
+  const project = createBlockProject()
+  project.sheets[1].parts.push(
+    { id: 'child-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 500, y: 500, rotation: 0, mutualCoupling: { partnerId: 'child-l2', coefficient: '0.9' } },
+    { id: 'child-l2', kind: 'inductor', ref: 'L2', value: '5 mH', x: 700, y: 500, rotation: 0 },
+  )
+
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^\.SUBCKT ELSIM_SHEET_sheet_load IN OUT$/m)
+  assert.match(artifact.text, /^L1 \S+ \S+ 10m$/m)
+  assert.match(artifact.text, /^L2 \S+ \S+ 5m$/m)
+  assert.match(artifact.text, /^KL1 L1 L2 0\.9$/m)
+  assert.match(artifact.text, /^\.ENDS ELSIM_SHEET_sheet_load$/m)
+})
+
 test('new block names skip numbered names already used by sibling sheets', () => {
   const project = createBlockProject()
   const template = project.sheets[1]
