@@ -444,19 +444,27 @@ test('global temperature emits one top-level SPICE directive and is validated in
   assert.throws(() => validateProject(project), /temperature must be a number/)
 })
 
-test('optional floating-node shunt emits native ngspice RSHUNT and validates its resistance', () => {
+test('optional floating-node RSHUNT and CSHUNT emit native ngspice options and validate units', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options rshunt=/mi)
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options cshunt=/mi)
   project.simulation.shuntResistance = '1 TΩ'
+  project.simulation.shuntCapacitance = '0.13 pF'
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
   assert.equal((artifact.text.match(/^\.options rshunt=1000000000000$/gim) ?? []).length, 1)
+  assert.equal((artifact.text.match(/^\.options cshunt=1\.3e-13$/gim) ?? []).length, 1)
   assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:shuntResistance' && source.role === 'generated'))
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:shuntCapacitance' && source.role === 'generated'))
   project.simulation.shuntResistance = '0 Ω'
   assert.throws(() => validateProject(project), /invalid simulation shunt resistance/i)
   const invalidArtifact = createNetlistArtifact(project)
   assert.ok(invalidArtifact.diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:shuntResistance'))
   assert.doesNotMatch(invalidArtifact.text, /^\.options rshunt=/mi)
+  project.simulation.shuntResistance = undefined
+  project.simulation.shuntCapacitance = '0 F'
+  assert.throws(() => validateProject(project), /invalid simulation shunt capacitance/i)
+  assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:shuntCapacitance'))
 })
 
 test('per-device DTEMP offsets and absolute TEMP settings reach native instances exclusively', () => {

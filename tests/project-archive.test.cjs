@@ -363,6 +363,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.ok(schema.$defs.simulation.properties.transientMeasurements.items.properties.operation.enum.includes('integ'))
   assert.match(schema.$defs.simulation.properties.temperature.pattern, /0-9/)
   assert.equal(schema.$defs.simulation.properties.shuntResistance.maxLength, 64)
+  assert.equal(schema.$defs.simulation.properties.shuntCapacitance.maxLength, 64)
   assert.equal(schema.$defs.plotSettings.properties.panels.maxItems, 8)
   assert.equal(schema.$defs.plotPanel.required.includes('selectedTraceIds'), true)
   assert.equal(schema.$defs.plotPanel.properties.valueRanges.$ref, '#/$defs/plotAnalysisValueRanges')

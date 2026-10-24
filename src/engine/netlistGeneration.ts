@@ -1124,6 +1124,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:shuntResistance', line: rows.length })
     } else append(`.options rshunt=${shuntResistance}`, 'analysis:shuntResistance', 'generated')
   }
+  if (includeHierarchyProbes && project.simulation.shuntCapacitance?.trim()) {
+    const shuntCapacitance = componentMagnitude(project.simulation.shuntCapacitance, 'capacitor')
+    if (shuntCapacitance === null || shuntCapacitance <= 0) {
+      const message = 'Node shunt capacitance must be a positive numeric capacitance.'
+      append(`* ERROR: ${cleanComment(message)}`, 'analysis:shuntCapacitance', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:shuntCapacitance', line: rows.length })
+    } else append(`.options cshunt=${shuntCapacitance}`, 'analysis:shuntCapacitance', 'generated')
+  }
   if (includeHierarchyProbes) for (const directive of hierarchicalSaveVectors(project)) append(directive, 'hierarchy:probe', 'generated')
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesZener) append('.model DZENER D(BV=5.1 IBV=1m)', 'model:DZENER', 'model')
