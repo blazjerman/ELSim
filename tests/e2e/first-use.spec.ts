@@ -13617,6 +13617,36 @@ test('a punctuation-named subcircuit-local .FUNC drives its local .MODEL through
   await expect(page.locator('.plot-window').last().getByRole('button', { name: 'Disable V(X1)' })).toBeVisible()
 })
 
+test('different-arity imported .FUNC conflicts show source locations before a model is run', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  const rootLibrary = [
+    '.include helpers.lib',
+    '.MODEL DLOCAL D(IS={SCALE!(1)*1e-14} N=1)',
+    '.SUBCKT FUNCTION_STAGE IN OUT',
+    'VDRIVE IN 0 1',
+    'D1 IN OUT DLOCAL',
+    'RLOAD OUT 0 1k',
+    '.ENDS FUNCTION_STAGE',
+  ].join('\n') + '\n'
+  await modelInput.setInputFiles([
+    { name: 'root-function-model.lib', mimeType: 'text/plain', buffer: Buffer.from(rootLibrary) },
+    { name: 'helpers.lib', mimeType: 'text/plain', buffer: Buffer.from('.FUNC SCALE!(x$) {x$}\n') },
+    { name: 'unrelated.lib', mimeType: 'text/plain', buffer: Buffer.from('.FUNC SCALE!(x$, y$) {x$+y$}\n') },
+  ])
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'FUNCTION_STAGE' })
+  await expect(importedModel).toBeVisible()
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
+  await expect(conflicts).toContainText('.FUNC SCALE!')
+  await expect(conflicts).toContainText('ngspice uses one global function namespace and does not overload a name by argument count')
+  await expect(conflicts).toContainText('helpers.lib:1')
+  await expect(conflicts).toContainText('unrelated.lib:1')
+  await expect(page.locator('.imported-model').filter({ hasText: 'DLOCAL' })).toBeVisible()
+})
+
 test('nested native ngspice .IF model branches import and select the active diode model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

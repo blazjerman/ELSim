@@ -78,7 +78,7 @@ function modelConflictLabel(conflict: ModelDefinitionConflict): string {
 
 function modelConflictDescription(conflict: ModelDefinitionConflict): string {
   if (conflict.kind === 'measurement') return `More than one imported library defines the ${conflict.analysis?.toUpperCase() ?? ''} measurement name ${conflict.name}. ngspice prints multiple values with this same name, so ELSim omits the ambiguous result. Rename one card before relying on it.`
-  if (conflict.kind === 'function') return `The imported sources define the function ${conflict.name} more than once. The function bodies may differ, and ngspice resolution can depend on library order. Review the source definitions and rename or remove an unintended duplicate.`
+  if (conflict.kind === 'function') return `The imported sources define .FUNC ${conflict.name} more than once. ngspice uses one global function namespace and does not overload a name by argument count; calls may resolve to the wrong definition or fail with a parameter mismatch. Review the source lines and rename or remove one definition before running circuits that use this function.`
   if (conflict.kind === 'parameter') return `Global .PARAM ${conflict.name} is declared more than once; rename it if the values should be independent.`
   return `More than one imported library defines ${conflict.name}. Review the source lines and rename entries that should be independent.`
 }
