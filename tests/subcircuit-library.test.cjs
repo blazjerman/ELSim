@@ -1038,16 +1038,16 @@ test('matches conditional AKO bases across imported libraries by normalized nume
   assert.deepEqual(result.parameters.get('conditional-child-lib:2').map(({ name, defaultVariesByCondition }) => [name, defaultVariesByCondition]), [['IS', true], ['N', true]])
 })
 
-test('matches cross-library numeric AKO branches with equivalent ngspice equality and inequality operators', () => {
+test('matches cross-library literal and deterministic-math AKO conditions with comparison aliases', () => {
   const baseContent = [
-    '.IF (1mil == 25.4u && 5kOhm > 1k && 2 <> 3)',
+    '.IF (1mil == 25.4u && 5kOhm > 1k && sqrt(4) == 2 && 2 <> 3)',
     '.MODEL BASE D(IS=1n)',
     '.ELSE',
     '.MODEL BASE D(IS=2n)',
     '.ENDIF',
   ].join('\n')
   const childContent = [
-    '.IF (1mil = 25.4u && 5kOhm > 1k && 2 != 3)',
+    '.IF (1mil = 25.4u && 5kOhm > 1k && sqrt(4) = 2 && 2 != 3)',
     '.MODEL CHILD AKO:BASE D(N=2)',
     '.ELSE',
     '.MODEL CHILD AKO:BASE D(N=3)',
@@ -1073,6 +1073,20 @@ test('does not infer cross-library conditional AKO equivalence from parameter na
 
   assert.match(result.issues.map(({ message }) => message).join('\n'), /no definition in the child model’s active conditional branch/)
   assert.equal(result.cards.size, 0)
+})
+
+test('does not match stochastic or interpreter-dependent AKO conditions across libraries', () => {
+  for (const [index, condition] of ['gauss(1, 0.1, 3) > 0', 'vec("pi") > 0'].entries()) {
+    const baseContent = `.IF (${condition})\n.MODEL BASE D(IS=1n)\n.ELSE\n.MODEL BASE D(IS=9n)\n.ENDIF`
+    const childContent = `.IF (${condition})\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ELSE\n.MODEL CHILD AKO:BASE D(IS=3n)\n.ENDIF`
+    const assets = [
+      { id: `context-base-${index}`, filename: 'base.lib', content: baseContent },
+      { id: `context-child-${index}`, filename: 'child.lib', content: childContent },
+    ]
+    const result = expandNgspiceAkoModels(assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) })))
+    assert.match(result.issues.map(({ message }) => message).join('\n'), /no definition in the child model’s active conditional branch/)
+    assert.equal(result.cards.size, 0)
+  }
 })
 
 test('does not pair cross-library numeric AKO branches when their normalized conditions differ', () => {

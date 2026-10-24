@@ -676,11 +676,19 @@ function conditionalBranchSignature(block: { branch: number; sawElse: boolean; c
 function conditionalPathEnvironmentIndependent(block: { conditions: string[] }): boolean {
   // Across separate files, identical source text is not enough when names can
   // bind to different .PARAM values. Only numeric-only expressions are safe.
+  const deterministicFunctions = [
+    'sqrt', 'sin', 'cos', 'tan', 'sinh', 'cosh', 'tanh', 'asin', 'acos', 'atan', 'arctan',
+    'asinh', 'acosh', 'atanh', 'exp', 'ln', 'log', 'log10', 'abs', 'nint', 'int', 'floor', 'ceil',
+    'sgn', 'pow', 'pwr', 'min', 'max', 'ternary_fcn',
+  ].join('|')
+  const functionCall = new RegExp(`\\b(?:${deterministicFunctions})\\s*\\(`, 'gi')
   return block.conditions.every((condition) => {
     // SPICE numbers may carry a scale factor (including `mil`) followed by
     // decorative unit text (for example 1k, 2.2meg, 5mV, or 5kOhm). These
     // remain literal constants; their letters must not look like parameters.
-    const withoutNumbers = condition.replace(/(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*/gi, '')
+    const withoutNumbers = condition
+      .replace(/(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*/gi, '')
+      .replace(functionCall, '(')
     return /^[\s+\-*/^%<>=!&|(),{}]*$/.test(withoutNumbers)
   })
 }
