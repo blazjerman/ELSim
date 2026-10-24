@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, deviceModelTypeMatches, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId, supportsDeviceTemperatureDelta, supportsInitialOff } from './componentDefinitions'
@@ -652,6 +652,11 @@ export function validateProject(input: unknown): Project {
       const name = model.name.toLowerCase()
       if (!importedDeviceModelByName.has(name)) importedDeviceModelByName.set(name, model)
     }
+  }
+  for (const family of ngspiceBsim3BinFamilies([...importedDeviceModelByName.values()])) {
+    if (importedDeviceModelByName.has(family.name)) continue
+    const parameters = family.models[0].parameters.filter((parameter) => family.models.every((model) => model.parameters.some((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase())))
+    importedDeviceModelByName.set(family.name, { ...family.models[0], name: family.name, parameters })
   }
   for (const part of data.parts as Part[]) {
     const expectedDefinitionId = part.kind !== 'subcircuit' || part.sheetId

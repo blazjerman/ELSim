@@ -1,11 +1,11 @@
 import type { ParameterSweep, Project, SourceSweepParameter } from '../domain/project'
 import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
-import { isValidNgspiceSubcircuitParameterName, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { isValidNgspiceSubcircuitParameterName, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { translateVoltageSwitchModel } from '../domain/voltageSwitchModel'
 
 type VoltageSwitchSweepBase = { von: number; voff: number; ron: number; roff: number }
-type ParameterSweepValue = { component: string; value: string; parameter?: string; model?: string; instanceParameter?: boolean; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean; voltageSwitch?: { base: VoltageSwitchSweepBase; parameter: keyof VoltageSwitchSweepBase }; altermodParameters?: { RON: string; ROFF: string; VT: string; VH: string } }
+type ParameterSweepValue = { component: string; value: string; parameter?: string; model?: string; modelTargets?: string[]; instanceParameter?: boolean; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean; voltageSwitch?: { base: VoltageSwitchSweepBase; parameter: keyof VoltageSwitchSweepBase }; altermodParameters?: { RON: string; ROFF: string; VT: string; VH: string } }
 export type ParameterSweepRun = { values: ParameterSweepValue[]; label: string }
 
 
@@ -152,9 +152,13 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     const inheritedParameters = expandNgspiceAkoModels(parsedModels).parameters
     const model = parsedModels.flatMap(({ asset, parsed }) => parsed.models.filter((definition) => !definition.scope).map((definition) => ({ asset, definition })))
       .find(({ definition }) => definition.name.toLowerCase() === part?.deviceModel?.toLowerCase())
-    const parameters = model ? inheritedParameters.get(`${model.asset.id}:${model.definition.startLine}`) ?? model.definition.parameters : []
+    const deviceModels = parsedModels.flatMap(({ parsed }) => parsed.models.filter((definition) => !definition.scope))
+    const binFamily = ngspiceBsim3BinFamilies(deviceModels).find((family) => family.name.toLowerCase() === part?.deviceModel?.toLowerCase())
+    const parameters = binFamily
+      ? binFamily.models[0].parameters.filter((candidate) => binFamily.models.every((bin) => bin.parameters.some((parameter) => parameter.name.toLowerCase() === candidate.name.toLowerCase())))
+      : model ? inheritedParameters.get(`${model.asset.id}:${model.definition.startLine}`) ?? model.definition.parameters : []
     const parameter = parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
-    if (!part || !parameter) throw new Error(`${sweep.component}.${sweep.parameter} is not a numeric parameter on its selected imported device model.`)
+    if (!part || !parameter || (binFamily && !binFamily.models.every((bin) => bin.parameters.some((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase())))) throw new Error(`${sweep.component}.${sweep.parameter} is not a shared parameter on every bin in its selected imported device model.`)
     const start = spiceModelParameterMagnitude(sweep.start), stop = spiceModelParameterMagnitude(sweep.stop)
     if (sweep.listValues) {
       const values = sweep.listValues.map(spiceModelParameterMagnitude)
@@ -219,6 +223,10 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
     const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
     if (!part) throw new Error(`${sweep.component} is no longer in the circuit.`)
     const values = buildValues(project, sweep)
+    const binFamily = sweep.parameter && !sweep.instanceParameter && part.deviceModel
+      ? ngspiceBsim3BinFamilies((project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.filter((definition) => !definition.scope)))
+        .find((family) => family.name.toLowerCase() === part.deviceModel!.toLowerCase())
+      : undefined
     const voltageSwitch = sweep.parameter && !sweep.instanceParameter ? voltageSwitchSweepBase(project, part) : undefined
     const voltageSwitchParameter = sweep.parameter?.toLowerCase() as keyof VoltageSwitchSweepBase | undefined
     const sweepVoltageSwitchModel = voltageSwitch && ['von', 'voff', 'ron', 'roff'].includes(voltageSwitchParameter ?? '') ? voltageSwitch : undefined
@@ -233,7 +241,7 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
       const label = combination.label ? `${combination.label}, ${target}=${display}` : `${target}=${display}`
       const model = parameter ? (sweep.instanceParameter ? part.modelName : part.deviceModel) : undefined
       const pulseHigh = !parameter && !sourceParameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
-      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model, ...(sweep.instanceParameter ? { instanceParameter: true } : {}) } : {}), ...(sourceParameter ? { sourceParameter } : {}), ...(!sourceParameter && pulseHigh ? { pulseHigh: true } : {}), ...(!sourceParameter && pwlScale ? { pwlScale: true } : {}), ...(!sourceParameter && waveformAmplitude ? { waveformAmplitude: true } : {}), ...(sweepVoltageSwitchModel && voltageSwitchParameter ? { voltageSwitch: { base: sweepVoltageSwitchModel.base, parameter: voltageSwitchParameter } } : {}) }], label }
+      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model, ...(binFamily ? { modelTargets: binFamily.models.map((bin) => bin.name) } : {}), ...(sweep.instanceParameter ? { instanceParameter: true } : {}) } : {}), ...(sourceParameter ? { sourceParameter } : {}), ...(!sourceParameter && pulseHigh ? { pulseHigh: true } : {}), ...(!sourceParameter && pwlScale ? { pwlScale: true } : {}), ...(!sourceParameter && waveformAmplitude ? { waveformAmplitude: true } : {}), ...(sweepVoltageSwitchModel && voltageSwitchParameter ? { voltageSwitch: { base: sweepVoltageSwitchModel.base, parameter: voltageSwitchParameter } } : {}) }], label }
     }))
   }
   if (combinations.length > 10) throw new Error('Parameter stepping is limited to 10 total combinations.')

@@ -2877,6 +2877,22 @@ export default function App() {
         return parameters ? { ...model, parameters } : model
       })
     }
+    const bsim3Families = ngspiceBsim3BinFamilies(modelLibraryAnalysis.assets.flatMap(({ parsed }) => parsed.models.filter((model) => !model.scope)))
+    sweepModels = [
+      ...sweepModels,
+      ...bsim3Families.map((family) => {
+        const first = family.models[0]
+        const commonParameters = first.parameters.filter((parameter) => family.models.every((model) => model.parameters.some((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase())))
+        return {
+          ...first,
+          name: family.name,
+          parameters: commonParameters,
+          binModels: family.models.map((model) => model.name),
+          assetId: modelLibraryAnalysis.assets.find(({ parsed }) => parsed.models.includes(first))?.asset.id ?? first.name,
+          filename: [...new Set(family.models.map((model) => modelLibraryAnalysis.assets.find(({ parsed }) => parsed.models.includes(model))?.asset.filename).filter((filename): filename is string => Boolean(filename)))].join(', '),
+        }
+      }),
+    ]
     const eligibleParts = eligibleParameterSweepParts({ parts: project.parts, analysis: project.simulation.analysis, dcSweepSource: project.simulation.dcSweep?.source, models: sweepModels, subcircuits: importedModels, sheets: project.sheets })
     const parts = unusedSweepTargets(eligibleParts, configured, sweepModels, importedModels, project.sheets)
     const availableInstanceParameters = (part: Part) => subcircuitSweepParameters(part, importedModels, project.sheets).filter((parameter) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase() && sweep.instanceParameter && sweep.parameter?.toLowerCase() === parameter.name.toLowerCase()))

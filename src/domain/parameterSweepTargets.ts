@@ -2,7 +2,7 @@ import { spiceModelParameterMagnitude } from './componentValue'
 import type { ParameterSweep, Part, Project } from './project'
 
 type SweepParameter = { name: string; defaultValue: string; defaultIsExpression?: boolean }
-type SweepDefinition = { name: string; parameters: SweepParameter[] }
+type SweepDefinition = { name: string; parameters: SweepParameter[]; binModels?: string[] }
 
 function parameterValue(part: Part, parameter: SweepParameter): string {
   const overrides = part.sheetId ? part.sheetParameters : part.modelParameters

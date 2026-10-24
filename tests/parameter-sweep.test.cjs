@@ -447,6 +447,25 @@ test('imported URC model parameters can be stepped', () => {
   assert.match(addResultControl(createNetlistArtifact(validated).text, runs), /altermod USER_URC RPERL=2\.00000000e\+1\nrun/)
 })
 
+test('BSIM3 bin-family parameter sweeps update every bin in each case', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'm-bin-sweep', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', x: 700, y: 500, rotation: 0 })
+  project.modelAssets = [{ id: 'binned-models', filename: 'nch.lib', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(), content: [
+    '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7',
+    '.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5',
+  ].join('\n') }]
+  project.simulation.parameterSweeps = [{ component: 'M1', parameter: 'VTH0', start: '0.7', stop: '1.5', points: 3 }]
+
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 3)
+  assert.deepEqual(runs[0].values[0].modelTargets, ['NCH.1', 'NCH.2'])
+  assert.match(runs[0].label, /M1\.VTH0=0\.7/)
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /altermod NCH\.1 VTH0=7\.00000000e-1\naltermod NCH\.2 VTH0=7\.00000000e-1\nrun/)
+  assert.match(control, /altermod NCH\.1 VTH0=1\.50000000e\+0\naltermod NCH\.2 VTH0=1\.50000000e\+0\nrun/)
+})
+
 test('PSpice VSWITCH model sweeps map threshold fields to native SW parameters', () => {
   const project = createVoltageSwitchExampleProject()
   const switchPart = project.parts.find((part) => part.kind === 'voltageSwitch')
