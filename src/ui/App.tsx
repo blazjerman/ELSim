@@ -812,8 +812,27 @@ export default function App() {
     project.parts, project.simulation, project.activeSheetId,
     project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters, connectivity,
   ])
-  const analysisSettingError = (field: AnalysisSettingField, sourceId?: string) => analysisSettingErrors.find((error) => error.field === field && (sourceId === undefined || error.sourceId === sourceId))?.message
-  const pwlCountValidationError = (sourceId: string) => analysisSettingErrors.find((error) => error.field === 'pwlPoints' && error.sourceId === sourceId && error.settingPath?.endsWith('.points'))?.message
+  const analysisSettingErrorIndex = useMemo(() => {
+    const firstByField = new Map<AnalysisSettingField, string>()
+    const byFieldAndSource = new Map<AnalysisSettingField, Map<string, string>>()
+    const pwlPointErrors = new Map<string, string>()
+    for (const error of analysisSettingErrors) {
+      if (!firstByField.has(error.field)) firstByField.set(error.field, error.message)
+      if (error.sourceId !== undefined) {
+        let bySource = byFieldAndSource.get(error.field)
+        if (!bySource) { bySource = new Map(); byFieldAndSource.set(error.field, bySource) }
+        if (!bySource.has(error.sourceId)) bySource.set(error.sourceId, error.message)
+        if (error.field === 'pwlPoints' && error.settingPath?.endsWith('.points') && !pwlPointErrors.has(error.sourceId)) {
+          pwlPointErrors.set(error.sourceId, error.message)
+        }
+      }
+    }
+    return { firstByField, byFieldAndSource, pwlPointErrors }
+  }, [analysisSettingErrors])
+  const analysisSettingError = (field: AnalysisSettingField, sourceId?: string) => sourceId === undefined
+    ? analysisSettingErrorIndex.firstByField.get(field)
+    : analysisSettingErrorIndex.byFieldAndSource.get(field)?.get(sourceId)
+  const pwlCountValidationError = (sourceId: string) => analysisSettingErrorIndex.pwlPointErrors.get(sourceId)
   const modelLibraryAnalysis = useMemo(() => analyzeModelLibraries(project.modelAssets ?? []), [modelLibraryRevision])
   const modelFunctionResolver = useMemo(() => createModelFunctionResolver(modelLibraryAnalysis.assets), [modelLibraryAnalysis])
   const projectModelFunctions = useMemo(() => modelFunctionsForProject(modelLibraryAnalysis.assets), [modelLibraryAnalysis])
