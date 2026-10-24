@@ -98,6 +98,8 @@ test('response consumer rejects malformed or incomplete worker messages', () => 
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'noise', noiseSummaries: [{ outputRms: -1, inputRms: 2e-8, inputUnit: 'A' }] } }), false)
   const ngspiceFourier = { traceId: 'v(out)', vector: 'v(out)', fundamentalFrequency: 1000, thdPercent: 0.01, harmonics: Array.from({ length: 10 }, (_, order) => ({ order, frequency: order * 1000, magnitude: order === 1 ? 5 : 0, phaseDegrees: 0, normalizedMagnitude: order === 1 ? 1 : 0, normalizedPhaseDegrees: 0 })) }
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, ngspiceFourier } }), true)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, ngspiceFourier: { ...ngspiceFourier, harmonics: ngspiceFourier.harmonics.map((harmonic, index) => index === 0 ? { ...harmonic, magnitude: -1e-12 } : harmonic) } } }), true)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, ngspiceFourier: { ...ngspiceFourier, harmonics: ngspiceFourier.harmonics.map((harmonic, index) => index === 1 ? { ...harmonic, magnitude: -1 } : harmonic) } } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, ngspiceFourier: { ...ngspiceFourier, harmonics: [] } } }), false)
   assert.equal(isEngineResponse({ type: 'unknown', requestId: 'run-1' }), false)
 })

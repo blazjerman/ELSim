@@ -84,7 +84,7 @@ function isNgspiceFourierAnalysis(value: unknown): value is NgspiceFourierAnalys
     && Array.isArray(value.harmonics) && value.harmonics.length === 10
     && value.harmonics.every((harmonic, index) => isRecord(harmonic) && harmonic.order === index
       && typeof harmonic.frequency === 'number' && Number.isFinite(harmonic.frequency) && harmonic.frequency >= 0
-      && typeof harmonic.magnitude === 'number' && Number.isFinite(harmonic.magnitude) && harmonic.magnitude >= 0
+      && typeof harmonic.magnitude === 'number' && Number.isFinite(harmonic.magnitude) && (index === 0 || harmonic.magnitude >= 0)
       && typeof harmonic.phaseDegrees === 'number' && Number.isFinite(harmonic.phaseDegrees)
       && (harmonic.normalizedMagnitude === null || (typeof harmonic.normalizedMagnitude === 'number' && Number.isFinite(harmonic.normalizedMagnitude)))
       && (harmonic.normalizedPhaseDegrees === null || (typeof harmonic.normalizedPhaseDegrees === 'number' && Number.isFinite(harmonic.normalizedPhaseDegrees))))
