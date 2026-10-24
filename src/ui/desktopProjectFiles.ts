@@ -1,6 +1,5 @@
 import { isTauri } from '@tauri-apps/api/core'
-
-const MAX_PROJECT_FILE_BYTES = 50 * 1024 * 1024
+import { assertProjectFileWithinLimit } from '../domain/projectFileLimits'
 
 export type DesktopProjectFileResult =
   | { status: 'unavailable' | 'cancelled' }
@@ -36,8 +35,8 @@ export async function openDesktopProject(): Promise<DesktopProjectFileResult> {
   })
   if (!path || Array.isArray(path)) return { status: 'cancelled' }
   const file = await stat(path)
-  if (file.size > MAX_PROJECT_FILE_BYTES) throw new Error('Project file exceeds the 50 MiB size limit.')
+  assertProjectFileWithinLimit(file.size)
   const bytes = await readFile(path)
-  if (bytes.byteLength > MAX_PROJECT_FILE_BYTES) throw new Error('Project file exceeds the 50 MiB size limit.')
+  assertProjectFileWithinLimit(bytes.byteLength)
   return { status: 'file', bytes }
 }

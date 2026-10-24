@@ -40,6 +40,7 @@ import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domai
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
 import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type TransientMeasurementPatch } from '../domain/project'
 import { validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlistValidation'
+import { assertProjectFileWithinLimit } from '../domain/projectFileLimits'
 import { updatePartUiState } from './partUiState'
 import { COMPONENT_SHORTCUTS_HELP, EDITOR_SHORTCUTS, exampleSelection, FUTURE_COMPONENT_SHORTCUTS, LOGIC_GATE_SHORTCUTS, LOGIC_GATE_SHORTCUTS_HELP } from './editorMetadata'
 import { getStartHereProgress, type ExampleId } from '../domain/examplePath'
@@ -1640,7 +1641,7 @@ export default function App() {
     downloadProjectArchive()
   }
   const applyProjectBytes = async (bytes: Uint8Array) => {
-    if (bytes.byteLength > 50 * 1024 * 1024) throw new Error('Project file exceeds the 50 MiB size limit.')
+    assertProjectFileWithinLimit(bytes.byteLength)
     const { isProjectArchive, readProjectArchive } = await import('../domain/projectArchive')
     const projectData = isProjectArchive(bytes) ? await readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
     const parsed = validateProject(projectData)

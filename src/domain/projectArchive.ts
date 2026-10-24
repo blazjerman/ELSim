@@ -1,9 +1,10 @@
 import type { Project } from './project'
+import { PROJECT_ARCHIVE_ENTRY_MAX_BYTES, PROJECT_FILE_MAX_BYTES } from './projectFileLimits'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
-const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
-const MAX_ENTRY_BYTES = MAX_ARCHIVE_BYTES - 1024 * 1024
+const MAX_ARCHIVE_BYTES = PROJECT_FILE_MAX_BYTES
+const MAX_ENTRY_BYTES = PROJECT_ARCHIVE_ENTRY_MAX_BYTES
 const MAX_ENTRIES = 64
 const MANIFEST_PATH = 'manifest.json'
 const PROJECT_PATH = 'project.json'

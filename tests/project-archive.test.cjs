@@ -6,9 +6,19 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive, crc32 } = require(path.join(build, 'domain/projectArchive.js'))
+const { assertProjectFileWithinLimit, PROJECT_FILE_MAX_BYTES } = require(path.join(build, 'domain/projectFileLimits.js'))
 const { webcrypto } = require('node:crypto')
 const { deflateRawSync, inflateRawSync } = require('node:zlib')
 if (!globalThis.crypto) globalThis.crypto = webcrypto
+
+test('shared project file limit accepts its boundary and rejects invalid or oversized lengths', () => {
+  assert.doesNotThrow(() => assertProjectFileWithinLimit(0))
+  assert.doesNotThrow(() => assertProjectFileWithinLimit(PROJECT_FILE_MAX_BYTES))
+  assert.throws(() => assertProjectFileWithinLimit(PROJECT_FILE_MAX_BYTES + 1), /50 MiB size limit/)
+  assert.throws(() => assertProjectFileWithinLimit(-1), /invalid size/)
+  assert.throws(() => assertProjectFileWithinLimit(Number.NaN), /invalid size/)
+  assert.throws(() => assertProjectFileWithinLimit(Number.POSITIVE_INFINITY), /invalid size/)
+})
 // Node 18's CompressionStream supports zlib-wrapped DEFLATE but not ZIP's raw
 // DEFLATE format. Exercise the exact browser API contract with a small adapter.
 globalThis.CompressionStream = class TestCompressionStream {
