@@ -8,6 +8,18 @@ import { formatTime } from './formatTime'
 
 type SpectrumDisplay = 'magnitude' | 'phase'
 
+function nearestFrequencyBin(spectrum: ReturnType<typeof calculateTransientSpectrum>, frequency: number): number {
+  const { frequencies } = spectrum
+  let low = 1, high = frequencies.length - 1
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    if (frequencies[middle] < frequency) low = middle + 1
+    else high = middle
+  }
+  if (low > 1 && frequency - frequencies[low - 1] < frequencies[low] - frequency) return low - 1
+  return low
+}
+
 function frequencyLabel(value: number): string {
   if (value >= 1e6) return `${Number((value / 1e6).toPrecision(3))} MHz`
   if (value >= 1e3) return `${Number((value / 1e3).toPrecision(3))} kHz`
@@ -25,7 +37,9 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
   const [end, setEnd] = useState(initialRange.end)
   const [windowFunction, setWindowFunction] = useState<SpectrumWindow>('hann')
   const [display, setDisplay] = useState<SpectrumDisplay>('magnitude')
-  const [cursorFrequency, setCursorFrequency] = useState<number | null>(null)
+  const [cursorA, setCursorA] = useState<number | null>(null)
+  const [cursorB, setCursorB] = useState<number | null>(null)
+  const [activeCursor, setActiveCursor] = useState<'A' | 'B'>('A')
   const trace = traces.find((candidate) => candidate.id === traceId) ?? traces[0]
   const calculation = useMemo(() => {
     if (!trace) return { spectrum: null, error: 'Select a transient trace to inspect.' }
@@ -61,20 +75,16 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
     }
     return { bins, firstFrequency, lastFrequency, minimum, maximum, left, right, top, bottom, x, y, points, values, peak, frequencyTicks, valueTicks }
   }, [spectrum, display])
-  const cursorBin = useMemo(() => {
+  const cursorBinA = useMemo(() => {
     if (!spectrum) return 0
-    if (cursorFrequency === null) return interpolateSpectrumPeak(spectrum)?.bin ?? 1
-    const { frequencies } = spectrum
-    let low = 1, high = frequencies.length - 1
-    while (low < high) {
-      const middle = (low + high) >>> 1
-      if (frequencies[middle] < cursorFrequency) low = middle + 1
-      else high = middle
-    }
-    if (low > 1 && cursorFrequency - frequencies[low - 1] < frequencies[low] - cursorFrequency) return low - 1
-    return low
-  }, [spectrum, cursorFrequency])
-  useEffect(() => { if (plot) setCursorFrequency(plot.peak.frequency) }, [plot])
+    return nearestFrequencyBin(spectrum, cursorA ?? plot?.peak.frequency ?? spectrum.frequencies[1])
+  }, [spectrum, cursorA, plot])
+  const cursorBinB = useMemo(() => spectrum && cursorB !== null ? nearestFrequencyBin(spectrum, cursorB) : null, [spectrum, cursorB])
+  useEffect(() => {
+    if (!spectrum) return
+    const peak = interpolateSpectrumPeak(spectrum)
+    if (peak) { setCursorA(peak.frequency); setCursorB(null); setActiveCursor('A') }
+  }, [spectrum])
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', keyDown)
@@ -86,13 +96,31 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
     const rect = event.currentTarget.getBoundingClientRect()
     const x = (event.clientX - rect.left) / Math.max(rect.width, 1) * 800
     const fraction = Math.max(0, Math.min(1, (x - plot.left) / (plot.right - plot.left)))
-    setCursorFrequency(plot.firstFrequency * (plot.lastFrequency / plot.firstFrequency) ** fraction)
+    const frequency = plot.firstFrequency * (plot.lastFrequency / plot.firstFrequency) ** fraction
+    if (activeCursor === 'A') setCursorA(frequency)
+    else setCursorB(frequency)
   }
   const moveFrequencyCursorByKey = (event: ReactKeyboardEvent<SVGSVGElement>) => {
     if (!spectrum || !plot || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
     event.preventDefault()
-    const index = event.key === 'Home' ? 1 : event.key === 'End' ? spectrum.frequencies.length - 1 : Math.max(1, Math.min(spectrum.frequencies.length - 1, cursorBin + (event.key === 'ArrowLeft' ? -1 : 1)))
-    setCursorFrequency(spectrum.frequencies[index])
+    const currentBin = activeCursor === 'A' ? cursorBinA : cursorBinB ?? cursorBinA
+    const index = event.key === 'Home' ? 1 : event.key === 'End' ? spectrum.frequencies.length - 1 : Math.max(1, Math.min(spectrum.frequencies.length - 1, currentBin + (event.key === 'ArrowLeft' ? -1 : 1)))
+    if (activeCursor === 'A') setCursorA(spectrum.frequencies[index])
+    else setCursorB(spectrum.frequencies[index])
+  }
+
+  const amplitudeAt = (bin: number) => spectrum?.peakAmplitudes[bin] ?? 0
+  const phaseAt = (bin: number) => spectrum?.phaseDegrees[bin] ?? 0
+  const cursorAFrequency = spectrum?.frequencies[cursorBinA] ?? 0
+  const cursorBFrequency = cursorBinB === null || !spectrum ? null : spectrum.frequencies[cursorBinB]
+  const setSecondCursor = () => {
+    if (cursorB === null) {
+      setCursorB(cursorAFrequency)
+      setActiveCursor('B')
+    } else {
+      setCursorB(null)
+      setActiveCursor('A')
+    }
   }
 
   return <div className="netlist-modal-backdrop spectrum-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
@@ -106,14 +134,16 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
       {calculation.error && <p className="field-error" role="alert">{calculation.error}</p>}
       {spectrum && plot && trace && <>
         <div className="spectrum-summary"><strong>Peak: {frequencyLabel(plot.peak.frequency)}</strong><span>{plot.peak.peakAmplitude.toPrecision(4)} {trace.unit} peak (interpolated)</span><span>{spectrum.sampleCount.toLocaleString()} samples · {frequencyLabel(spectrum.sampleRate / spectrum.sampleCount)} resolution · Nyquist {frequencyLabel(spectrum.frequencies.at(-1) ?? 0)}</span><span>{spectrum.window} window · {formatTime(start, trace.axis.at(-1) ?? end)} to {formatTime(end, trace.axis.at(-1) ?? end)}</span></div>
-        <div className="spectrum-cursor-readout" aria-live="polite"><strong>{frequencyLabel(spectrum.frequencies[cursorBin])}</strong><span>{display === 'magnitude' ? `${spectrum.peakAmplitudes[cursorBin].toPrecision(5)} ${trace.unit} peak · ${amplitudeLabel(20 * Math.log10(Math.max(spectrum.peakAmplitudes[cursorBin], 1e-15)))}` : `${spectrum.phaseDegrees[cursorBin].toFixed(2)}° phase relative to window start`}</span></div>
-        <svg className="spectrum-chart" viewBox="0 0 800 344" role="group" aria-label={`${display === 'magnitude' ? 'Magnitude' : 'Phase'} FFT of ${trace.label}, peak at ${frequencyLabel(plot.peak.frequency)}. Use left and right arrow keys to inspect frequency bins.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onPointerMove={moveFrequencyCursor} onKeyDown={moveFrequencyCursorByKey}>
+        <div className="spectrum-cursor-controls"><span>Move cursor:</span><button type="button" aria-pressed={activeCursor === 'A'} onClick={() => setActiveCursor('A')}>Cursor A</button>{cursorB !== null && <button type="button" aria-pressed={activeCursor === 'B'} onClick={() => setActiveCursor('B')}>Cursor B</button>}<button type="button" onClick={setSecondCursor}>{cursorB === null ? 'Add cursor B' : 'Remove cursor B'}</button></div>
+        <div className="spectrum-cursor-readout" aria-live="polite"><span><strong>A {frequencyLabel(cursorAFrequency)}</strong> {display === 'magnitude' ? `${amplitudeAt(cursorBinA).toPrecision(5)} ${trace.unit} · ${amplitudeLabel(20 * Math.log10(Math.max(amplitudeAt(cursorBinA), 1e-15)))}` : `${phaseAt(cursorBinA).toFixed(2)}° phase relative to window start`}</span>{cursorBinB !== null && cursorBFrequency !== null && <><span><strong>B {frequencyLabel(cursorBFrequency)}</strong> {display === 'magnitude' ? `${amplitudeAt(cursorBinB).toPrecision(5)} ${trace.unit} · ${amplitudeLabel(20 * Math.log10(Math.max(amplitudeAt(cursorBinB), 1e-15)))}` : `${phaseAt(cursorBinB).toFixed(2)}° phase relative to window start`}</span><span>Δf {frequencyLabel(cursorBFrequency - cursorAFrequency)} · {display === 'magnitude' ? `ΔA ${(amplitudeAt(cursorBinB) - amplitudeAt(cursorBinA)).toPrecision(5)} ${trace.unit}` : `Δphase ${(((phaseAt(cursorBinB) - phaseAt(cursorBinA) + 540) % 360) - 180).toFixed(2)}°`}</span></>}</div>
+        <svg className="spectrum-chart" viewBox="0 0 800 344" role="group" aria-label={`${display === 'magnitude' ? 'Magnitude' : 'Phase'} FFT of ${trace.label}, peak at ${frequencyLabel(plot.peak.frequency)}. Use left and right arrow keys to inspect the active frequency cursor.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onPointerMove={moveFrequencyCursor} onKeyDown={moveFrequencyCursorByKey}>
           {plot.valueTicks.map((value) => <g key={`amp-${value}`}><line x1={plot.left} x2={plot.right} y1={plot.y(value)} y2={plot.y(value)} className="plot-grid"/><text x={plot.left - 8} y={plot.y(value) + 4} textAnchor="end" className="plot-tick">{display === 'magnitude' ? amplitudeLabel(value) : `${value}°`}</text></g>)}
           {plot.frequencyTicks.map((value) => <g key={`freq-${value}`}><line x1={plot.x(value)} x2={plot.x(value)} y1={plot.top} y2={plot.bottom} className="plot-grid"/><text x={plot.x(value)} y={plot.bottom + 20} textAnchor="middle" className="plot-tick">{frequencyLabel(value)}</text></g>)}
           <line x1={plot.left} x2={plot.right} y1={plot.bottom} y2={plot.bottom} className="plot-axis"/>
           <polyline points={plot.points} fill="none" stroke="#91e0ae" strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>
-          <line x1={plot.x(spectrum.frequencies[cursorBin])} x2={plot.x(spectrum.frequencies[cursorBin])} y1={plot.top} y2={plot.bottom} className="spectrum-cursor-line"/>
-          <circle cx={plot.x(spectrum.frequencies[cursorBin])} cy={plot.y(plot.values[cursorBin - 1])} r="3.5" fill="#91e0ae" stroke="#101512" strokeWidth="1"/>
+          <line x1={plot.x(spectrum.frequencies[cursorBinA])} x2={plot.x(spectrum.frequencies[cursorBinA])} y1={plot.top} y2={plot.bottom} className="spectrum-cursor-line spectrum-cursor-a"/>
+          <circle cx={plot.x(spectrum.frequencies[cursorBinA])} cy={plot.y(plot.values[cursorBinA - 1])} r="3.5" fill="#91e0ae" stroke="#101512" strokeWidth="1"/>
+          {cursorBinB !== null && <><line x1={plot.x(spectrum.frequencies[cursorBinB])} x2={plot.x(spectrum.frequencies[cursorBinB])} y1={plot.top} y2={plot.bottom} className="spectrum-cursor-line spectrum-cursor-b"/><circle cx={plot.x(spectrum.frequencies[cursorBinB])} cy={plot.y(plot.values[cursorBinB - 1])} r="3.5" fill="#d88bea" stroke="#101512" strokeWidth="1"/></>}
           {display === 'magnitude' && <circle cx={plot.x(plot.peak.frequency)} cy={plot.y(20 * Math.log10(Math.max(plot.peak.peakAmplitude, 1e-15)))} r="4" fill="#f2d17e"/>}
           <text x={(plot.left + plot.right) / 2} y="340" textAnchor="middle" className="plot-tick">{display === 'magnitude' ? `Magnitude (dB${trace.unit}, logarithmic frequency)` : 'Phase (degrees, wrapped; relative to window start)'}</text>
         </svg>
