@@ -64,7 +64,7 @@ function fft(real: Float64Array, imaginary: Float64Array): void {
  * Calculate a Hann-windowed, single-sided FFT from an ngspice transient trace.
  * Adaptive solver samples are linearly resampled to a uniform grid first.
  */
-export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 16384): TransientSpectrum {
+export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 16384, timeRange?: { start: number; end: number }): TransientSpectrum {
   const { axis, values } = trace
   if (!(axis instanceof Float64Array) || !(values instanceof Float64Array) || axis.length !== values.length || axis.length < 32) {
     throw new Error('FFT needs at least 32 transient samples on one axis.')
@@ -72,7 +72,12 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
   if (!Number.isSafeInteger(maxSamples) || maxSamples < 32 || !isPowerOfTwo(maxSamples)) {
     throw new Error('FFT maximum sample count must be a power of two of at least 32.')
   }
-  const duration = axis[axis.length - 1] - axis[0]
+  const start = timeRange?.start ?? axis[0]
+  const end = timeRange?.end ?? axis[axis.length - 1]
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < axis[0] || end > axis[axis.length - 1] || end <= start) {
+    throw new Error('FFT time range must be inside the trace and have positive duration.')
+  }
+  const duration = end - start
   if (!Number.isFinite(duration) || duration <= 0) throw new Error('FFT needs a positive transient time range.')
   for (let index = 0; index < axis.length; index += 1) {
     if (!Number.isFinite(axis[index]) || !Number.isFinite(values[index]) || index > 0 && axis[index] <= axis[index - 1]) {
@@ -80,7 +85,9 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
     }
   }
   let sampleCount = 1
-  const limit = Math.min(axis.length, maxSamples)
+  const startIndex = Math.max(0, sampleAtIndex(axis, start))
+  const endIndex = Math.min(axis.length - 1, sampleAtIndex(axis, end))
+  const limit = Math.min(endIndex - startIndex + 1, maxSamples)
   while (sampleCount * 2 <= limit) sampleCount *= 2
   if (sampleCount < 32) throw new Error('FFT needs at least 32 transient samples.')
 
@@ -88,7 +95,7 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
   const imaginary = new Float64Array(sampleCount)
   let mean = 0
   for (let index = 0; index < sampleCount; index += 1) {
-    const time = axis[0] + duration * index / sampleCount
+    const time = start + duration * index / sampleCount
     real[index] = sampleAt(axis, values, time)
     mean += real[index]
   }
@@ -111,4 +118,14 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
     peakAmplitudes[bin] = Math.hypot(real[bin], imaginary[bin]) * scale / windowSum
   }
   return { frequencies, peakAmplitudes, sampleCount, sampleRate, window: 'hann' }
+}
+
+function sampleAtIndex(axis: Float64Array, time: number): number {
+  let low = 0, high = axis.length - 1
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    if (axis[middle] < time) low = middle + 1
+    else high = middle
+  }
+  return low
 }

@@ -553,7 +553,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={colorFor}/>
     <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors} keyboardAnnouncement={keyboardAnnouncement}/>
-    {spectrumOpen && <Suspense fallback={<div className="waveform-empty" role="status">Loading FFT spectrum…</div>}><FourierSpectrumDialog traces={shown.filter((trace) => trace.axis.length >= 32)} onClose={() => setSpectrumOpen(false)}/></Suspense>}
+    {spectrumOpen && <Suspense fallback={<div className="waveform-empty" role="status">Loading FFT spectrum…</div>}><FourierSpectrumDialog traces={shown.filter((trace) => trace.axis.length >= 32)} initialRange={{ start: minTime, end: maxTime }} onClose={() => setSpectrumOpen(false)}/></Suspense>}
   </div>
 }
 

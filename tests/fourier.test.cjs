@@ -45,6 +45,24 @@ test('transient FFT resamples adaptive time points onto a uniform grid', () => {
   assert.ok(Math.abs(spectrum.peakAmplitudes[peak] - 1.4) < 0.003)
 })
 
+test('transient FFT can analyze a selected time interval with its own resolution', () => {
+  const count = 4097
+  const axis = new Float64Array(count), values = new Float64Array(count)
+  for (let index = 0; index < count; index += 1) {
+    axis[index] = 2 * index / (count - 1)
+    values[index] = 2 * Math.sin(2 * Math.PI * 50 * axis[index])
+  }
+  const whole = calculateTransientSpectrum({ axis, values })
+  const segment = calculateTransientSpectrum({ axis, values }, 16384, { start: 0.5, end: 1.5 })
+  assert.equal(whole.sampleCount, 4096)
+  assert.equal(segment.sampleCount, 2048)
+  assert.equal(segment.frequencies[1], 1)
+  const peak = strongestNonzeroBin(segment)
+  assert.equal(segment.frequencies[peak], 50)
+  assert.ok(Math.abs(segment.peakAmplitudes[peak] - 2) < 0.01)
+  assert.throws(() => calculateTransientSpectrum({ axis, values }, 16384, { start: -1, end: 1 }), /inside the trace/)
+})
+
 test('transient FFT rejects short, malformed, and non-power-of-two requests', () => {
   assert.throws(() => calculateTransientSpectrum({ axis: Float64Array.of(0), values: Float64Array.of(1) }), /at least 32/)
   const axis = Float64Array.from({ length: 32 }, (_, index) => index)
