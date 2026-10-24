@@ -39,6 +39,11 @@ function selectedLibraryLines(source: string, selectedSections?: string[]): Logi
 }
 
 type BehavioralHelper = { name: string; body: string; sourceLine: number; excerpt: string; assetId?: string; scope: string }
+function parseBehavioralHelperDefinition(line: string): { name: string; body: string } | null {
+  const match = line.match(/^\s*\.func\s+([A-Za-z_][A-Za-z0-9_.$!#%\[\]]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
+  return match ? { name: match[1], body: match[2] } : null
+}
+
 const selectedLinesCache = new WeakMap<ModelDialectLibrarySource, LogicalSourceLine[]>()
 const globalFunctionsCache = new WeakMap<readonly ModelDialectLibrarySource[], Map<string, BehavioralHelper[]>>()
 
@@ -64,9 +69,9 @@ function globalFunctionsForLibraries(libraries: readonly ModelDialectLibrarySour
       if (directive === '.ends') { scopes.pop(); continue }
       if (directive === '.subckt') { scopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
       if (scopes.length) continue
-      const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$!#%\[\]]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
+      const definition = parseBehavioralHelperDefinition(line)
       if (!definition) continue
-      const helper: BehavioralHelper = { name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160), assetId: library.assetId, scope: '' }
+      const helper: BehavioralHelper = { name: definition.name, body: definition.body, sourceLine, excerpt: line.slice(0, 160), assetId: library.assetId, scope: '' }
       const key = helper.name.toLowerCase()
       functions.set(key, [...(functions.get(key) ?? []), helper])
     }
@@ -130,7 +135,7 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
   const sourceLibrary = options.supportingLibraries?.find(({ assetId }) => assetId === options.sourceAssetId)
   const logical = sourceLibrary ? selectedLinesForLibrary(sourceLibrary) : selectedLibraryLines(source, options.selectedSections)
   const helperDefinitionLines = new Set(logical
-    .filter(({ text }) => /^\s*\.func\s+[A-Za-z_][A-Za-z0-9_.$!#%\[\]]*\s*(?:\([^)]*\))?\s*=?\s*\{/i.test(withoutInlineComment(text)))
+    .filter(({ text }) => parseBehavioralHelperDefinition(withoutInlineComment(text)) !== null)
     .map(({ sourceLine }) => sourceLine))
   const conditionalModelLines = new Set<number>()
   let conditionalDepth = 0
@@ -183,9 +188,9 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
     if (directive === '.ends') { sourceScopes.pop(); continue }
     if (directive === '.subckt') { sourceScopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
     const scope = sourceScopes.join('.')
-    const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$!#%\[\]]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
+    const definition = parseBehavioralHelperDefinition(line)
     if (definition) {
-      const helper: BehavioralHelper = { name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160), assetId: options.sourceAssetId, scope }
+      const helper: BehavioralHelper = { name: definition.name, body: definition.body, sourceLine, excerpt: line.slice(0, 160), assetId: options.sourceAssetId, scope }
       if (scope) {
         const helpers = helpersByScope.get(scope) ?? new Map<string, BehavioralHelper>()
         if (!helpers.has(helper.name.toLowerCase())) helpers.set(helper.name.toLowerCase(), helper)
