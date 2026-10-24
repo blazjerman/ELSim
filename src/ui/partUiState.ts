@@ -26,15 +26,18 @@ export function updatePartUiState(nextSelectedPartIds: string[], nextFocusablePa
     && nextSelectedPartIds.every((id) => selectedPartIds.has(id))
   ) return
 
+  const previousSelected = selectedPartIds
+  const previousFocusable = focusablePartId
   const nextSelected = new Set(nextSelectedPartIds)
-  const changed = new Set<string>()
-  for (const id of selectedPartIds) if (!nextSelected.has(id)) changed.add(id)
-  for (const id of nextSelected) if (!selectedPartIds.has(id)) changed.add(id)
-  if (focusablePartId !== nextFocusablePartId) {
-    if (focusablePartId) changed.add(focusablePartId)
-    if (nextFocusablePartId) changed.add(nextFocusablePartId)
-  }
   selectedPartIds = nextSelected
   focusablePartId = nextFocusablePartId
-  for (const id of changed) for (const listener of listenersByPart.get(id) ?? []) listener()
+  const notify = (id: string) => {
+    for (const listener of listenersByPart.get(id) ?? []) listener()
+  }
+  for (const id of previousSelected) if (!nextSelected.has(id)) notify(id)
+  for (const id of nextSelected) if (!previousSelected.has(id)) notify(id)
+  if (previousFocusable !== nextFocusablePartId) {
+    if (previousFocusable && previousSelected.has(previousFocusable) === nextSelected.has(previousFocusable)) notify(previousFocusable)
+    if (nextFocusablePartId && previousSelected.has(nextFocusablePartId) === nextSelected.has(nextFocusablePartId)) notify(nextFocusablePartId)
+  }
 }

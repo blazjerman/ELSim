@@ -42,3 +42,20 @@ test('part UI store releases listener buckets after the last subscriber leaves',
   assert.equal(partUiState('released-row'), 1)
   updatePartUiState([], undefined)
 })
+
+test('bulk part selection notifies changed and focus rows once without changing unrelated rows', () => {
+  const ids = Array.from({ length: 5_000 }, (_, index) => `bulk-${index}`)
+  const counts = new Map(['bulk-0', 'bulk-2500', 'bulk-4999', 'unselected'].map((id) => [id, 0]))
+  const unsubscribe = [...counts.keys()].map((id) => subscribePartUiState(id, () => counts.set(id, counts.get(id) + 1)))
+
+  try {
+    updatePartUiState(ids, 'bulk-4999')
+    assert.deepEqual([...counts], [['bulk-0', 1], ['bulk-2500', 1], ['bulk-4999', 1], ['unselected', 0]])
+
+    updatePartUiState(ids.slice(0, -1), 'bulk-0')
+    assert.deepEqual([...counts], [['bulk-0', 2], ['bulk-2500', 1], ['bulk-4999', 2], ['unselected', 0]])
+  } finally {
+    unsubscribe.forEach((remove) => remove())
+    updatePartUiState([], undefined)
+  }
+})
