@@ -1566,6 +1566,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   const scopedBsim3Bins = new Map<string, { assetId: string; model: SpiceModelDefinition }[]>()
   const subcircuitParents = new Map<string, string | undefined>()
   const definitionLocations = new Map<string, ModelDefinitionConflict>()
+  const parameterDeclarationSources = new Map<string, Set<string>>()
   for (const { asset, parsed } of parsedAssets) {
     for (const model of parsed.subcircuits) {
       const key = `subcircuit:${model.name.toLowerCase()}`
@@ -1610,10 +1611,17 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       for (const name of topLevelParameterNames(record.text)) {
         const key = `parameter:${name.toLowerCase()}`
         const conflict = definitionLocations.get(key) ?? { name, kind: 'parameter' as const, definitions: [] }
-        const sameSourceDeclaration = conflict.definitions.some((definition) => definition.assetId === asset.id && definition.sourceLine === record.sourceLine)
+        let sources = parameterDeclarationSources.get(key)
+        if (!sources) {
+          sources = new Set()
+          parameterDeclarationSources.set(key, sources)
+        }
+        const sourceKey = `${asset.id}\0${record.sourceLine}`
+        const sameSourceDeclaration = sources.has(sourceKey)
         if (sameSourceDeclaration) {
           conflict.declarationCount = (conflict.declarationCount ?? 1) + 1
         } else {
+          sources.add(sourceKey)
           conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: record.sourceLine })
         }
         definitionLocations.set(key, conflict)

@@ -384,6 +384,17 @@ try {
     resolvedIncludes: modelLibraryAnalysis.value.dependencies.resolvedIncludes.length,
     analysis: { medianMs: modelLibraryAnalysis.medianMs, p95Ms: modelLibraryAnalysis.p95Ms },
   }
+  const parameterConflictLibraries = Array.from({ length: 2000 }, (_, index) => ({
+    id: `bench-parameter-${index}`,
+    filename: `bench-parameter-${index}.lib`,
+    content: '.PARAM SHARED_GAIN=1',
+  }))
+  const parameterConflictAnalysis = measure(() => analyzeModelLibraries(parameterConflictLibraries))
+  const importedParameterConflictResults = {
+    libraries: parameterConflictLibraries.length,
+    duplicateDefinitions: parameterConflictAnalysis.value.dependencies.conflicts[0]?.definitions.length ?? 0,
+    analysis: { medianMs: parameterConflictAnalysis.medianMs, p95Ms: parameterConflictAnalysis.p95Ms },
+  }
   const importedDeviceProject = makeImportedDeviceModelProject(createStarterProject, 400, 600)
   const importedDeviceNetlist = measure(() => createNetlistArtifact(importedDeviceProject))
   const importedDeviceArtifact = importedDeviceNetlist.value
@@ -709,6 +720,7 @@ try {
     hierarchyResults,
     importedModelResults,
     importedLibraryAnalysisResults,
+    importedParameterConflictResults,
     importedDeviceResults,
     plotResults,
     rawRetentionResults,

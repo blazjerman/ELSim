@@ -1769,6 +1769,23 @@ test('reports repeated global .PARAM assignments on one source line once with th
   ])
 })
 
+test('indexes repeated global .PARAM declarations across many imported libraries', () => {
+  const assetCount = 1200
+  const report = analyzeModelDependencies(Array.from({ length: assetCount }, (_, index) => ({
+    id: `repeated-parameter-${index}`,
+    filename: `repeated-parameter-${index}.lib`,
+    content: '.PARAM SHARED_GAIN=1',
+  })))
+  assert.deepEqual(report.conflicts, [{
+    name: 'SHARED_GAIN', kind: 'parameter',
+    definitions: Array.from({ length: assetCount }, (_, index) => ({
+      assetId: `repeated-parameter-${index}`,
+      filename: `repeated-parameter-${index}.lib`,
+      sourceLine: 1,
+    })),
+  }])
+})
+
 test('recognizes punctuation allowed in native ngspice .PARAM identifiers', () => {
   const report = analyzeModelDependencies([
     { id: 'punctuation-a', filename: 'punctuation-a.lib', content: '.param GAIN!=1 HASH#=2 DOLLAR$=3 PERCENT%=4 BRACKET[1]=5' },

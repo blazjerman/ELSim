@@ -902,7 +902,10 @@ The version-14 quick domain benchmark now compares recalculating every pin coord
 
 `npm run benchmark:performance:quick` completed with benchmark version 14 on the documented i7-12700F host. It skips ngspice and reports seven-run medians and nearest-rank p95 for the general cases. The 5,000-part resistor chain measured 38.422/46.990 ms for connectivity and 47.337/57.517 ms for netlisting; the 5,000-part/4,900-wire fixture measured 34.553/42.999 ms and 43.656/57.760 ms respectively. The 5,000-instance hierarchy measured 76.125/88.520 ms for connectivity and 110.323/123.655 ms for netlisting. These local results remain within the existing 500 ms domain budget.
 
+
 The visible-wire current-flow comparison now uses 31 timed samples after three warmups, so its nearest-rank p95 is not simply the maximum of seven samples. On the 4,900-wire fixture, sampling 20 visible wires measured 0.009 ms median / 0.017 ms p95 with the stable set and 0.011/0.012 ms while rebuilding the set for each sample. The earlier 21 ms seven-sample p95 did not reproduce; this comparison does not justify changing the production cache. Sampling every network measured 16.308/25.388 ms. The results preserve exact per-wire flow values. These are Node domain timings, not browser animation-frame measurements. No WASM rebuild or Pages workflow ran.
+
+The same version-14 run now includes 2,000 separate imported libraries, each declaring the same global `.PARAM`. Analysis returned all 2,000 conflict locations and measured 20.478 ms median / 21.662 ms p95. This includes parsing and is a local scaling baseline, not a before/after performance claim.
 
 ### Domain benchmark recheck (2026-10-23)
 
