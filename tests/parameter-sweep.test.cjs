@@ -466,6 +466,18 @@ test('imported IC instance parameters become alterparam-driven sweep cases', () 
   assert.match(control, /^XLINE IN OUT 0 URC_LINE PARAMS: LENGTH=\{ELSIM_SWEEP_IC_XLINE_LENGTH\}$/m)
   assert.match(control, /alterparam ELSIM_SWEEP_IC_XLINE_LENGTH=1\.00000000e-3\nreset\nrun/)
   assert.equal((control.match(/write \/result-\d+\.raw all/g) ?? []).length, 3)
+  const combined = structuredClone(project)
+  combined.simulation.parameterSweeps = [
+    { component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: '1m', stop: '3m', points: 2 },
+    { component: 'XLINE', parameter: 'SECTIONS', instanceParameter: true, start: '4', stop: '8', points: 2 },
+  ]
+  const combinedValidated = validateProject(combined)
+  const combinedRuns = prepareParameterSweep(combinedValidated)
+  assert.equal(combinedRuns.length, 4)
+  assert.deepEqual(combinedRuns[0].values.map(({ parameter }) => parameter), ['LENGTH', 'SECTIONS'])
+  const combinedControl = addResultControl(createNetlistArtifact(combinedValidated).text, combinedRuns)
+  assert.match(combinedControl, /alterparam ELSIM_SWEEP_IC_XLINE_LENGTH=1\.00000000e-3\nalterparam ELSIM_SWEEP_IC_XLINE_SECTIONS=4\.00000000e\+0\nreset\nrun/)
+  assert.match(combinedControl, /^XLINE .* PARAMS: LENGTH=\{ELSIM_SWEEP_IC_XLINE_LENGTH\} SECTIONS=\{ELSIM_SWEEP_IC_XLINE_SECTIONS\}$/m)
   project.simulation.parameterSweeps[0].parameter = 'UNKNOWN'
   assert.throws(() => validateProject(project), /including numeric parameters on selected imported devices, ICs, or reusable blocks/)
   project.simulation.parameterSweeps[0] = { component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: 'one', stop: '3m', points: 3 }
