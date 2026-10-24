@@ -910,6 +910,15 @@ R1 IN OUT \\
   assert.equal(comment.models[0].name, 'DCOMMENT')
 })
 
+test('recognizes ngspice backslash continuation after an escaped quote', () => {
+  const source = String.raw`.MODEL DSTRING D(LABEL="embedded \" quote" \\
+ IS=1n)`
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: '1n' }])
+  assert.deepEqual(parsed.models[0].unparsedParameters, [{ name: 'LABEL', sourceValue: String.raw`"embedded \" quote"` }])
+  assert.equal(parsed.models[0].endLine, 2)
+})
+
 test('rejects ngspice backslash continuations for forbidden directives and missing next lines', () => {
   for (const directive of ['.TITLE welcome', '.LIB typical', '.INCLUDE "child.lib"']) {
     assert.throws(() => parseSubcircuitLibrary(`${directive} \\\\\n+`), /ngspice does not allow continuation lines/i, directive)
