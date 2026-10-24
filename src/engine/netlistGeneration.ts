@@ -1663,6 +1663,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: `analysis:${field}`, line: rows.length })
     } else if (applies) append(`.options ${option}=${Number(value)}`, `analysis:${field}`, 'generated')
   }
+  if (includeHierarchyProbes && project.simulation.transientErrorTolerance !== undefined) {
+    const value = project.simulation.transientErrorTolerance
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) || !Number.isFinite(Number(value)) || Number(value) <= 0) {
+      const message = 'Ngspice transient truncation-error tolerance must be a positive finite number.'
+      append(`* ERROR: ${cleanComment(message)}`, 'analysis:transientErrorTolerance', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:transientErrorTolerance', line: rows.length })
+    } else if (project.simulation.analysis === 'tran') append(`.options trtol=${Number(value)}`, 'analysis:transientErrorTolerance', 'generated')
+  }
   if (includeHierarchyProbes && project.simulation.shuntResistance?.trim()) {
     const shuntResistance = componentMagnitude(project.simulation.shuntResistance, 'resistor')
     if (shuntResistance === null || shuntResistance <= 0) {

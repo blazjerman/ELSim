@@ -865,6 +865,23 @@ test('ngspice iteration limits are analysis-aware positive integers', () => {
   }
 })
 
+test('transient truncation-error tolerance is validated and only emitted for transient analysis', () => {
+  const project = createStarterProject()
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options trtol=/mi)
+  project.simulation.transientErrorTolerance = '5'
+  let artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal((artifact.text.match(/^\.options trtol=5$/gim) ?? []).length, 1)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:transientErrorTolerance' && source.role === 'generated'))
+  project.simulation.analysis = 'ac'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.doesNotMatch(artifact.text, /^\.options trtol=/mi)
+  project.simulation.analysis = 'tran'
+  project.simulation.transientErrorTolerance = '0'
+  assert.throws(() => validateProject(project), /transient truncation-error tolerance must be a positive finite number/i)
+  assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:transientErrorTolerance'))
+})
+
 test('transient integration method defaults to ngspice and can opt into trapezoidal or Gear', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options method=/mi)

@@ -39,6 +39,7 @@ export default function SolverConditioningEditor({
   dcIterationLimit,
   dcTransferIterationLimit,
   transientIterationLimit,
+  transientErrorTolerance,
   integrationMethod,
   integrationMaxOrder,
   skipAcOperatingPoint,
@@ -53,6 +54,7 @@ export default function SolverConditioningEditor({
   onDcIterationLimitChange,
   onDcTransferIterationLimitChange,
   onTransientIterationLimitChange,
+  onTransientErrorToleranceChange,
   onIntegrationMethodChange,
   onIntegrationMaxOrderChange,
   onSkipAcOperatingPointChange,
@@ -67,6 +69,7 @@ export default function SolverConditioningEditor({
   dcIterationLimit?: string
   dcTransferIterationLimit?: string
   transientIterationLimit?: string
+  transientErrorTolerance?: string
   integrationMethod?: 'trap' | 'gear'
   integrationMaxOrder?: number
   skipAcOperatingPoint?: boolean
@@ -81,6 +84,7 @@ export default function SolverConditioningEditor({
   onDcIterationLimitChange: (value?: string) => void
   onDcTransferIterationLimitChange: (value?: string) => void
   onTransientIterationLimitChange: (value?: string) => void
+  onTransientErrorToleranceChange: (value?: string) => void
   onIntegrationMethodChange: (value?: 'trap' | 'gear') => void
   onIntegrationMaxOrderChange: (value?: number) => void
   onSkipAcOperatingPointChange: (value: boolean) => void
@@ -94,6 +98,7 @@ export default function SolverConditioningEditor({
 
   return <>
     {analysis === 'tran' && <>
+      <NumericSetting label="Transient truncation-error tolerance (TRTOL)" ariaLabel="Transient truncation-error tolerance (TRTOL)" dataSetting="transientErrorTolerance" value={transientErrorTolerance} hint="Ngspice default is 7. This changes how the solver estimates transient truncation error and can affect runtime and sampled waveforms; leave blank for the default." example="7" onChange={onTransientErrorToleranceChange}/>
       <label className="field-label">Transient integration method
         <select data-analysis-setting="integrationMethod" aria-label="Transient integration method" value={integrationMethod ?? ''} onChange={(event) => {
           const method = (event.target.value || undefined) as 'trap' | 'gear' | undefined
