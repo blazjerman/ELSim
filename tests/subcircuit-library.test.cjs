@@ -1793,6 +1793,17 @@ test('detects duplicate global .PARAM assignments continued onto later physical 
   ])
 })
 
+test('reports a repeated parameter name across a continued card once with its starting source line', () => {
+  const report = analyzeModelDependencies([
+    { id: 'continued-repeat', filename: 'continued-repeat.lib', content: '.param gain=1\n+ GAIN=2' },
+  ])
+  assert.deepEqual(report.conflicts, [
+    { name: 'gain', kind: 'parameter', declarationCount: 2, definitions: [
+      { assetId: 'continued-repeat', filename: 'continued-repeat.lib', sourceLine: 1 },
+    ] },
+  ])
+})
+
 test('validates reserved .PARAM names on continuation lines against the logical card start', () => {
   assert.throws(
     () => parseSubcircuitLibrary('.param GOOD=1\n+ sqrt=2'),
