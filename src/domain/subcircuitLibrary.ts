@@ -1696,24 +1696,42 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     resolvedIncludes.push({ assetId: asset.id, targetAssetId: target.id, reference: include.reference, ...(include.section ? { section: include.section } : {}), sourceLine: include.sourceLine })
   }
   const graph = new Map<string, Set<string>>()
+  const deviceModelLookupCache = new Map<string, { assetId: string; model: SpiceModelDefinition }[]>()
+  const findDeviceModels = (assetId: string, ownerName: string, modelName: string) => {
+    const owner = ownerName.toLowerCase()
+    const foldedName = modelName.toLowerCase()
+    const cacheKey = `${assetId}\0${owner}\0${foldedName}`
+    const cached = deviceModelLookupCache.get(cacheKey)
+    if (cached) return cached
+    let scope: string | undefined = owner
+    while (scope) {
+      const key = `${assetId}:${scope}:${foldedName}`
+      const scopedAssetId = scopedDeviceModelAssets.get(key)
+      if (scopedAssetId) {
+        const result = [{ assetId: scopedAssetId, model: scopedDeviceModels.get(key)! }]
+        deviceModelLookupCache.set(cacheKey, result)
+        return result
+      }
+      const scopedBins = scopedBsim3Bins.get(`${assetId}:${scope}:${foldedName}`)
+      if (scopedBins?.length) {
+        deviceModelLookupCache.set(cacheKey, scopedBins)
+        return scopedBins
+      }
+      scope = subcircuitParents.get(`${assetId}:${scope}`)
+    }
+    const globalAssetId = deviceModelAssets.get(foldedName)
+    if (globalAssetId) {
+      const result = [{ assetId: globalAssetId, model: globalDeviceModels.get(foldedName)! }]
+      deviceModelLookupCache.set(cacheKey, result)
+      return result
+    }
+    const globalBins = globalBsim3Bins.get(foldedName) ?? []
+    deviceModelLookupCache.set(cacheKey, globalBins)
+    return globalBins
+  }
   for (const { asset, parsed } of parsedAssets) for (const dependency of parsed.dependencies) {
     const modelCandidates = dependency.kind === 'device' ? alternateBjtModelNames.get(dependency) : undefined
     let resolvedDependency = dependency
-    const findDeviceModels = (modelName: string) => {
-      let scope: string | undefined = dependency.owner.toLowerCase()
-      while (scope) {
-        const key = `${asset.id}:${scope}:${modelName.toLowerCase()}`
-        const scopedAssetId = scopedDeviceModelAssets.get(key)
-        if (scopedAssetId) return [{ assetId: scopedAssetId, model: scopedDeviceModels.get(key)! }]
-        const scopedBins = scopedBsim3Bins.get(`${asset.id}:${scope}:${modelName.toLowerCase()}`)
-        if (scopedBins?.length) return scopedBins
-        scope = subcircuitParents.get(`${asset.id}:${scope}`)
-      }
-      const foldedName = modelName.toLowerCase()
-      const globalAssetId = deviceModelAssets.get(foldedName)
-      if (globalAssetId) return [{ assetId: globalAssetId, model: globalDeviceModels.get(foldedName)! }]
-      return globalBsim3Bins.get(foldedName) ?? []
-    }
     if (dependency.kind === 'subcircuit') {
       const targetAssetId = subcircuitAssets.get(dependency.modelName.toLowerCase())
       if (!targetAssetId) missing.push({ assetId: asset.id, filename: asset.filename, ...dependency })
@@ -1732,15 +1750,15 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       // Prefer the rightmost candidate that resolves to a declared card: it
       // is the model token after any optional BJT substrate/temperature nodes.
       for (let index = modelCandidates.length - 1; index >= 0; index -= 1) {
-        targetModels = findDeviceModels(modelCandidates[index])
+        targetModels = findDeviceModels(asset.id, dependency.owner, modelCandidates[index])
         if (targetModels.length) {
           resolvedDependency = { ...dependency, modelName: modelCandidates[index] }
           break
         }
       }
-      if (!targetModels.length) targetModels = findDeviceModels(dependency.modelName)
+      if (!targetModels.length) targetModels = findDeviceModels(asset.id, dependency.owner, dependency.modelName)
     } else {
-      targetModels = findDeviceModels(dependency.modelName)
+      targetModels = findDeviceModels(asset.id, dependency.owner, dependency.modelName)
     }
     if (!targetModels.length) missing.push({ assetId: asset.id, filename: asset.filename, ...dependency })
     else for (const target of targetModels) resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId: target.assetId, targetModelType: target.model.type })

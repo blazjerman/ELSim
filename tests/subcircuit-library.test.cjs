@@ -770,6 +770,20 @@ test('resolves many case-insensitive section references through one large import
   assert.deepEqual(report.missingIncludes, [])
 })
 
+test('reuses scoped device-model resolution across many instances in one subcircuit', () => {
+  const instanceCount = 300
+  const devices = Array.from({ length: instanceCount }, (_, index) => `D${index + 1} IN OUT DFAST`).join('\n')
+  const report = analyzeModelDependencies([{ id: 'repeated-model-lookups', filename: 'repeated-model-lookups.lib', content: [
+    '.MODEL DFAST D(IS=1n)',
+    '.SUBCKT REPEATED IN OUT',
+    devices,
+    '.ENDS REPEATED',
+  ].join('\n') }])
+  assert.equal(report.resolved.length, instanceCount)
+  assert.deepEqual(report.resolved.map(({ targetAssetId, targetModelType }) => [targetAssetId, targetModelType]), Array.from({ length: instanceCount }, () => ['repeated-model-lookups', 'D']))
+  assert.deepEqual(report.missing, [])
+})
+
 test('parses ngspice double-backslash continuations and retains their physical source records', () => {
   const source = String.raw`.MODEL DFAST D(IS=1n \\
 + BV=50)

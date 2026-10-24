@@ -414,6 +414,23 @@ try {
     resolvedIncludes: sectionReferenceAnalysis.value.dependencies.resolvedIncludes.length,
     analysis: { medianMs: sectionReferenceAnalysis.medianMs, p95Ms: sectionReferenceAnalysis.p95Ms },
   }
+  const repeatedDeviceCount = 2000
+  const repeatedDeviceLibrary = {
+    id: 'bench-repeated-device-model',
+    filename: 'bench-repeated-device-model.lib',
+    content: [
+      '.MODEL DFAST D(IS=1n)',
+      '.SUBCKT BENCH_REPEATED IN OUT',
+      Array.from({ length: repeatedDeviceCount }, (_, index) => `D${index + 1} IN OUT DFAST`).join('\n'),
+      '.ENDS BENCH_REPEATED',
+    ].join('\n'),
+  }
+  const repeatedDeviceAnalysis = measure(() => analyzeModelLibraries([repeatedDeviceLibrary]))
+  const repeatedDeviceDependencyResults = {
+    modelReferences: repeatedDeviceCount,
+    resolved: repeatedDeviceAnalysis.value.dependencies.resolved.length,
+    analysis: { medianMs: repeatedDeviceAnalysis.medianMs, p95Ms: repeatedDeviceAnalysis.p95Ms },
+  }
   const importedDeviceProject = makeImportedDeviceModelProject(createStarterProject, 400, 600)
   const importedDeviceNetlist = measure(() => createNetlistArtifact(importedDeviceProject))
   const importedDeviceArtifact = importedDeviceNetlist.value
@@ -741,6 +758,7 @@ try {
     importedLibraryAnalysisResults,
     importedParameterConflictResults,
     importedSectionReferenceResults,
+    repeatedDeviceDependencyResults,
     importedDeviceResults,
     plotResults,
     rawRetentionResults,
