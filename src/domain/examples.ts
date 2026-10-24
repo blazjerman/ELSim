@@ -1104,6 +1104,16 @@ export function createTransferFunctionExampleProject(): Project {
   return project
 }
 
+/** A current-source transfer-function lesson measuring transresistance. */
+export function createCurrentTransresistanceExampleProject(): Project {
+  const project = createCurrentSourceExampleProject()
+  project.name = 'Current-source transresistance'
+  project.simulation = { ...project.simulation, analysis: 'tf', transferFunction: { outputNode: 'OUT', inputSource: 'I1' } }
+  project.plotSettings = { selectedTraceIds: [], ranges: {} }
+  project.sheets = project.sheets.map((sheet) => ({ ...sheet, name: project.name }))
+  return project
+}
+
 /** Two independent sources drive a resistive node to demonstrate linear superposition. */
 export function createSuperpositionExampleProject(): Project {
   const project = createStarterProject()
