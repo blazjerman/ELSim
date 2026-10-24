@@ -261,10 +261,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     globalDeviceModelsByName.set(key, models)
   }
   const globalFunctionDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
+  const globalFunctionBodies = new Map<string, string[]>()
   for (const { asset, parsed } of parsedModelLibraryEntries) {
     let conditionalDepth = 0
     let subcircuitDepth = 0
-    for (const record of parsed.modelRecords) {
+    for (let recordIndex = 0; recordIndex < parsed.modelRecords.length; recordIndex += 1) {
+      const record = parsed.modelRecords[recordIndex]
       const text = record.text.trim()
       if (!text || text.startsWith('*')) continue
       const directive = text.split(/\s+/, 1)[0].toLowerCase()
@@ -279,14 +281,51 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const definitions = globalFunctionDefinitions.get(key) ?? []
       definitions.push({ filename: asset.filename, sourceLine: record.sourceLine })
       globalFunctionDefinitions.set(key, definitions)
+      const functionLines = [text]
+      for (let nextIndex = recordIndex + 1; nextIndex < parsed.modelRecords.length; nextIndex += 1) {
+        const nextText = parsed.modelRecords[nextIndex].text.trim()
+        if (!/^\+/.test(nextText)) break
+        functionLines.push(nextText.replace(/^\+\s*/, ''))
+      }
+      const functionText = functionLines.join(' ')
+      const openBrace = functionText.indexOf('{')
+      const closeBrace = functionText.lastIndexOf('}')
+      if (openBrace >= 0 && closeBrace > openBrace) {
+        const bodies = globalFunctionBodies.get(key) ?? []
+        bodies.push(functionText.slice(openBrace + 1, closeBrace))
+        globalFunctionBodies.set(key, bodies)
+      }
     }
   }
   const ambiguousGlobalFunctionNames = [...globalFunctionDefinitions].filter(([, definitions]) => definitions.length > 1).map(([name]) => name)
-  const ambiguousFunctionCallsInText = (text: string, shadowedFunctions: ReadonlySet<string> = new Set()) => ambiguousGlobalFunctionNames.filter((functionName) => {
-    if (shadowedFunctions.has(functionName)) return false
+  const referencedFunctionNames = (text: string, scopedBodies: ReadonlyMap<string, string[]> = new Map()) => [...new Set([...globalFunctionDefinitions.keys(), ...scopedBodies.keys()])].filter((functionName) => {
     const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     return new RegExp(`(?:^|[^A-Za-z0-9_.$])${escapedName}\\s*\\(`, 'i').test(text)
   })
+  const ambiguousFunctionCallsInText = (text: string, shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map()) => {
+    const ambiguous = new Set<string>()
+    const pending = referencedFunctionNames(text, scopedBodies)
+    const visited = new Set<string>()
+    while (pending.length) {
+      const functionName = pending.pop()!
+      if (visited.has(functionName)) continue
+      visited.add(functionName)
+      const scopedFunctionBodies = scopedBodies.get(functionName)
+      if (scopedFunctionBodies) {
+        for (const body of scopedFunctionBodies) pending.push(...referencedFunctionNames(body, scopedBodies))
+        continue
+      }
+      if (shadowedFunctions.has(functionName)) continue
+      const definitions = globalFunctionDefinitions.get(functionName) ?? []
+      if (definitions.length > 1) {
+        ambiguous.add(functionName)
+        continue
+      }
+      const bodies = globalFunctionBodies.get(functionName) ?? []
+      if (bodies.length === 1) pending.push(...referencedFunctionNames(bodies[0], scopedBodies))
+    }
+    return ambiguousGlobalFunctionNames.filter((functionName) => ambiguous.has(functionName))
+  }
   const modelCallsAmbiguousGlobalFunction = (model: typeof parsedModelAssets[number]['models'][number]) =>
     model.parameters.some((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue).length > 0)
   const importedSubcircuitsByName = new Map<string, { assetId: string; definition: ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number] }[]>()
@@ -387,23 +426,41 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           for (const definition of scope.functions ?? []) shadowedFunctions.add(definition.name.toLowerCase())
           scope = scope.parentName ? importedSubcircuitsByAssetAndName.get(`${current.assetId}:${scope.parentName.toLowerCase()}`) : undefined
         }
-        const parameterFunctions = [...new Set(current.definition.parameters.flatMap((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue, shadowedFunctions)))]
-        if (parameterFunctions.length) subcircuitsCallingAmbiguousFunctions.push({ name: current.definition.name, usage: 'parameter', functions: parameterFunctions })
         const nestedRanges = nestedSubcircuitRangesByParent.get(`${current.assetId}:${current.definition.name.toLowerCase()}`) ?? []
-        let skippingFunctionContinuation = false
-        const body = currentLibrary.modelRecords
+        const records = currentLibrary.modelRecords
           .filter(({ sourceLine }) => sourceLine > current.definition.startLine && sourceLine < current.definition.endLine)
           .filter(({ sourceLine }) => !nestedRanges.some(([start, end]) => sourceLine >= start && sourceLine <= end))
-          .flatMap(({ text }) => {
-            if (/^\s*\.func\b/i.test(text)) { skippingFunctionContinuation = true; return [] }
-            if (skippingFunctionContinuation && /^\s*\+/.test(text)) return []
-            skippingFunctionContinuation = false
-            if (/^\s*\*/.test(text)) return []
-            return [text.replace(/\s(?:\$|;|\/\/).*$/, '').trim()]
-          })
-          .filter(Boolean)
-          .join(' ')
-        const functions = ambiguousFunctionCallsInText(body, shadowedFunctions)
+        const scopedFunctionBodies = new Map<string, string[]>()
+        const bodyRecords: string[] = []
+        for (let recordIndex = 0; recordIndex < records.length; recordIndex += 1) {
+          const text = records[recordIndex].text.trim()
+          if (!text || text.startsWith('*')) continue
+          if (/^\.func\b/i.test(text)) {
+            const functionName = text.match(/^\.func\s+([^\s(=]+)/i)?.[1]?.toLowerCase()
+            const functionLines = [text]
+            while (recordIndex + 1 < records.length && /^\s*\+/.test(records[recordIndex + 1].text)) {
+              recordIndex += 1
+              functionLines.push(records[recordIndex].text.trim().replace(/^\+\s*/, ''))
+            }
+            const functionText = functionLines.join(' ')
+            const openBrace = functionText.indexOf('{')
+            const closeBrace = functionText.lastIndexOf('}')
+            if (functionName && openBrace >= 0 && closeBrace > openBrace) {
+              const bodies = scopedFunctionBodies.get(functionName) ?? []
+              bodies.push(functionText.slice(openBrace + 1, closeBrace))
+              scopedFunctionBodies.set(functionName, bodies)
+            }
+            continue
+          }
+          if (/^\+/.test(text)) {
+            if (bodyRecords.length) bodyRecords[bodyRecords.length - 1] += ` ${text.replace(/^\+\s*/, '')}`
+            continue
+          }
+          bodyRecords.push(text.replace(/\s(?:\$|;|\/\/).*$/, '').trim())
+        }
+        const parameterFunctions = [...new Set(current.definition.parameters.flatMap((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue, shadowedFunctions, scopedFunctionBodies)))]
+        if (parameterFunctions.length) subcircuitsCallingAmbiguousFunctions.push({ name: current.definition.name, usage: 'parameter', functions: parameterFunctions })
+        const functions = ambiguousFunctionCallsInText(bodyRecords.join(' '), shadowedFunctions, scopedFunctionBodies)
         if (functions.length) subcircuitsCallingAmbiguousFunctions.push({ name: current.definition.name, usage: 'body', functions })
       }
       for (const dependency of current.definition.dependencies) {

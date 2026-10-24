@@ -161,6 +161,36 @@ test('same-arity duplicate functions in one imported library are preflighted whe
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE! \(duplicate-functions\.lib:1, duplicate-functions\.lib:2\)/i.test(diagnostic.message)), true)
 })
 
+test('preflight follows a used imported function through its helper body', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    {
+      id: 'model-helper-library',
+      filename: 'model-helpers.lib',
+      content: '.FUNC WRAP(x$) {SCALE!(x$)}\n.MODEL DLOCAL D(IS={WRAP(1)*1e-14} N=1)\n.SUBCKT FUNCTION_STAGE IN OUT\nD1 IN OUT DLOCAL\n.ENDS FUNCTION_STAGE\n',
+      licenseStatus: 'unknown',
+      importedAt: new Date(0).toISOString(),
+    },
+    { id: 'one-argument-function', filename: 'helpers.lib', content: '.FUNC SCALE!(x$) {x$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'two-argument-function', filename: 'unrelated.lib', content: '.FUNC SCALE!(x$, y$) {x$+y$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
+})
+
+test('preflight follows a scoped imported function through its helper body', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'scoped-helper-library', filename: 'stage.lib', content: '.SUBCKT FUNCTION_STAGE IN OUT\n.FUNC WRAP(x$) {SCALE!(x$)}\nB1 OUT 0 V={WRAP(V(IN))}\n.ENDS FUNCTION_STAGE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'one-argument-function', filename: 'helpers.lib', content: '.FUNC SCALE!(x$) {x$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'two-argument-function', filename: 'unrelated.lib', content: '.FUNC SCALE!(x$, y$) {x$+y$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported subcircuit FUNCTION_STAGE body that calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
+})
+
 test('a behavioral source cannot call an ambiguous imported global function', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'behavioral-output', kind: 'behavioral', ref: 'B1', value: 'SCALE!(V(vin))', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })
