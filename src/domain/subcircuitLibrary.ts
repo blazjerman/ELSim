@@ -720,12 +720,14 @@ function topLevelParameterNames(text: string): string[] {
   const names: string[] = []
   for (let index = 0; index < fields.length; index += 1) {
     const field = fields[index]
-    const inline = field.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)/)
+    // ngspice identifiers start with a letter and may then contain digits or
+    // ! # $ % [ ] _. These punctuation characters are valid in .PARAM names.
+    const inline = field.match(/^([A-Za-z][A-Za-z0-9!#$%_\[\]]*)\s*=(?!=)/)
     if (inline) {
       names.push(inline[1])
       continue
     }
-    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(field) && /^=(?!=)/.test(fields[index + 1] ?? '')) {
+    if (/^[A-Za-z][A-Za-z0-9!#$%_\[\]]*$/.test(field) && /^=(?!=)/.test(fields[index + 1] ?? '')) {
       names.push(field)
       index += 1
     }

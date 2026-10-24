@@ -1741,6 +1741,20 @@ test('reports repeated global .PARAM assignments on one source line once with th
   ])
 })
 
+test('recognizes punctuation allowed in native ngspice .PARAM identifiers', () => {
+  const report = analyzeModelDependencies([
+    { id: 'punctuation-a', filename: 'punctuation-a.lib', content: '.param GAIN!=1 HASH#=2 DOLLAR$=3 PERCENT%=4 BRACKET[1]=5' },
+    { id: 'punctuation-b', filename: 'punctuation-b.lib', content: '.param gain! = 6 hash# = 7 dollar$ = 8 percent% = 9 bracket[1] = 10' },
+  ])
+  assert.deepEqual(report.conflicts.map(({ name, kind }) => ({ name, kind })), [
+    { name: 'GAIN!', kind: 'parameter' },
+    { name: 'HASH#', kind: 'parameter' },
+    { name: 'DOLLAR$', kind: 'parameter' },
+    { name: 'PERCENT%', kind: 'parameter' },
+    { name: 'BRACKET[1]', kind: 'parameter' },
+  ])
+})
+
 test('rejects ngspice directives that are not supported in conditional blocks', () => {
   for (const directive of ['.FUNC SCALE(x) {x}', '.MEAS TRAN RESULT MAX V(out)', '.GLOBAL 0', '.OPTIONS reltol=.01']) {
     assert.throws(() => parseSubcircuitLibrary(`.IF (MODE == 1)\n${directive}\n.ENDIF`), /Line 2: .* is not supported inside an ngspice \.IF block/, directive)
