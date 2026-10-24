@@ -56,7 +56,8 @@ export type Trace = {
   sweep?: { label: string; index: number }
 }
 
-export type MeasurementResult = { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ' | 'delay'; vector: string; targetVector?: string; from?: string; to?: string; value: number; unit: 'V' | 'A' | 'C' | 'V·s' | 's'; sweep?: { label: string; index: number } }
+export type MeasurementResult = { id: string; operation: 'crossing'; vector: string; threshold: string; edge: 'rise' | 'fall' | 'either'; crossingCount?: number; value: number; unit: 's'; sweep?: { label: string; index: number } }
+  | { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ' | 'delay'; vector: string; targetVector?: string; from?: string; to?: string; value: number; unit: 'V' | 'A' | 'C' | 'V·s' | 's'; sweep?: { label: string; index: number } }
   | { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ'; vector: string; from?: string; to?: string; value: number; unit: ''; sweep?: { label: string; index: number } }
   | { id: string; operation: 'native'; vector: string; directive: string; value: number; unit: ''; sourceAssetId: string; sourceLine: number; sweep?: { label: string; index: number } }
 
@@ -203,7 +204,7 @@ function isMeasurementResult(value: unknown): value is MeasurementResult {
   const to = value.to === undefined ? null : typeof value.to === 'string' ? timeMagnitude(value.to) ?? Number.NaN : Number.NaN
   const validRange = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
   const basic = typeof value.id === 'string' && value.id.length > 0
-    && ['max', 'min', 'pp', 'avg', 'rms', 'integ', 'delay'].includes(String(value.operation))
+    && ['max', 'min', 'pp', 'avg', 'rms', 'integ', 'delay', 'crossing'].includes(String(value.operation))
     && typeof value.vector === 'string'
     && (value.targetVector === undefined || typeof value.targetVector === 'string')
     && (value.from === undefined || typeof value.from === 'string')
@@ -212,6 +213,7 @@ function isMeasurementResult(value: unknown): value is MeasurementResult {
     && ['V', 'A', 'C', 'V·s', 's', ''].includes(String(value.unit))
     && (value.sweep === undefined || (isRecord(value.sweep) && typeof value.sweep.label === 'string' && Number.isInteger(value.sweep.index) && Number(value.sweep.index) >= 0))
   if (!basic) return false
+  if (value.operation === 'crossing') return value.unit === 's' && value.from === undefined && value.to === undefined && value.targetVector === undefined && typeof value.threshold === 'string' && ['rise', 'fall', 'either'].includes(String(value.edge)) && (value.crossingCount === undefined || Number.isInteger(value.crossingCount) && Number(value.crossingCount) >= 1 && Number(value.crossingCount) <= 9999)
   if (value.unit === '') return ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(String(value.operation)) && /^par\('[^\r\n]*'\)$/.test(String(value.vector))
   if (value.operation === 'delay') return typeof value.targetVector === 'string' && value.unit === 's' && value.from === undefined && value.to === undefined
   if (value.operation === 'integ') return value.unit === (String(value.vector).trim().toLowerCase().startsWith('i(') ? 'C' : 'V·s') && validRange
@@ -239,6 +241,7 @@ function isTransientMeasurement(value: unknown): boolean {
     return !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
   }
   if (value.from !== undefined || value.to !== undefined) return false
+  if (value.operation === 'crossing') return typeof value.threshold === 'string' && measurementThresholdMagnitude(value.threshold, value.vector) !== null && ['rise', 'fall', 'either'].includes(String(value.edge)) && isValidMeasurementCrossingCount(value.crossingCount)
   return value.operation === 'delay'
     && typeof value.threshold === 'string' && measurementThresholdMagnitude(value.threshold, value.vector) !== null
     && typeof value.targetVector === 'string' && measurementVectorPattern.test(value.targetVector.trim())

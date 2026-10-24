@@ -165,6 +165,24 @@ test('delay measurements select the requested trigger and target crossings', () 
   assert.equal(parsed.results[0].value, 3)
 })
 
+test('time-at-level measurements interpolate the selected crossing and support sweep cases', () => {
+  const axis = Float64Array.from([0, 1, 2, 3, 4])
+  const trace = { id: 'v(out)', label: 'V(out)', unit: 'V', axisLabel: 'Time', axisUnit: 's', axis, values: Float64Array.from([0, 2, 0, 2, 0]) }
+  const measurement = { id: 'SecondRise', operation: 'crossing', vector: 'V(out)', threshold: '1V', edge: 'rise', crossingCount: 2 }
+  const project = createStarterProject()
+  project.simulation.transientMeasurements = [measurement]
+  assert.deepEqual(validateProject(JSON.parse(JSON.stringify(project))).simulation.transientMeasurements[0], measurement)
+  const result = parseMeasurementOutput('', [measurement], ['R1=1kΩ'], [[trace]])
+  assert.deepEqual(result.diagnostics, [])
+  assert.deepEqual(result.results, [{ id: 'SecondRise', operation: 'crossing', vector: 'V(out)', threshold: '1V', edge: 'rise', crossingCount: 2, value: 2.5, unit: 's', sweep: { label: 'R1=1kΩ', index: 0 } }])
+  const fall = parseMeasurementOutput('', [{ ...measurement, id: 'SecondFall', edge: 'fall' }], [], [[trace]])
+  assert.equal(fall.results[0].value, 3.5)
+  const deck = createNetlistArtifact(validateProject(project)).text
+  assert.match(deck, /ELSim calculates crossing time measurement SecondRise from solved waveform samples/i)
+  assert.doesNotMatch(deck, /\.meas tran ELSIM_SecondRise/i)
+  assert.doesNotMatch(addResultControl(deck, [], [measurement]), /\.meas tran ELSIM_SecondRise/i)
+})
+
 test('voltage delay measurements use target crossings after the selected trigger, not ngspice absolute crossing counts', () => {
   const axis = Float64Array.from([0, 1, 2, 3, 4, 5, 6, 7])
   const traces = [

@@ -314,10 +314,11 @@ function TransientEditorLaunchers({ nodes, inductors, capacitors, diodes, transi
 
 function patchMeasurement(current: TransientMeasurement, patch: TransientMeasurementPatch): TransientMeasurement {
   if (patch.operation === 'delay') return { id: current.id, operation: 'delay', vector: current.vector ?? 'V(vout)', threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' }
-  const range = current.operation === 'delay' ? {} : { ...(current.from === undefined ? {} : { from: current.from }), ...(current.to === undefined ? {} : { to: current.to }) }
-  if (typeof patch.expression === 'string') return { id: patch.id ?? current.id, operation: patch.operation ?? (current.operation === 'delay' ? 'max' : current.operation), expression: patch.expression, ...range }
+  if (patch.operation === 'crossing') return { id: current.id, operation: 'crossing', vector: current.vector ?? 'V(vout)', threshold: '2.5', edge: 'rise' }
+  const range = current.operation === 'delay' || current.operation === 'crossing' ? {} : { ...(current.from === undefined ? {} : { from: current.from }), ...(current.to === undefined ? {} : { to: current.to }) }
+  if (typeof patch.expression === 'string') return { id: patch.id ?? current.id, operation: patch.operation ?? (current.operation === 'delay' || current.operation === 'crossing' ? 'max' : current.operation), expression: patch.expression, ...range }
   if (typeof patch.vector === 'string' && typeof current.expression === 'string') return { id: patch.id ?? current.id, operation: patch.operation ?? current.operation, vector: patch.vector, ...range }
-  if (current.operation === 'delay' && patch.operation) return { id: current.id, operation: patch.operation as 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ', vector: current.vector }
+  if ((current.operation === 'delay' || current.operation === 'crossing') && patch.operation) return { id: current.id, operation: patch.operation as 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ', vector: current.vector }
   if (typeof current.expression === 'string' && patch.operation) return { ...current, ...patch, operation: patch.operation }
   return { ...current, ...patch } as TransientMeasurement
 }

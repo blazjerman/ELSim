@@ -97,9 +97,12 @@
       "required": ["id", "operation", "vector", "value", "unit"],
       "properties": {
         "id": { "type": "string" },
-        "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ", "delay"] },
+        "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ", "delay", "crossing"] },
         "vector": { "type": "string" },
         "targetVector": { "type": "string" },
+        "threshold": { "type": "string" },
+        "edge": { "enum": ["rise", "fall", "either"] },
+        "crossingCount": { "type": "integer", "minimum": 1, "maximum": 9999 },
         "from": { "type": "string", "maxLength": 48 },
         "to": { "type": "string", "maxLength": 48 },
         "value": { "type": "number" },

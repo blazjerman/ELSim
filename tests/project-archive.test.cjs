@@ -361,6 +361,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.simulation.properties.transientMeasurements.items.properties.to.maxLength, 48)
   assert.ok(schema.$defs.simulation.properties.transientMeasurements.items.properties.operation.enum.includes('pp'))
   assert.ok(schema.$defs.simulation.properties.transientMeasurements.items.properties.operation.enum.includes('integ'))
+  assert.ok(schema.$defs.simulation.properties.transientMeasurements.items.properties.operation.enum.includes('crossing'))
+  assert.equal(schema.$defs.simulation.properties.transientMeasurements.items.properties.crossingCount.maximum, 9999)
   assert.match(schema.$defs.simulation.properties.temperature.pattern, /0-9/)
   assert.equal(schema.$defs.simulation.properties.shuntResistance.maxLength, 64)
   assert.equal(schema.$defs.simulation.properties.nominalTemperature.maxLength, 64)

@@ -557,6 +557,7 @@ function MeasurementResults({ measurements }: { measurements: MeasurementResult[
   if (!measurements.length) return null
   const description = (measurement: MeasurementResult) => {
     if (measurement.operation === 'native') return <code title={measurement.directive}>{measurement.directive}</code>
+    if (measurement.operation === 'crossing') return `TIME AT ${measurement.threshold} · ${measurement.edge} ${measurement.vector}`
     if (measurement.unit === '') return `${measurement.operation.toUpperCase()} ${measurement.vector}`
     if (measurement.operation === 'delay') return `DELAY ${measurement.vector} → ${measurement.targetVector ?? 'target'}`
     return `${measurement.operation === 'pp' ? 'PEAK-TO-PEAK' : measurement.operation === 'integ' ? 'INTEGRAL' : measurement.operation.toUpperCase()} ${measurement.vector}${measurement.from || measurement.to ? ` · ${measurement.from ? `from ${measurement.from}` : ''}${measurement.from && measurement.to ? ' ' : ''}${measurement.to ? `to ${measurement.to}` : ''}` : ''}`

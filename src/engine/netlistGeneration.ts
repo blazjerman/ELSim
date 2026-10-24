@@ -1320,14 +1320,16 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       break
     }
     const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQBJ][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
+    const crossing = measurement.operation === 'crossing' ? measurement : undefined
     const delay = measurement.operation === 'delay' ? measurement : undefined
-    const scalarMeasurement = measurement.operation === 'delay' ? undefined : measurement
+    const scalarMeasurement = measurement.operation === 'delay' || measurement.operation === 'crossing' ? undefined : measurement
     const sourceCurrent = (typeof measurement.vector === 'string' && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim())) || (delay && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(delay.targetVector.trim()))
     const from = scalarMeasurement?.from === undefined ? null : timeMagnitude(scalarMeasurement.from) ?? Number.NaN
     const to = scalarMeasurement?.to === undefined ? null : timeMagnitude(scalarMeasurement.to) ?? Number.NaN
     const rangeValid = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
     const triggerThreshold = delay ? spiceScalar(delay.threshold, delay.vector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
     const targetThreshold = delay ? spiceScalar(delay.targetThreshold, delay.targetVector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
+    const crossingThreshold = crossing ? spiceScalar(crossing.threshold, crossing.vector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
     let validExpression = false
     if (!delay && typeof measurement.expression === 'string') {
       try {
@@ -1338,7 +1340,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         validExpression = true
       } catch { validExpression = false }
     }
-    const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
+    const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (crossing
+      ? vectorPattern.test(crossing.vector.trim()) && crossingThreshold !== null && ['rise', 'fall', 'either'].includes(crossing.edge)
+      : delay
       ? vectorPattern.test(delay.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && triggerThreshold !== null && targetThreshold !== null && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
       : ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && ((typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && typeof measurement.expression !== 'string') || validExpression) && rangeValid)
     if (!valid) {
@@ -1346,7 +1350,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       continue
     }
-    if ((sourceCurrent || measurement.operation === 'integ') && typeof measurement.expression !== 'string') append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id}${scalarMeasurement ? `${scalarMeasurement.from ? ` from ${scalarMeasurement.from}` : ''}${scalarMeasurement.to ? ` to ${scalarMeasurement.to}` : ''}` : ''} from solved waveform samples.`, 'analysis:tran', 'analysis')
+    if (crossing) append(`* ELSim calculates crossing time measurement ${crossing.id} from solved waveform samples.`, 'analysis:tran', 'analysis')
+    else if ((sourceCurrent || measurement.operation === 'integ') && typeof measurement.expression !== 'string') append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id}${scalarMeasurement ? `${scalarMeasurement.from ? ` from ${scalarMeasurement.from}` : ''}${scalarMeasurement.to ? ` to ${scalarMeasurement.to}` : ''}` : ''} from solved waveform samples.`, 'analysis:tran', 'analysis')
     else if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${triggerThreshold} ${delay.edge === 'either' ? 'CROSS' : delay.edge.toUpperCase()}=${delay.triggerCount ?? 1} TARG ${delay.targetVector.trim()} VAL=${targetThreshold} ${delay.targetEdge === 'either' ? 'CROSS' : delay.targetEdge.toUpperCase()}=${delay.targetCount ?? 1}`, 'analysis:tran', 'analysis')
     else {
       const scalarMeasure = scalarMeasurement!

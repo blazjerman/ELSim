@@ -34,6 +34,10 @@ function calculateFromTraces(measurement: TransientMeasurement, traces: readonly
   if (!source || source.values.length < 2) return null
   const axis = source.axis
   const values = source.values
+  if (measurement.operation === 'crossing') {
+    const threshold = measurementThresholdMagnitude(measurement.threshold, measurement.vector)
+    return threshold === null ? null : interpolateCrossing(axis, values, threshold, measurement.edge, -Infinity, measurement.crossingCount ?? 1)
+  }
   const from = measurement.operation === 'delay' || measurement.from === undefined ? axis[0] : timeMagnitude(measurement.from)
   const to = measurement.operation === 'delay' || measurement.to === undefined ? axis[axis.length - 1] : timeMagnitude(measurement.to)
   if (from === null || to === null) return null
@@ -105,7 +109,7 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
       const match = output.match(resultPattern)
       const isExpression = typeof measurement.expression === 'string'
       const sourceCurrent = !isExpression && 'vector' in measurement && currentSourceVector.test(measurement.vector?.trim() ?? '') || (measurement.operation === 'delay' && currentSourceVector.test(measurement.targetVector.trim()))
-      const calculateWithTraces = measurement.operation === 'delay' || (measurement.operation === 'integ' && !isExpression) || (!match && sourceCurrent)
+      const calculateWithTraces = measurement.operation === 'delay' || measurement.operation === 'crossing' || (measurement.operation === 'integ' && !isExpression) || (!match && sourceCurrent)
       const calculated = calculateWithTraces && !isExpression ? calculateFromTraces(measurement, traceSets[index] ?? traceSets[0] ?? []) : null
       if ((!match || measurement.operation === 'delay') && calculated === null) {
         diagnostics.push({ severity: 'warning', message: `ngspice did not return the ${measurement.operation.toUpperCase()} measurement for ${measurement.expression ?? measurement.vector}. Check that the signal exists and the transient run covers enough data.`, sourceId: 'analysis:tran' })
@@ -117,7 +121,8 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
         continue
       }
       const sweep = caseCount ? { sweep: { label: sweepLabels[index], index } } : {}
-      if (measurement.operation === 'delay') results.push({ id: measurement.id, operation: 'delay', vector: measurement.vector, targetVector: measurement.targetVector, value, unit: 's', ...sweep })
+      if (measurement.operation === 'crossing') results.push({ id: measurement.id, operation: 'crossing', vector: measurement.vector, threshold: measurement.threshold, edge: measurement.edge, ...(measurement.crossingCount ? { crossingCount: measurement.crossingCount } : {}), value, unit: 's', ...sweep })
+      else if (measurement.operation === 'delay') results.push({ id: measurement.id, operation: 'delay', vector: measurement.vector, targetVector: measurement.targetVector, value, unit: 's', ...sweep })
       else if (isExpression) results.push({ id: measurement.id, operation: measurement.operation, vector: `par('${measurement.expression}')`, ...(measurement.from ? { from: measurement.from } : {}), ...(measurement.to ? { to: measurement.to } : {}), value, unit: '', ...sweep })
       else {
         const isCurrent = measurement.vector?.trim().toLowerCase().startsWith('i(') ?? false

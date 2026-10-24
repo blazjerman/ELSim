@@ -11840,10 +11840,41 @@ test('transient measurements expose peak-to-peak and preserve it in the netlist'
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('.meas tran ELSIM_OutputSwing pp V(vout)')
   await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('combobox', { name: 'Calculate', exact: true }).selectOption('crossing')
+  await page.getByLabel('Measurement 1 crossing threshold').fill('2.5V')
+  await page.getByLabel('Measurement 1 crossing direction').selectOption('fall')
+  await page.getByLabel('Measurement 1 crossing number').fill('2')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0])).toMatchObject({ operation: 'crossing', threshold: '2.5V', edge: 'fall', crossingCount: 2 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('ELSim calculates crossing time measurement OutputSwing from solved waveform samples')
+  await expect(page.locator('.netlist-modal pre')).not.toContainText('.meas tran ELSIM_OutputSwing')
+  await page.getByRole('button', { name: 'Close netlist' }).click()
   await page.getByRole('combobox', { name: 'Calculate', exact: true }).selectOption('integ')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0].operation)).toBe('integ')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('ELSim calculates INTEG measurement OutputSwing from solved waveform samples')
+})
+
+test('time-at-level measurement reports the interpolated threshold crossing in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    project.simulation.transientMeasurements = [{ id: 'OneTau', operation: 'crossing', vector: 'V(vout)', threshold: '3.16V', edge: 'rise' }]
+    localStorage.setItem(key, JSON.stringify(project))
+    localStorage.setItem(`${key}:savedAt`, String(Date.now() + 10_000))
+  })
+  await page.reload()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openWireVoltagePlot(page, 430, 290)
+  const row = plot.locator('.measurement-results tbody tr').filter({ hasText: 'OneTau' })
+  await expect(row).toContainText('TIME AT 3.16V · rise V(vout)')
+  const value = await row.locator('td').nth(2).innerText()
+  expect(Number.parseFloat(value)).toBeGreaterThan(0.009)
+  expect(Number.parseFloat(value)).toBeLessThan(0.011)
 })
 
 test('transient measurement time windows persist and appear in the netlist', async ({ page }) => {

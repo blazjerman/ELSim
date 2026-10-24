@@ -1518,14 +1518,23 @@
             "oneOf": [
               {
                 "required": ["vector"],
-                "not": { "required": ["expression"] }
+                "not": { "required": ["expression"] },
+                "properties": { "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ"] } }
               },
               {
                 "required": ["expression"],
                 "not": { "required": ["vector"] },
-                "properties": {
-                  "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ"] }
-                }
+                "properties": { "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ"] } }
+              },
+              {
+                "required": ["vector", "threshold", "edge"],
+                "properties": { "operation": { "const": "crossing" } },
+                "not": { "anyOf": [{ "required": ["expression"] }, { "required": ["targetVector"] }, { "required": ["targetThreshold"] }, { "required": ["targetEdge"] }, { "required": ["from"] }, { "required": ["to"] }] }
+              },
+              {
+                "required": ["vector", "threshold", "targetVector", "targetThreshold", "edge", "targetEdge"],
+                "properties": { "operation": { "const": "delay" } },
+                "not": { "anyOf": [{ "required": ["expression"] }, { "required": ["from"] }, { "required": ["to"] }] }
               }
             ],
             "properties": {
@@ -1541,6 +1550,7 @@
                   "avg",
                   "rms",
                   "integ",
+                  "crossing",
                   "delay"
                 ]
               },
@@ -1563,6 +1573,11 @@
               },
               "threshold": {
                 "type": "string"
+              },
+              "crossingCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9999
               },
               "targetVector": {
                 "type": "string",
