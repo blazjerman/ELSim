@@ -112,12 +112,16 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     }
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.15, message: 'Preparing simulation' } satisfies EngineResponse)
     if (profileWorker) moduleLoadMs = performance.now() - moduleLoadStarted
-    let distortionHarmonic: 2 | 3 = 2
+    let distortion: { harmonic?: number; mode?: string; intermodProduct?: string } = { harmonic: 2 }
     try {
-      const simulation = typeof metadata.settings.simulation === 'string' ? JSON.parse(metadata.settings.simulation) as { distortion?: { harmonic?: number } } : undefined
-      if (simulation?.distortion?.harmonic === 3) distortionHarmonic = 3
+      const simulation = typeof metadata.settings.simulation === 'string' ? JSON.parse(metadata.settings.simulation) as { distortion?: typeof distortion } : undefined
+      if (simulation?.distortion) distortion = simulation.distortion
     } catch { /* Use second harmonic if older engine clients omit saved settings. */ }
-    const runDeck = addResultControl(artifact.text, parameterSweep, measurements, ngspiceFourier, distortionHarmonic)
+    const distortionPlot = distortion.mode === 'intermodulation'
+      ? distortion.intermodProduct === 'difference' ? 2 : distortion.intermodProduct === 'third-order' ? 3 : 1
+      : distortion.harmonic === 3 ? 2 : 1
+    const intermodProductLabel = distortion.intermodProduct === 'difference' ? 'f1−f2' : distortion.intermodProduct === 'third-order' ? '2f1−f2' : 'f1+f2'
+    const runDeck = addResultControl(artifact.text, parameterSweep, measurements, ngspiceFourier, distortionPlot as 1 | 2 | 3)
     if (needsLtspiceFullDeckTranslation(runDeck)) {
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
@@ -154,7 +158,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     const inputRef = typeof tfSettings?.inputSource === 'string' ? tfSettings.inputSource : 'input source'
     const inputUnit = /^I/i.test(inputRef) ? 'A' : 'V'
     const traces = analysis === 'disto'
-      ? rawTraces.map((trace) => ({ ...trace, label: `H${distortionHarmonic} (${distortionHarmonic === 2 ? '2nd' : '3rd'} harmonic) · ${trace.label}` }))
+      ? rawTraces.map((trace) => ({ ...trace, label: distortion.mode === 'intermodulation' ? `IM (${intermodProductLabel}) · ${trace.label}` : `H${distortion.harmonic === 3 ? 3 : 2} (${distortion.harmonic === 3 ? '3rd' : '2nd'} harmonic) · ${trace.label}` }))
       : analysis === 'pz'
       ? labelPoleZeroTraces(rawTraces)
       : analysis === 'sens'

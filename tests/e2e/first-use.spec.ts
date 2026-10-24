@@ -14957,7 +14957,7 @@ test('JFET and MESFET area factors edit and appear in generated netlist', { tag:
   await expect(netlist).toContainText(/^Z1 __ELSIM_z_area_test_D \S+ \S+ NTEST 3$/m)
 })
 
-test('harmonic distortion analysis runs in the browser engine and plots the selected harmonic', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('harmonic and two-tone distortion analyses run in the browser engine', { tag: ['@ngspice', '@engine-smoke'], timeout: 90_000 }, async ({ page }) => {
   await page.goto('/')
   await page.getByLabel('Analysis type').first().selectOption('disto')
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
@@ -14972,4 +14972,11 @@ test('harmonic distortion analysis runs in the browser engine and plots the sele
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Harmonic distortion analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText(/H3 \(3rd harmonic\)/).first()).toBeVisible()
+  await page.getByLabel('Distortion type').selectOption('intermodulation')
+  await expect(page.getByLabel('Second tone frequency ratio')).toHaveValue('0.49')
+  await page.getByLabel('Intermodulation product').selectOption('third-order')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Two-tone intermodulation analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('group', { name: /Intermodulation magnitude from/i })).toBeVisible()
+  await expect(page.getByRole('group', { name: /Selected ac result vectors/ }).getByRole('button', { name: /Disable IM \(2f1−f2\) · V\(vout\)/ })).toBeVisible()
 })

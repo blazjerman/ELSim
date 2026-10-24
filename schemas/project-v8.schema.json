@@ -1564,7 +1564,10 @@
           "properties": {
             "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
             "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
-            "harmonic": { "enum": [2, 3] }
+            "harmonic": { "enum": [2, 3] },
+            "mode": { "enum": ["harmonic", "intermodulation"] },
+            "intermodProduct": { "enum": ["sum", "difference", "third-order"] },
+            "secondToneRatio": { "type": "string", "maxLength": 32, "pattern": "^(?:0(?:\\.[0-9]+)?|\\.[0-9]+)$", "description": "Ratio F2/F1 used for two-tone intermodulation; must be greater than zero and less than one." }
           }
         },
         "sourceAcMagnitude": {

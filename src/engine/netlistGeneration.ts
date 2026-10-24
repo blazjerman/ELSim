@@ -900,7 +900,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${negative} ${isDistortionAnalysis ? `DC ${value} DISTOF1 ${isDistortionInput ? acMagnitude : 0} ${isDistortionInput ? acPhase : 0}` : isAcAnalysis ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'tran' ? transientValue : value}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
+      const isIntermodInput = isDistortionInput && project.simulation.distortion?.mode === 'intermodulation'
+      append(`${part.ref} ${positive} ${negative} ${isDistortionAnalysis ? `DC ${value} DISTOF1 ${isDistortionInput ? acMagnitude : 0} ${isDistortionInput ? acPhase : 0}${isIntermodInput ? ` DISTOF2 ${acMagnitude} ${acPhase}` : ''}` : isAcAnalysis ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'tran' ? transientValue : value}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'source') {
       const acMagnitude = spiceNumber(part.acMagnitude ?? project.simulation.sourceAcMagnitude ?? '1 V', 'source')
@@ -1015,7 +1016,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period}${cycleCount ? ` ${cycleCount}` : ''})`
       }
-      append(`${part.ref} ${positive} ${negative} ${isDistortionAnalysis ? `DC ${value} DISTOF1 ${isDistortionInput ? acMagnitude : 0} ${isDistortionInput ? acPhase : 0}` : project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'tf' || project.simulation.analysis === 'pz' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : isAcAnalysis ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
+      const isIntermodInput = isDistortionInput && project.simulation.distortion?.mode === 'intermodulation'
+      append(`${part.ref} ${positive} ${negative} ${isDistortionAnalysis ? `DC ${value} DISTOF1 ${isDistortionInput ? acMagnitude : 0} ${isDistortionInput ? acPhase : 0}${isIntermodInput ? ` DISTOF2 ${acMagnitude} ${acPhase}` : ''}` : project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'tf' || project.simulation.analysis === 'pz' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : isAcAnalysis ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
     }
     else if (part.kind === 'urcLine') {
       const nodes = [0, 1, 2].map((index) => pinNet(connectivity, part, index))
@@ -1866,12 +1868,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     const outputNet = output ? connectivity.labelNets.get(output.id) : undefined
     const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
-    if (!output || !outputNet || outputNet === '0' || !source || ![2, 3].includes(settings.harmonic) || !['dec', 'oct', 'lin'].includes(sweep.scale) || !Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000 || !start || !stop || Number(start) <= 0 || Number(stop) <= Number(start)) {
+    const secondToneRatio = settings.secondToneRatio ?? '0.49'
+    if (!output || !outputNet || outputNet === '0' || !source || ![2, 3].includes(settings.harmonic) || settings.mode !== undefined && !['harmonic', 'intermodulation'].includes(settings.mode) || settings.mode === 'intermodulation' && (!/^(?:0(?:\.[0-9]+)?|\.[0-9]+)$/.test(secondToneRatio) || Number(secondToneRatio) <= 0 || Number(secondToneRatio) >= 1) || !['dec', 'oct', 'lin'].includes(sweep.scale) || !Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000 || !start || !stop || Number(start) <= 0 || Number(stop) <= Number(start)) {
       const message = 'Distortion analysis needs a labeled non-ground output, a connected independent input source, a supported sweep, and positive increasing frequencies.'
       append(`* ERROR: ${message}`, 'analysis:disto', 'analysis')
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:disto', line: rows.length })
     } else {
-      append(`.disto ${sweep.scale} ${sweep.points} ${start} ${stop}`, 'analysis:disto', 'analysis')
+      append(`.disto ${sweep.scale} ${sweep.points} ${start} ${stop}${settings.mode === 'intermodulation' ? ` ${Number(secondToneRatio)}` : ''}`, 'analysis:disto', 'analysis')
       append(`.print disto vm(${outputNet})`, 'analysis:disto', 'analysis')
     }
   } else if (project.simulation.analysis === 'dc') {

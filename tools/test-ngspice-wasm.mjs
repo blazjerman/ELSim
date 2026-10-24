@@ -23,7 +23,7 @@ fixtures.push('imported-subckt-sqr-parameter-op')
 fixtures.push('imported-library-global-node-op')
 fixtures.push('bracketed-subckt-parameter-op')
 fixtures.push('bsim3-bin-family-sweep')
-fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'disto-diode-harmonics')
+fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'disto-diode-harmonics', 'disto-diode-intermod')
 const fixturesWithRawResults = new Set(['pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac'])
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
@@ -104,6 +104,12 @@ for (const fixture of selectedFixtures) {
     assert.ok(Math.abs(secondHarmonic - 8.140051e-9) < 1e-14, `second harmonic at 100 Hz should be about 8.140051 nV, got ${secondHarmonic}`)
     assert.ok(Math.abs(thirdHarmonic - 2.208504e-12) < 1e-16, `third harmonic at 100 Hz should be about 2.208504 pV, got ${thirdHarmonic}`)
     process.stdout.write('PASS disto-diode-harmonics: H2 = 8.140051 nV, H3 = 2.208504 pV at 100 Hz\n')
+    continue
+  }
+  if (fixture === 'disto-diode-intermod') {
+    const thirdOrder = Number(wasmResult.stdout.match(/DISTORTION - IM: 2f1-f2[\s\S]*?\n0\s+1\.000000e\+02\s+([\d.e+-]+)/i)?.[1])
+    assert.ok(Math.abs(thirdOrder - 6.625511e-12) < 1e-16, `third-order 2f1-f2 intermodulation at 100 Hz should be about 6.625511 pV, got ${thirdOrder}`)
+    process.stdout.write('PASS disto-diode-intermod: 2f1-f2 = 6.625511 pV at 100 Hz (F2/F1 = 0.49)\n')
     continue
   }
   if (fixture === 'pole-zero-rc') {

@@ -207,6 +207,17 @@ test('ASCII raw parser identifies ngspice harmonic distortion as complex frequen
   assert.deepEqual([...parsed.variables[0].imaginaryValues], [1e-10, 1e-10])
 })
 
+test('ASCII raw parser identifies ngspice two-tone intermodulation products as complex frequency data', () => {
+  const raw = validDistoRaw.replace('DISTORTION - 2nd harmonic', 'DISTORTION - IM: 2f1-f2')
+  const parsed = parseAsciiRawFile(raw)
+  assert.equal(parsed.analysis, 'disto')
+  assert.equal(parsed.axisLabel, 'Frequency')
+  assert.equal(parsed.axisUnit, 'Hz')
+  assert.equal(parsed.isComplex, true)
+  assert.deepEqual([...parsed.axis], [100, 1000])
+  assert.deepEqual([...parsed.variables[0].values], [8.140051e-9, 8.140051e-9])
+})
+
 test('ASCII raw parser exposes DC sweep source values as the analysis axis', () => {
   const parsed = parseAsciiRawFile(validDcRaw)
   assert.equal(parsed.analysis, 'dc')

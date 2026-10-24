@@ -1,0 +1,8 @@
+ELSim diode two-tone intermodulation known-answer regression
+V1 in 0 DC 1.7 AC 0 DISTOF1 1m DISTOF2 1m
+R1 in out 1k
+D1 out 0 D1N4148
+.model D1N4148 D(Is=2.52e-9 N=1.752)
+.disto dec 10 100 100k 0.49
+.print disto vm(out)
+.end

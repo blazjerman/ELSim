@@ -107,7 +107,7 @@ export function parseAsciiRawFile(text: string, tracesOnly = false): ParsedRawFi
   const isSensitivity = /sensitivity analysis/i.test(plotName)
   const isSensitivityAc = isSensitivity && isComplex && variableRecords[0]?.name.toLowerCase() === 'frequency'
   const isSensitivityDc = isSensitivity && !isSensitivityAc
-  const isDisto = /distortion - (?:2nd|3rd) harmonic/i.test(plotName)
+  const isDisto = /distortion - (?:\s*(?:2nd|3rd) harmonic|im:)/i.test(plotName)
   const isFrequency = /ac analysis/i.test(plotName) || isSensitivityAc || isDisto
   const isNoise = /noise spectral density/i.test(plotName)
   const isDcSweep = /dc transfer characteristic/i.test(plotName)
@@ -246,7 +246,7 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
   const isSensitivity = /sensitivity analysis/i.test(plotName)
   const isSensitivityAc = isSensitivity && isComplex && variableRecords[0]?.name.toLowerCase() === 'frequency'
   const isSensitivityDc = isSensitivity && !isSensitivityAc
-  const isDisto = /distortion - (?:2nd|3rd) harmonic/i.test(plotName)
+  const isDisto = /distortion - (?:\s*(?:2nd|3rd) harmonic|im:)/i.test(plotName)
   const isFrequency = /ac analysis/i.test(plotName) || isSensitivityAc || isDisto
   const isNoise = /noise spectral density/i.test(plotName)
   const isDcSweep = /dc transfer characteristic/i.test(plotName)

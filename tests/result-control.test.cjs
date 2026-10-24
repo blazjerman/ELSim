@@ -33,8 +33,10 @@ test('result control selects the requested distortion harmonic before writing ra
   const netlist = 'V1 in 0 DC 1 DISTOF1 1m 0\n.disto dec 10 100 100k\n.print disto vm(out)\n.end'
   const second = addResultControl(netlist)
   assert.match(second, /disto dec 10 100 100k\nsetplot disto1\nwrite \/result\.raw all/i)
-  const third = addResultControl(netlist, [], [], undefined, 3)
+  const third = addResultControl(netlist, [], [], undefined, 2)
   assert.match(third, /disto dec 10 100 100k\nsetplot disto2\nwrite \/result\.raw all/i)
+  const intermodThird = addResultControl('V1 in 0 DC 1 DISTOF1 1m DISTOF2 1m\n.disto dec 10 100 100k 0.49\n.end', [], [], undefined, 3)
+  assert.match(intermodThird, /disto dec 10 100 100k 0\.49\nsetplot disto3\nwrite \/result\.raw all/i)
   assert.throws(() => addResultControl(netlist, [{ values: [{ component: 'R1', value: '2k' }], label: 'R1=2k' }]), /not supported.*distortion/i)
 })
 

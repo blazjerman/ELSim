@@ -67,6 +67,38 @@ test('harmonic distortion settings generate a labeled ngspice frequency sweep an
   assert.doesNotMatch(artifact.text, /^\.ac /m)
 })
 
+test('two-tone distortion emits both excitation tones and the selected frequency ratio', () => {
+  const project = createStarterProject()
+  project.simulation = {
+    ...project.simulation,
+    analysis: 'disto',
+    distortion: { outputNode: 'vout', inputSource: 'V1', harmonic: 2, mode: 'intermodulation', intermodProduct: 'third-order', secondToneRatio: '0.49' },
+    acSweep: { scale: 'dec', points: 10, startFrequency: '100 Hz', stopFrequency: '100 kHz' },
+  }
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.disto dec 10 100 100k 0\.49$/m)
+  assert.match(artifact.text, /^V1 vin 0 DC .* DISTOF1 1 0 DISTOF2 1 0$/m)
+})
+
+test('two-tone distortion supports an independent current source as its input', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.ref === 'V1')
+  source.kind = 'currentSource'
+  source.ref = 'I1'
+  source.value = '1 mA'
+  delete source.componentDefinitionId
+  project.simulation = {
+    ...project.simulation,
+    analysis: 'disto',
+    distortion: { outputNode: 'vout', inputSource: 'I1', harmonic: 2, mode: 'intermodulation', secondToneRatio: '0.49' },
+    acSweep: { scale: 'dec', points: 10, startFrequency: '100 Hz', stopFrequency: '100 kHz' },
+  }
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 \S+ \S+ DC 1m DISTOF1 1m 0 DISTOF2 1m 0$/m)
+})
+
 test('pole-zero settings generate native ngspice analysis and validate source terminals', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'pz'

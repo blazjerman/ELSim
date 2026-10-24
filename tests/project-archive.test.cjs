@@ -94,6 +94,18 @@ test('harmonic distortion settings round-trip in native project archives', async
   assert.deepEqual(restored.simulation.acSweep, project.simulation.acSweep)
 })
 
+test('two-tone intermodulation settings round-trip in native project archives', async () => {
+  const project = createStarterProject()
+  project.simulation = { ...project.simulation, analysis: 'disto', distortion: { outputNode: 'vout', inputSource: 'V1', harmonic: 2, mode: 'intermodulation', intermodProduct: 'third-order', secondToneRatio: '0.49' } }
+  const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
+  assert.deepEqual(restored.simulation.distortion, project.simulation.distortion)
+  for (const secondToneRatio of ['0', '1', '-0.5', '0.5*']) {
+    const invalid = structuredClone(project)
+    invalid.simulation.distortion.secondToneRatio = secondToneRatio
+    assert.throws(() => validateProject(invalid), /Distortion analysis settings are malformed/)
+  }
+})
+
 test('project ZIP archives efficiently round-trip valid project JSON entries larger than 20 MiB', async () => {
   const project = createStarterProject()
   const source = 'X'.repeat(7 * 1024 * 1024)
@@ -309,6 +321,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('pz'))
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('disto'))
   assert.deepEqual(schema.$defs.simulation.properties.distortion.properties.harmonic.enum, [2, 3])
+  assert.deepEqual(schema.$defs.simulation.properties.distortion.properties.mode.enum, ['harmonic', 'intermodulation'])
+  assert.deepEqual(schema.$defs.simulation.properties.distortion.properties.intermodProduct.enum, ['sum', 'difference', 'third-order'])
   assert.deepEqual(schema.$defs.simulation.properties.poleZero.properties.roots.enum, ['poles', 'zeros', 'both'])
   assert.deepEqual(schema.$defs.simulation.properties.sensitivity.properties.mode.enum, ['dc', 'ac'])
   const modelPinPattern = new RegExp(schema.$defs.part.properties.modelPins.items.pattern, 'u')
