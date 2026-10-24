@@ -38,6 +38,16 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('unsupported browser ngspice formal punctuation reports the exact imported source line', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'punctuation-formal', filename: 'punctuation.lib', content: '.SUBCKT PUNCT IN OUT GAIN#=2\n.ENDS PUNCT\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const artifact = createNetlistArtifact(project)
+  const diagnostic = artifact.diagnostics.find(({ severity, assetId }) => severity === 'error' && assetId === 'punctuation-formal')
+  assert.match(diagnostic?.message ?? '', /ngspice 47 runtime cannot parse !, #, \$, or %/)
+  assert.equal(diagnostic?.assetLine, 1)
+  assert.equal(diagnostic?.sourceId, 'model-file:punctuation-formal')
+})
+
 test('netlist generation expands imported native AKO cards and maps them to the child source line', () => {
   const project = createStarterProject()
   project.modelAssets = [

@@ -1,4 +1,5 @@
 import { spiceModelParameterMagnitude } from './componentValue'
+import { isSupportedBrowserSubcircuitParameterName } from './subcircuitLibrary'
 import type { ParameterSweep, Part, Project } from './project'
 
 type SweepParameter = { name: string; defaultValue: string; defaultIsExpression?: boolean }
@@ -20,6 +21,7 @@ export function subcircuitSweepParameters(part: Part | undefined, subcircuits: S
     ? sheets.find((sheet) => sheet.id === part.sheetId)?.parameters ?? []
     : subcircuits.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())?.parameters ?? []
   return parameters.filter((parameter) => {
+    if (!isSupportedBrowserSubcircuitParameterName(parameter.name)) return false
     const value = parameterValue(part, parameter)
     return spiceModelParameterMagnitude(value) !== null || isExpressionValue(value)
   })

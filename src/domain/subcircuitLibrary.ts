@@ -430,7 +430,7 @@ function unsupportedParameterWordOperator(value: string): { operator: string; re
 function parseParameterDefaults(source: string, line: number, functions: ReadonlyMap<string, number>): SubcircuitParameter[] {
   const result: SubcircuitParameter[] = []
   let offset = 0
-  const assignment = /\s*([A-Za-z_][A-Za-z0-9_\[\]]*)\s*=\s*(\{[^{}]*\}|"(?:\\.|[^"\\\r\n])*"|'[^']*'|[^\s]+)\s*/gy
+  const assignment = /\s*([A-Za-z_][A-Za-z0-9!#$%_\[\]]*)\s*=\s*(\{[^{}]*\}|"(?:\\.|[^"\\\r\n])*"|'[^']*'|[^\s]+)\s*/gy
   while (offset < source.length) {
     assignment.lastIndex = offset
     const match = assignment.exec(source)
@@ -452,7 +452,12 @@ function parseParameterDefaults(source: string, line: number, functions: Readonl
 
 /** ngspice formal subcircuit parameters support bracketed identifiers such as GAIN[1]. */
 export function isValidNgspiceSubcircuitParameterName(name: string): boolean {
-  return /^[A-Za-z_](?:[A-Za-z0-9_]|\[[A-Za-z0-9_]+\])*$/.test(name)
+  return /^[A-Za-z_](?:[A-Za-z0-9!#$%_]|\[[A-Za-z0-9_]+\])*$/.test(name)
+}
+
+/** ngspice 47's browser runtime accepts bracketed formals but rejects !#$% in names. */
+export function isSupportedBrowserSubcircuitParameterName(name: string): boolean {
+  return isValidNgspiceSubcircuitParameterName(name) && !/[!#$%]/.test(name)
 }
 
 const builtinFunctionArities: Readonly<Record<string, number>> = {
@@ -1227,8 +1232,8 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       // PARAMS: is optional. Also accept whitespace around '=' because it is
       // valid in the card grammar and the value parser already handles it.
       const bareParameterAt = header.findIndex((token, index) =>
-        /^[A-Za-z_][A-Za-z0-9_\[\]]*\s*=/.test(token)
-        || (/^[A-Za-z_][A-Za-z0-9_\[\]]*$/.test(token) && /^=/.test(header[index + 1] ?? '')))
+        /^[A-Za-z_][A-Za-z0-9!#$%_\[\]]*\s*=/.test(token)
+        || (/^[A-Za-z_][A-Za-z0-9!#$%_\[\]]*$/.test(token) && /^=/.test(header[index + 1] ?? '')))
       const paramsAt = paramsMarkerAt >= 0 ? paramsMarkerAt : bareParameterAt
       const pins = (paramsAt < 0 ? header : header.slice(0, paramsAt)).filter(Boolean)
       const headerTokens = [...text.matchAll(/\S+/g)]

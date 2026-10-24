@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelProvenanceForReplacement, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, ngspiceModelValuesEquivalent, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes, withoutInlineComment } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelProvenanceForReplacement, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, ngspiceModelValuesEquivalent, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes, withoutInlineComment } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { analyzeLtspiceModelDialect } = require(path.join(build, 'domain/modelDialectDiagnostics.js'))
 const { expandNgspiceAkoModels } = require(path.join(build, 'domain/ngspiceAko.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
@@ -49,7 +49,22 @@ test('parses bracketed ngspice subcircuit formal parameter names', () => {
   assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN[1]', defaultValue: '2' }])
   assert.equal(isValidNgspiceSubcircuitParameterName('GAIN[1]'), true)
   assert.equal(isValidNgspiceSubcircuitParameterName('GAIN[1'), false)
-  assert.equal(isValidNgspiceSubcircuitParameterName('GAIN!'), false)
+  assert.equal(isValidNgspiceSubcircuitParameterName('GAIN!'), true)
+  assert.equal(isSupportedBrowserSubcircuitParameterName('GAIN[1]'), true)
+  assert.equal(isSupportedBrowserSubcircuitParameterName('GAIN!'), false)
+})
+
+test('parses native ngspice punctuation in imported formal parameter names', () => {
+  const parsed = parseSubcircuitLibrary('.SUBCKT PUNCT IN OUT GAIN#=2 GAIN$=3 GAIN%=4 GAIN!=5\n.ENDS PUNCT')
+  assert.deepEqual(parsed.subcircuits[0].pins, ['IN', 'OUT'])
+  assert.deepEqual(parsed.subcircuits[0].parameters, [
+    { name: 'GAIN#', defaultValue: '2' },
+    { name: 'GAIN$', defaultValue: '3' },
+    { name: 'GAIN%', defaultValue: '4' },
+    { name: 'GAIN!', defaultValue: '5' },
+  ])
+  for (const name of ['GAIN#', 'GAIN$', 'GAIN%', 'GAIN!']) assert.equal(isValidNgspiceSubcircuitParameterName(name), true, name)
+  for (const name of ['GAIN#', 'GAIN$', 'GAIN%', 'GAIN!']) assert.equal(isSupportedBrowserSubcircuitParameterName(name), false, name)
 })
 
 test('parses native ngspice conditional expressions in subcircuit parameter defaults', () => {

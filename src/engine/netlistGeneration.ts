@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit } from '../domain/subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
@@ -247,6 +247,19 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const availableModelFunctions = modelFunctionSignaturesForLibraries(modelAssets)
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections, availableModelFunctions))
   const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
+  for (const { asset, parsed } of parsedModelLibraryEntries) for (const definition of parsed.subcircuits) {
+    const unsupported = definition.parameters.filter((parameter) => !isSupportedBrowserSubcircuitParameterName(parameter.name))
+    if (!unsupported.length) continue
+    const names = unsupported.map((parameter) => parameter.name).join(', ')
+    diagnostics.push({
+      severity: 'error',
+      message: `Imported subcircuit ${definition.name} in ${asset.filename} uses formal parameter name${unsupported.length === 1 ? '' : 's'} ${names}. The bundled browser ngspice 47 runtime cannot parse !, #, $, or % in subcircuit parameter names. Rename ${unsupported.length === 1 ? 'this parameter' : 'these parameters'} using letters, digits, underscores, or bracketed indices before simulation.`,
+      sourceId: `model-file:${asset.id}`,
+      assetId: asset.id,
+      assetLine: definition.startLine,
+      line: definition.startLine,
+    })
+  }
   const parsedModelLibrariesById = new Map(parsedModelLibraryEntries.map(({ asset, parsed }) => [asset.id, parsed]))
   const globalDeviceModelDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
   const globalDeviceModelsByName = new Map<string, typeof parsedModelAssets[number]['models'][number][]>()
