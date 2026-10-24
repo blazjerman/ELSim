@@ -14862,6 +14862,7 @@ test('portable export names imported files and asks before including unknown-lic
   await expect(warning).toContainText('Saving a copy for your own use does not grant permission')
   await expect(warning).toHaveAttribute('aria-describedby', 'export-warning-description')
   await expectDialogTextContrast(warning, 'Portable project export warning', ['.modal-heading h2', '#export-warning-description', '.export-warning-files strong', '.export-warning-files span'])
+  await expect(page.locator('input[accept=".asc,.asy,text/plain"]')).toBeHidden()
   await expectVisibleKeyboardControlsNamed(page)
   const closeWarning = warning.getByRole('button', { name: 'Cancel project export' })
   const cancelWarning = warning.getByRole('button', { name: 'Cancel', exact: true })
@@ -14874,6 +14875,13 @@ test('portable export names imported files and asks before including unknown-lic
   await cancelWarning.click()
   await expect(warning).toBeHidden()
   await expect(saveTrigger).toBeFocused()
+
+  const saveAsTrigger = page.getByRole('button', { name: 'Save As', exact: true })
+  await saveAsTrigger.click()
+  await expect(warning).toBeVisible()
+  await warning.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(warning).toBeHidden()
+  await expect(saveAsTrigger).toBeFocused()
 
   await saveTrigger.click()
   const downloadPromise = page.waitForEvent('download')

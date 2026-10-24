@@ -328,13 +328,19 @@ export default function App() {
   const electricalCheckTriggerRef = useRef<HTMLButtonElement>(null)
   const sheetSettingsTriggerRef = useRef<HTMLButtonElement>(null)
   const saveProjectTriggerRef = useRef<HTMLButtonElement>(null)
+  const saveAsProjectTriggerRef = useRef<HTMLButtonElement>(null)
   const ltspiceExportTriggerRef = useRef<HTMLButtonElement>(null)
   const netlistReturnFocusRef = useRef<HTMLElement | null>(null)
   const modelImportReturnFocusRef = useRef<HTMLElement | null>(null)
   const restoreDialogTriggerFocus = (trigger: typeof examplesTriggerRef) => {
     window.requestAnimationFrame(() => trigger.current?.focus())
   }
-  const closeSaveWarning = () => { setSaveWarningOpen(false); setSaveWarningAs(false); restoreDialogTriggerFocus(saveProjectTriggerRef) }
+  const closeSaveWarning = () => {
+    const trigger = saveWarningAs ? saveAsProjectTriggerRef : saveProjectTriggerRef
+    setSaveWarningOpen(false)
+    setSaveWarningAs(false)
+    restoreDialogTriggerFocus(trigger)
+  }
   const continueProjectRecovery = () => {
     setCorruptLocalProjectCopies([])
     window.requestAnimationFrame(() => workspaceMainRef.current?.focus())
@@ -3280,7 +3286,7 @@ export default function App() {
     </header>
 
     <div className="main-toolbar">
-      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={openProject}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc, matching child .asc/.asy files, referenced PWL data, and optional .lib/.sub model files"><FolderOpen size={15}/> Import LTspice</button><button ref={saveProjectTriggerRef} onClick={saveProject}><Save size={15}/> Save</button><button onClick={saveProjectAs} title="Save a copy under a new filename (Ctrl/⌘+Shift+S)"><Save size={15}/> Save As</button><button ref={ltspiceExportTriggerRef} onClick={prepareLtspiceExport} disabled={ltspiceExportBusy}><Download size={15}/> Export LTspice</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple onChange={importLtspiceSchematic}/></div>
+      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={openProject}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc, matching child .asc/.asy files, referenced PWL data, and optional .lib/.sub model files"><FolderOpen size={15}/> Import LTspice</button><button ref={saveProjectTriggerRef} onClick={saveProject}><Save size={15}/> Save</button><button ref={saveAsProjectTriggerRef} onClick={saveProjectAs} title="Save a copy under a new filename (Ctrl/⌘+Shift+S)"><Save size={15}/> Save As</button><button ref={ltspiceExportTriggerRef} onClick={prepareLtspiceExport} disabled={ltspiceExportBusy}><Download size={15}/> Export LTspice</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
