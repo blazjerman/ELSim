@@ -7439,6 +7439,25 @@ test('model compatibility warning reports unsupported MOSFET bins but not AKO as
   await expect(warnings).toContainText('does not choose one automatically')
 })
 
+test('native ngspice AKO models import and simulate after cross-library expansion', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'ako-base.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL DBAS D(Is=1n N=1)\n'),
+  })
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'ako-child.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL DCHILD AKO:DBAS D(IS=2n)\n'),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from ako-child\.lib/)).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText(/^\.model DCHILD D\(IS=2n N=1\)$/m)
+  await expect(netlist).not.toContainText(/AKO:/i)
+})
+
 test('native ngspice BSIM3 model bins are not reported as unsupported LTspice bins', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
