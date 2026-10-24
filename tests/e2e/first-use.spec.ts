@@ -4142,7 +4142,7 @@ test('imported model B-source and helper compatibility warnings link to their so
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'shared-functions.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.LIB active\n.FUNC square_helper(x) {sqr(x)}\n.FUNC truncate_helper(x) {int(x)}\n.FUNC clamp_helper(x) {limit(x, 0, 1)}\n.FUNC select_helper(x) {if(x > 0, 1, 0)}\n.FUNC distribution_helper(x) {flat(x)}\n.FUNC punctuation#helper(x) {punctuation!nested(x)}\n.FUNC punctuation!nested(x) {sqr(x)}\n.ENDL active\n.LIB inactive\n.FUNC unused_helper(x) {sqr(x)}\n.ENDL inactive\n'),
+    buffer: Buffer.from('.LIB active\n.FUNC square_helper(x) {sqr(x)}\n.FUNC truncate_helper(x) {int(x)}\n.FUNC clamp_helper(x) {limit(x, 0, 1)}\n.FUNC select_helper(x) {if(x > 0, 1, 0)}\n.FUNC distribution_helper(x) {flat(x)}\n.FUNC punctuation#helper(x) {punctuation!nested(x)}\n.FUNC punctuation!nested(x) {sqr(x)}\n.ENDL active\n.LIB inactive\n.FUNC unused_helper(x) {sqr(x)}\n.FUNC unused#helper(x) {limit(x, 0, 1)}\n.ENDL inactive\n'),
   })
   const sections = page.getByRole('dialog', { name: 'Choose model sections' })
   await expect(sections).toBeVisible()
@@ -4174,6 +4174,7 @@ test('imported model B-source and helper compatibility warnings link to their so
   await expect(warning).toContainText('Imported .FUNC uses B-source sqr()')
   await expect(warning).toContainText('shared-functions.lib:8')
   await expect(warning).not.toContainText('shared-functions.lib:12')
+  await expect(warning).not.toContainText('shared-functions.lib:13')
 })
 
 test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {

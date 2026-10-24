@@ -130,7 +130,7 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
   const sourceLibrary = options.supportingLibraries?.find(({ assetId }) => assetId === options.sourceAssetId)
   const logical = sourceLibrary ? selectedLinesForLibrary(sourceLibrary) : selectedLibraryLines(source, options.selectedSections)
   const helperDefinitionLines = new Set(logical
-    .filter(({ text }) => /^\s*\.func\s+[A-Za-z_][A-Za-z0-9_.$]*\s*(?:\([^)]*\))?\s*=?\s*\{/i.test(withoutInlineComment(text)))
+    .filter(({ text }) => /^\s*\.func\s+[A-Za-z_][A-Za-z0-9_.$!#%\[\]]*\s*(?:\([^)]*\))?\s*=?\s*\{/i.test(withoutInlineComment(text)))
     .map(({ sourceLine }) => sourceLine))
   const conditionalModelLines = new Set<number>()
   let conditionalDepth = 0

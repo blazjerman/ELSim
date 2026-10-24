@@ -1468,6 +1468,11 @@ test('follows ngspice punctuation-bearing .FUNC names when reporting reachable i
   ])
 })
 
+test('does not warn for unreachable punctuation-bearing .FUNC helpers', () => {
+  const source = '.FUNC unused#helper(x) {limit(x, 0, 1)}'
+  assert.deepEqual(analyzeLtspiceModelDialect(source), [])
+})
+
 test('diagnoses reached LTspice helper limit() and if() constructs at their definition lines', () => {
   const source = [
     '.FUNC clamp_value(x) {limit(x, 0, 1)}',
