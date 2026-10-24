@@ -47,6 +47,19 @@ test('parses native ngspice conditional expressions in subcircuit parameter defa
   ])
 })
 
+test('explains ngspice word-form operators rejected by the bundled runtime', () => {
+  const replacements = { not: '!', and: '&&', or: '||', div: '\\', mod: '%' }
+  for (const [operator, replacement] of Object.entries(replacements)) {
+    assert.throws(
+      () => parseSubcircuitLibrary(`.SUBCKT UNSUPPORTED IN OUT PARAMS: VALUE={1 ${operator} 1}\n.ENDS UNSUPPORTED`),
+      (error) => error.message.includes(`Line 1: parameter VALUE uses the ngspice word-form operator "${operator}"`)
+        && error.message.endsWith(`Replace it with "${replacement}".`),
+    )
+  }
+  const quoted = parseSubcircuitLibrary('.SUBCKT FILE_SOURCE IN OUT PARAMS: NAME="model and data.txt"\n.ENDS FILE_SOURCE')
+  assert.equal(quoted.subcircuits[0].parameters[0].defaultValue, '"model and data.txt"')
+})
+
 test('accepts ngspice sqr() in imported subcircuit parameter expressions', () => {
   const parsed = parseSubcircuitLibrary('.SUBCKT SQUARED IN OUT PARAMS: GAIN={sqr(4)}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS SQUARED')
   assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '{sqr(4)}' }])

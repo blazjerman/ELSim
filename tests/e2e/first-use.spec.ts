@@ -2344,6 +2344,19 @@ test('model importer reports a ground pin in an imported subcircuit header', { t
   await expect(page.getByRole('button', { name: 'Remove library file invalid-ground-pin.lib' })).toHaveCount(0)
 })
 
+test('model importer explains word-form ngspice operators unsupported by the browser runtime', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'word-operators.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SUBCKT WORD_OP IN OUT PARAMS: GAIN={2 and 1}\n.ENDS WORD_OP'),
+  })
+  await expect(page.locator('.toast[role="status"]')).toContainText('parameter GAIN uses the ngspice word-form operator "and"')
+  await expect(page.locator('.toast[role="status"]')).toContainText('Replace it with "&&".')
+  await expect(page.getByRole('button', { name: 'Remove library file word-operators.lib' })).toHaveCount(0)
+})
+
 test('model importer preserves polarity markers in IC pin names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')

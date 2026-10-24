@@ -400,6 +400,19 @@ function isLibrarySectionDollar(line: string, dollarIndex: number): boolean {
   return count < 2
 }
 
+function unsupportedParameterWordOperator(value: string): { operator: string; replacement: string } | undefined {
+  const trimmed = value.trim()
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) return undefined
+  const expression = trimmed.startsWith("'") && trimmed.endsWith("'")
+    ? trimmed.slice(1, -1)
+    : trimmed.replace(/^\{(.*)\}$/, '$1')
+  const match = expression.match(/\b(not|and|or|div|mod)\b/i)
+  if (!match) return undefined
+  const operator = match[1].toLowerCase()
+  const replacements: Record<string, string> = { not: '!', and: '&&', or: '||', div: '\\', mod: '%' }
+  return { operator, replacement: replacements[operator] }
+}
+
 function parseParameterDefaults(source: string, line: number, functions: ReadonlyMap<string, number>): SubcircuitParameter[] {
   const result: SubcircuitParameter[] = []
   let offset = 0
@@ -410,7 +423,11 @@ function parseParameterDefaults(source: string, line: number, functions: Readonl
     if (!match) throw new Error(`Line ${line}: malformed .SUBCKT PARAMS: declaration.`)
     if (['__proto__', 'constructor', 'prototype'].includes(match[1].toLowerCase())) throw new Error(`Line ${line}: parameter name ${match[1]} is reserved.`)
     if (result.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) throw new Error(`Line ${line}: parameter ${match[1]} is declared more than once.`)
-    if (!isSafeSubcircuitParameterValue(match[2], functions)) throw new Error(`Line ${line}: parameter ${match[1]} has an unsupported default value.`)
+    if (!isSafeSubcircuitParameterValue(match[2], functions)) {
+      const wordOperator = unsupportedParameterWordOperator(match[2])
+      if (wordOperator) throw new Error(`Line ${line}: parameter ${match[1]} uses the ngspice word-form operator "${wordOperator.operator}", which the browser ngspice 47 runtime does not evaluate in parameter expressions. Replace it with "${wordOperator.replacement}".`)
+      throw new Error(`Line ${line}: parameter ${match[1]} has an unsupported default value.`)
+    }
     result.push({ name: match[1], defaultValue: match[2] })
     offset = assignment.lastIndex
   }
