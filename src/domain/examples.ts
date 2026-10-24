@@ -307,6 +307,47 @@ export function createCommonEmitterExampleProject(): Project {
   return project
 }
 
+/** An AC lesson using the built-in educational NMOS in a common-source stage. */
+export function createCommonSourceExampleProject(): Project {
+  const project = createStarterProject()
+  const input: Part = { id: 'common-source-vin', kind: 'source', ref: 'VIN', value: '0 V', acMagnitude: '1 V', acPhase: '0', x: 150, y: 400, rotation: 0 }
+  const inputCapacitor: Part = { id: 'common-source-cin', kind: 'capacitor', ref: 'CIN', value: '10 µF', x: 400, y: 400, rotation: 0 }
+  const biasTop: Part = { id: 'common-source-rbias1', kind: 'resistor', ref: 'RBIAS1', value: '1 MΩ', x: 600, y: 250, rotation: 90 }
+  const biasBottom: Part = { id: 'common-source-rbias2', kind: 'resistor', ref: 'RBIAS2', value: '470 kΩ', x: 600, y: 550, rotation: 90 }
+  const transistor: Part = { id: 'common-source-m1', kind: 'nmos', ref: 'M1', value: '0', x: 850, y: 400, rotation: 0 }
+  const drainLoad: Part = { id: 'common-source-rd', kind: 'resistor', ref: 'RD', value: '100 kΩ', x: 850, y: 250, rotation: 90 }
+  const supply: Part = { id: 'common-source-vdd', kind: 'source', ref: 'VDD', value: '12 V', sourceMode: 'dc', acMagnitude: '0 V', x: 850, y: 100, rotation: 0 }
+  const outputCapacitor: Part = { id: 'common-source-cout', kind: 'capacitor', ref: 'COUT', value: '10 µF', x: 1050, y: 350, rotation: 0 }
+  const outputLoad: Part = { id: 'common-source-rload', kind: 'resistor', ref: 'RLOAD', value: '1 MΩ', x: 1250, y: 350, rotation: 90 }
+  const parts = [input, inputCapacitor, biasTop, biasBottom, transistor, drainLoad, supply, outputCapacitor, outputLoad]
+  const atPin = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'NMOS common-source amplifier'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    atPin('common-source-vin-source', 'VIN', input, 0), atPin('common-source-vin-cap', 'VIN', inputCapacitor, 0),
+    atPin('common-source-gate-cap', 'GATE', inputCapacitor, 1), atPin('common-source-gate-bias-top', 'GATE', biasTop, 1),
+    atPin('common-source-gate-bias-bottom', 'GATE', biasBottom, 0), atPin('common-source-gate-mos', 'GATE', transistor, 1),
+    atPin('common-source-vdd-source', 'VDD', supply, 0), atPin('common-source-vdd-rd', 'VDD', drainLoad, 0),
+    atPin('common-source-vdd-bias', 'VDD', biasTop, 0), atPin('common-source-drain-rd', 'DRAIN', drainLoad, 1),
+    atPin('common-source-drain-mos', 'DRAIN', transistor, 0), atPin('common-source-drain-cap', 'DRAIN', outputCapacitor, 0),
+    atPin('common-source-vout-cap', 'VOUT', outputCapacitor, 1), atPin('common-source-vout-load', 'VOUT', outputLoad, 0),
+    atPin('common-source-ground-input', '0', input, 1), atPin('common-source-ground-vdd', '0', supply, 1),
+    atPin('common-source-ground-mos-source', '0', transistor, 2), atPin('common-source-ground-mos-bulk', '0', transistor, 3),
+    atPin('common-source-ground-bias', '0', biasBottom, 1), atPin('common-source-ground-load', '0', outputLoad, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '100 kHz' } }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'V(GATE)', 'V(DRAIN)'], ranges: {} }
+  project.view = { zoom: 0.8, panX: -80, panY: -10 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A transient truth-table lesson built from the built-in ideal logic gates. */
 export function createLogicGatesExampleProject(): Project {
   const project = createStarterProject()

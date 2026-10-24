@@ -186,6 +186,23 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
       phaseDifference,
     }
   })()
+  const commonSourceDrainResistance = lessonId === 'common-source'
+    ? componentMagnitude(partsById.get('common-source-rd')?.value ?? '100 kΩ', 'resistor')
+    : null
+  const commonSourceMeasurement = (() => {
+    if (lessonId !== 'common-source' || simulationResult?.analysis !== 'ac') return null
+    const input = simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vin)')
+    const output = simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')
+    if (!input?.axis.length || !output?.axis.length) return null
+    const index = nearestAxisIndex(input.axis, 1000)
+    const inputMagnitude = Math.hypot(input.values[index] ?? 0, input.imaginaryValues?.[index] ?? 0)
+    const outputMagnitude = Math.hypot(output.values[index] ?? 0, output.imaginaryValues?.[index] ?? 0)
+    if (!Number.isFinite(inputMagnitude) || !Number.isFinite(outputMagnitude) || inputMagnitude <= Number.MIN_VALUE || outputMagnitude <= 0) return null
+    const inputPhase = Math.atan2(input.imaginaryValues?.[index] ?? 0, input.values[index] ?? 0)
+    const outputPhase = Math.atan2(output.imaginaryValues?.[index] ?? 0, output.values[index] ?? 0)
+    const phaseDifference = Math.abs(Math.atan2(Math.sin(outputPhase - inputPhase), Math.cos(outputPhase - inputPhase))) * 180 / Math.PI
+    return { frequency: input.axis[index], gainDb: 20 * Math.log10(outputMagnitude / inputMagnitude), phaseDifference }
+  })()
   const isLoadedDividerLesson = lessonId === 'loaded-voltage-divider'
   const loadedDividerR1 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r1')?.value ?? '1 kΩ', 'resistor') : null
   const loadedDividerR2 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r2')?.value ?? '1 kΩ', 'resistor') : null
@@ -900,6 +917,12 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
           ? simulationResultStale
             ? `The previous AC sweep measured VOUT/VIN = ${formatLessonDecibels(commonEmitterMeasurement.gainDb)} with a ${Number(commonEmitterMeasurement.phaseDifference.toPrecision(3))}° phase difference near ${formatLessonFrequency(commonEmitterMeasurement.frequency)}. RC is now ${formatLessonResistance(commonEmitterCollectorResistance)}; the old result is stale, so rerun to check the updated gain and phase.`
             : `At ${formatLessonFrequency(commonEmitterMeasurement.frequency)}, ngspice measured VOUT/VIN = ${formatLessonDecibels(commonEmitterMeasurement.gainDb)} and a ${Number(commonEmitterMeasurement.phaseDifference.toPrecision(3))}° phase difference, confirming the inverted output. Increase RC from 2.2 kΩ to 4.7 kΩ and rerun to compare the gain; too much collector resistance can shift Q1's bias toward saturation. This is an AC small-signal result from an approximate teaching model.`
+          : 'Run the AC sweep with V(VIN) and V(VOUT) selected to inspect the amplifier gain and phase near 1 kHz.'
+      : exampleLesson?.id === 'common-source' && simulationResult
+        ? commonSourceMeasurement && commonSourceDrainResistance !== null
+          ? simulationResultStale
+            ? `The previous AC sweep measured VOUT/VIN = ${formatLessonDecibels(commonSourceMeasurement.gainDb)} with a ${Number(commonSourceMeasurement.phaseDifference.toPrecision(3))}° phase difference near ${formatLessonFrequency(commonSourceMeasurement.frequency)}. RD is now ${formatLessonResistance(commonSourceDrainResistance)}; the old result is stale, so rerun to compare the gain and phase.`
+            : `At ${formatLessonFrequency(commonSourceMeasurement.frequency)}, ngspice measured VOUT/VIN = ${formatLessonDecibels(commonSourceMeasurement.gainDb)} and a ${Number(commonSourceMeasurement.phaseDifference.toPrecision(3))}° phase difference. Increase RD from 100 kΩ to 150 kΩ and rerun to compare the voltage gain; the drain bias also changes, so the stage can leave its useful operating range. This is an AC small-signal result from an approximate Level 1 teaching model.`
           : 'Run the AC sweep with V(VIN) and V(VOUT) selected to inspect the amplifier gain and phase near 1 kHz.'
       : simulationResult && !simulationResultStale
         ? simulationResult.analysis === 'tran'
