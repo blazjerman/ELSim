@@ -1,0 +1,11 @@
+ELSim imported library global-node operating point
+VCCSRC VCC 0 5
+X1 OUT POWERED
+RLOAD OUT 0 1k
+.SUBCKT POWERED OUT
+.GLOBAL VCC
+R1 OUT VCC 1k
+.ENDS POWERED
+.OP
+.PRINT OP V(OUT)
+.END
