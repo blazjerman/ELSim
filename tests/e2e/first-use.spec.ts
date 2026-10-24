@@ -4142,8 +4142,12 @@ test('imported model B-source sqr() and int() warnings link to their source line
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'shared-functions.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.FUNC square_helper(x) {sqr(x)}\n.FUNC truncate_helper(x) {int(x)}\n'),
+    buffer: Buffer.from('.LIB active\n.FUNC square_helper(x) {sqr(x)}\n.FUNC truncate_helper(x) {int(x)}\n.ENDL active\n.LIB inactive\n.FUNC unused_helper(x) {sqr(x)}\n.ENDL inactive\n'),
   })
+  const sections = page.getByRole('dialog', { name: 'Choose model sections' })
+  await expect(sections).toBeVisible()
+  await sections.getByRole('checkbox', { name: 'Include section active' }).check()
+  await sections.getByRole('button', { name: 'Import selected sections' }).click()
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'squared-model.lib',
@@ -4158,9 +4162,10 @@ test('imported model B-source sqr() and int() warnings link to their source line
   await expect(warning).toContainText('squared-model.lib:3')
   await expect(warning).toContainText('Use sgn(x)*floor(abs(x))')
   await expect(warning).toContainText('Imported .FUNC uses B-source sqr()')
-  await expect(warning).toContainText('shared-functions.lib:1')
-  await expect(warning).toContainText('Imported .FUNC uses B-source int()')
   await expect(warning).toContainText('shared-functions.lib:2')
+  await expect(warning).toContainText('Imported .FUNC uses B-source int()')
+  await expect(warning).toContainText('shared-functions.lib:3')
+  await expect(warning).not.toContainText('shared-functions.lib:6')
 })
 
 test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {

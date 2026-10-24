@@ -1454,6 +1454,21 @@ test('follows global imported .FUNC helpers across library files and attributes 
   ])
 })
 
+test('limits compatibility diagnostics and cross-library helpers to selected .LIB sections', () => {
+  const source = '.LIB used\n.SUBCKT used_model IN OUT\nB1 OUT 0 V=active_helper(V(IN))\n.ENDS used_model\n.ENDL used\n.LIB unused\n.SUBCKT unused_model IN OUT\nB2 OUT 0 V=int(V(IN))\n.ENDS unused_model\n.ENDL unused'
+  const warnings = analyzeLtspiceModelDialect(source, {
+    sourceAssetId: 'device-lib',
+    selectedSections: ['used'],
+    supportingLibraries: [
+      { assetId: 'device-lib', content: source, selectedSections: ['used'] },
+      { assetId: 'helpers-lib', content: '.LIB active\n.FUNC active_helper(x) {sqr(x)}\n.ENDL active\n.LIB inactive\n.FUNC inactive_helper(x) {int(x)}\n.ENDL inactive', selectedSections: ['active'] },
+    ],
+  })
+  assert.deepEqual(warnings.map(({ sourceLine, sourceAssetId, feature }) => [sourceLine, sourceAssetId, feature]), [
+    [2, 'helpers-lib', 'Imported .FUNC uses B-source sqr()'],
+  ])
+})
+
 test('flags LTspice idt() behavioral functions rejected by the pinned browser ngspice engine', () => {
   const source = '.SUBCKT integrator IN OUT\nB1 OUT 0 V=idt(V(IN))\n.ENDS integrator'
   const [warning] = analyzeLtspiceModelDialect(source)

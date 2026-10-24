@@ -746,9 +746,9 @@ export default function App() {
       if (!active) return
       const byId = new Map(assets.map((asset) => [asset.id, asset]))
       const warnings = new Map<string, ModelDialectWarning & { filename: string; assetId: string }>()
-      const supportingLibraries = assets.map(({ id, content }) => ({ assetId: id, content }))
+      const supportingLibraries = assets.map(({ id, content, selectedSections }) => ({ assetId: id, content, selectedSections }))
       for (const asset of assets) {
-        for (const warning of analyzeLtspiceModelDialect(asset.content, { sourceAssetId: asset.id, supportingLibraries })) {
+        for (const warning of analyzeLtspiceModelDialect(asset.content, { sourceAssetId: asset.id, selectedSections: asset.selectedSections, supportingLibraries })) {
           const sourceAsset = warning.sourceAssetId ? byId.get(warning.sourceAssetId) ?? asset : asset
           const key = `${sourceAsset.id}:${warning.sourceLine}:${warning.feature}`
           warnings.set(key, { ...warning, filename: sourceAsset.filename, assetId: sourceAsset.id })

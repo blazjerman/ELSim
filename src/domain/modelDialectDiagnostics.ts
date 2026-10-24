@@ -1,8 +1,8 @@
 import { translateVoltageSwitchModel } from './voltageSwitchModel'
-import { parseModelCard, withoutInlineComment, type ModelDialectWarning } from './subcircuitLibrary'
+import { listModelLibrarySections, parseModelCard, withoutInlineComment, type ModelDialectWarning } from './subcircuitLibrary'
 
 type LogicalSourceLine = { sourceLine: number; text: string; segments: { start: number; end: number; physicalLine: number }[] }
-export type ModelDialectLibrarySource = { assetId: string; content: string }
+export type ModelDialectLibrarySource = { assetId: string; content: string; selectedSections?: string[] }
 
 function logicalSourceLines(source: string): LogicalSourceLine[] {
   const lines: LogicalSourceLine[] = []
@@ -17,7 +17,69 @@ function logicalSourceLines(source: string): LogicalSourceLine[] {
   return lines
 }
 
-export function analyzeLtspiceModelDialect(source: string, options: { sourceAssetId?: string; supportingLibraries?: readonly ModelDialectLibrarySource[] } = {}): ModelDialectWarning[] {
+function selectedLibraryLines(source: string, selectedSections?: string[]): LogicalSourceLine[] {
+  const lines = logicalSourceLines(source)
+  const sections = listModelLibrarySections(source)
+  if (!sections.length) return lines
+  const selected = new Set((selectedSections ?? (sections.length === 1 ? sections : [])).map((section) => section.toLowerCase()))
+  const available = new Set(sections.map((section) => section.toLowerCase()))
+  const result: LogicalSourceLine[] = []
+  let activeSection: string | null = null
+  for (const line of lines) {
+    const text = withoutInlineComment(line.text).trim()
+    const tokens = text.split(/\s+/)
+    if (/^\.endl\b/i.test(text)) { activeSection = null; continue }
+    if (tokens.length === 2 && tokens[0].toLowerCase() === '.lib' && available.has(tokens[1].toLowerCase())) {
+      activeSection = tokens[1].toLowerCase()
+      continue
+    }
+    if (activeSection === null || selected.has(activeSection)) result.push(line)
+  }
+  return result
+}
+
+type BehavioralHelper = { name: string; body: string; sourceLine: number; excerpt: string; assetId?: string; scope: string }
+const selectedLinesCache = new WeakMap<ModelDialectLibrarySource, LogicalSourceLine[]>()
+const globalFunctionsCache = new WeakMap<readonly ModelDialectLibrarySource[], Map<string, BehavioralHelper[]>>()
+
+function selectedLinesForLibrary(library: ModelDialectLibrarySource): LogicalSourceLine[] {
+  const cached = selectedLinesCache.get(library)
+  if (cached) return cached
+  const lines = selectedLibraryLines(library.content, library.selectedSections)
+  selectedLinesCache.set(library, lines)
+  return lines
+}
+
+function globalFunctionsForLibraries(libraries: readonly ModelDialectLibrarySource[]): Map<string, BehavioralHelper[]> {
+  const cached = globalFunctionsCache.get(libraries)
+  if (cached) return cached
+  const functions = new Map<string, BehavioralHelper[]>()
+  for (const library of libraries) {
+    const scopes: string[] = []
+    for (const { sourceLine, text } of selectedLinesForLibrary(library)) {
+      const line = withoutInlineComment(text).trim()
+      if (!line || line.startsWith('*')) continue
+      const tokens = line.split(/\s+/)
+      const directive = tokens[0].toLowerCase()
+      if (directive === '.ends') { scopes.pop(); continue }
+      if (directive === '.subckt') { scopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
+      if (scopes.length) continue
+      const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
+      if (!definition) continue
+      const helper: BehavioralHelper = { name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160), assetId: library.assetId, scope: '' }
+      const key = helper.name.toLowerCase()
+      functions.set(key, [...(functions.get(key) ?? []), helper])
+    }
+  }
+  globalFunctionsCache.set(libraries, functions)
+  return functions
+}
+
+function behavioralFunctionCalls(expression: string): string[] {
+  return [...expression.matchAll(/\b([A-Za-z_][A-Za-z0-9_.$]*)\s*\(/g)].map((match) => match[1].toLowerCase())
+}
+
+export function analyzeLtspiceModelDialect(source: string, options: { sourceAssetId?: string; selectedSections?: string[]; supportingLibraries?: readonly ModelDialectLibrarySource[] } = {}): ModelDialectWarning[] {
   const features = [
     { pattern: /^\s*\.title\s+\S/i, name: 'ngspice .TITLE overrides the generated circuit heading', impact: 'This imported card replaces the generated project title in ngspice output. It does not change the circuit’s electrical behavior.', suggestion: 'Keep the card if its title is useful in solver output, or remove it to retain the ELSim project title.' },
     { pattern: /^\s*\.model\s+\S+\s+(?:nmos|pmos)\b(?=[\s\S]*?\blevel\s*=\s*(?:\{\s*)?54(?:\.0+)?(?=[\s,)}]|$))/i, name: 'BSIM4 MOSFET model unavailable in browser ngspice', impact: 'This model selects BSIM4 (LEVEL=54), which is omitted from ELSim’s browser ngspice build. The imported card is preserved, but this runtime cannot simulate it.', suggestion: 'Use a model supported by this browser build, or an equivalent imported .SUBCKT built from supported devices. ELSim preserves the original model card and does not convert BSIM4 parameters.' },
@@ -52,7 +114,8 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
     { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\b(?:idt|idtmod|sdt)\s*\(/i, name: 'LTspice behavioral integration function', impact: 'The pinned browser ngspice engine does not implement LTspice idt()/idtmod()/sdt() as behavioral expression functions; idt() fails with “no such function”.', suggestion: 'Replace the behavioral integrator with an explicit capacitor-based circuit or a tested ngspice-compatible subcircuit. ELSim preserves the imported expression and does not rewrite it.' },
     { pattern: /\b(?:tripdv|tripdt|nfft|window|mtol)\s*=/i, name: 'LTspice behavioral-source option', impact: 'This LTspice timestep/Laplace tuning option is not part of ngspice’s documented B-source instance syntax and may prevent the card from parsing.', suggestion: 'Remove or replace the option only after checking the model author’s intended behavior; ELSim does not rewrite it.' },
   ]
-  const logical = logicalSourceLines(source)
+  const sourceLibrary = options.supportingLibraries?.find(({ assetId }) => assetId === options.sourceAssetId)
+  const logical = sourceLibrary ? selectedLinesForLibrary(sourceLibrary) : selectedLibraryLines(source, options.selectedSections)
   const conditionalModelLines = new Set<number>()
   let conditionalDepth = 0
   for (const { sourceLine, text } of logical) {
@@ -83,11 +146,10 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
   // rejects sqr()/int() in the resulting expression even when the call is
   // hidden behind one or more helper functions, so point at the helper source
   // only when a B source actually reaches it.
-  type BehavioralHelper = { name: string; body: string; sourceLine: number; excerpt: string; assetId?: string; scope: string }
   const helpersByScope = new Map<string, Map<string, BehavioralHelper>>()
-  const globalHelpers = new Map<string, BehavioralHelper[]>()
+  const sharedFunctions = options.supportingLibraries?.length ? globalFunctionsForLibraries(options.supportingLibraries) : new Map<string, BehavioralHelper[]>()
+  const globalHelpers = sourceLibrary ? sharedFunctions : new Map([...sharedFunctions].map(([name, helpers]) => [name, [...helpers]]))
   const behavioralCalls: { scope: string; calls: string[] }[] = []
-  const functionCalls = (expression: string) => [...expression.matchAll(/\b([A-Za-z_][A-Za-z0-9_.$]*)\s*\(/g)].map((match) => match[1].toLowerCase())
   const addGlobalHelper = (helper: BehavioralHelper) => {
     const key = helper.name.toLowerCase()
     globalHelpers.set(key, [...(globalHelpers.get(key) ?? []), helper])
@@ -108,27 +170,11 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
         const helpers = helpersByScope.get(scope) ?? new Map<string, BehavioralHelper>()
         if (!helpers.has(helper.name.toLowerCase())) helpers.set(helper.name.toLowerCase(), helper)
         helpersByScope.set(scope, helpers)
-      } else addGlobalHelper(helper)
+      } else if (!sourceLibrary) addGlobalHelper(helper)
       continue
     }
     const bsource = line.match(/^b\S+\s+\S+\s+\S+\s+[vi]\s*=\s*(.*)$/i)
-    if (bsource) behavioralCalls.push({ scope, calls: functionCalls(bsource[1]) })
-  }
-
-  for (const library of options.supportingLibraries ?? []) {
-    if (library.assetId === options.sourceAssetId) continue
-    const scopes: string[] = []
-    for (const { sourceLine, text } of logicalSourceLines(library.content)) {
-      const line = withoutInlineComment(text).trim()
-      if (!line || line.startsWith('*')) continue
-      const tokens = line.split(/\s+/)
-      const directive = tokens[0].toLowerCase()
-      if (directive === '.ends') { scopes.pop(); continue }
-      if (directive === '.subckt') { scopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
-      if (scopes.length) continue
-      const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
-      if (definition) addGlobalHelper({ name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160), assetId: library.assetId, scope: '' })
-    }
+    if (bsource) behavioralCalls.push({ scope, calls: behavioralFunctionCalls(bsource[1]) })
   }
 
   const helperWarnings = new Map<string, ModelDialectWarning>()
@@ -143,7 +189,7 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
         const visitedKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${candidate.name.toLowerCase()}`
         if (visited.has(visitedKey)) continue
         visited.add(visitedKey)
-        pending.push(...functionCalls(candidate.body).map((called) => ({ name: called, scope: candidate.scope })))
+        pending.push(...behavioralFunctionCalls(candidate.body).map((called) => ({ name: called, scope: candidate.scope })))
         for (const feature of ['sqr', 'int'] as const) {
           if (!new RegExp(`\\b${feature}\\s*\\(`, 'i').test(candidate.body)) continue
           const warningKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${feature}`
