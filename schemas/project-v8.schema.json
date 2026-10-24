@@ -320,6 +320,12 @@
           "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$",
           "description": "Optional ngspice DTEMP offset in degrees Celsius from the circuit temperature."
         },
+        "deviceTemperature": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$",
+          "description": "Optional absolute ngspice instance TEMP in degrees Celsius; mutually exclusive with deviceTemperatureDelta."
+        },
         "initialOff": {
           "type": "boolean",
           "description": "Ask ngspice to start its DC operating-point iteration with this nonlinear semiconductor device off."

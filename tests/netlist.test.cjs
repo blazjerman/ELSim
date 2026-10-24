@@ -436,22 +436,45 @@ test('global temperature emits one top-level SPICE directive and is validated in
   assert.throws(() => validateProject(project), /temperature must be a number/)
 })
 
-test('per-device DTEMP offsets validate against circuit temperature and reach native instances', () => {
+test('per-device DTEMP offsets and absolute TEMP settings reach native instances exclusively', () => {
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')
   const capacitor = project.parts.find((part) => part.kind === 'capacitor')
+  const diode = { id: 'fixed-temp-d1', kind: 'diode', ref: 'D1', value: '', deviceTemperature: '100', x: 700, y: 500, rotation: 0 }
   resistor.deviceTemperatureDelta = '25'
   capacitor.deviceTemperatureDelta = '-10'
+  project.parts.push(diode)
   project.simulation.temperature = '40'
   let artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [], artifact.text)
   assert.match(artifact.text, /^R1 .* 1k DTEMP=25$/m)
   assert.match(artifact.text, /^C1 .* 10u DTEMP=-10$/m)
+  assert.match(artifact.text, /^D1 \S+ \S+ DDEFAULT TEMP=100$/m)
 
+  resistor.deviceTemperatureDelta = undefined
+  resistor.deviceTemperature = '125'
+  capacitor.deviceTemperatureDelta = undefined
+  capacitor.deviceTemperature = '0'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^R1 .* 1k TEMP=125$/m)
+  assert.match(artifact.text, /^C1 .* 10u TEMP=0$/m)
+
+  resistor.deviceTemperatureDelta = '2'
+  assert.throws(() => validateProject(project), /cannot set both an absolute device temperature and a temperature offset/i)
+  resistor.deviceTemperatureDelta = undefined
+  resistor.deviceTemperature = undefined
   resistor.deviceTemperatureDelta = '-400'
   assert.throws(() => validateProject(project), /device temperature must be from/)
   resistor.deviceTemperatureDelta = 'warm'
   assert.throws(() => validateProject(project), /device temperature offset must be a numeric/)
+  resistor.deviceTemperatureDelta = undefined
+  resistor.deviceTemperature = '-400'
+  assert.throws(() => validateProject(project), /device temperature must be from/)
+  resistor.deviceTemperature = 'warm'
+  assert.throws(() => validateProject(project), /device temperature must be a numeric/)
+  resistor.deviceTemperature = undefined
+  resistor.deviceTemperatureDelta = undefined
   resistor.deviceTemperatureDelta = '1'
   resistor.kind = 'source'
   resistor.ref = 'V2'

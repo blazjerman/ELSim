@@ -52,6 +52,8 @@ export type Part = {
   switchInitialState?: 'on' | 'off'
   /** Optional ngspice device-temperature offset from the circuit temperature. */
   deviceTemperatureDelta?: string
+  /** Optional absolute ngspice operating temperature for this device, in °C. */
+  deviceTemperature?: string
   /** Ask ngspice to initialize this nonlinear device in the OFF state during DC operating-point solving. */
   initialOff?: boolean
   sheetParameters?: Record<string, string>
@@ -703,10 +705,17 @@ export function validateProject(input: unknown): Project {
   for (const part of deviceInstanceOptionParts) {
     if (part.mutualCouplings !== undefined && (part.kind !== 'inductor' || !Array.isArray(part.mutualCouplings) || part.mutualCouplings.length > 64 || part.mutualCouplings.some((coupling) => !coupling || typeof coupling !== 'object' || Array.isArray(coupling) || Object.keys(coupling).some((key) => !['partnerId', 'coefficient'].includes(key)) || typeof coupling.partnerId !== 'string' || !coupling.partnerId || coupling.partnerId.length > 128 || typeof coupling.coefficient !== 'string' || coupling.coefficient.length > 64))) throw new Error(`${part.ref} has malformed mutual-inductor coupling settings.`)
     const delta = part.deviceTemperatureDelta
-    if (delta === undefined) continue
-    if (!supportsDeviceTemperatureDelta(part.kind) || typeof delta !== 'string' || delta.length > 64 || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(delta) || !Number.isFinite(Number(delta))) throw new Error(`${part.ref} device temperature offset must be a numeric °C value on a passive or semiconductor device.`)
-    const effectiveTemperature = Number(simulation.temperature) + Number(delta)
-    if (effectiveTemperature < -273.15 || effectiveTemperature > 10000) throw new Error(`${part.ref} device temperature must be from −273.15 °C to 10000 °C after applying the circuit temperature offset.`)
+    const temperature = part.deviceTemperature
+    if (delta !== undefined && temperature !== undefined) throw new Error(`${part.ref} cannot set both an absolute device temperature and a temperature offset.`)
+    if (temperature !== undefined) {
+      if (!supportsDeviceTemperatureDelta(part.kind) || typeof temperature !== 'string' || temperature.length > 64 || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(temperature) || !Number.isFinite(Number(temperature))) throw new Error(`${part.ref} device temperature must be a numeric °C value on a passive or semiconductor device.`)
+      if (Number(temperature) < -273.15 || Number(temperature) > 10000) throw new Error(`${part.ref} device temperature must be from −273.15 °C to 10000 °C.`)
+    }
+    if (delta !== undefined) {
+      if (!supportsDeviceTemperatureDelta(part.kind) || typeof delta !== 'string' || delta.length > 64 || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(delta) || !Number.isFinite(Number(delta))) throw new Error(`${part.ref} device temperature offset must be a numeric °C value on a passive or semiconductor device.`)
+      const effectiveTemperature = Number(simulation.temperature) + Number(delta)
+      if (effectiveTemperature < -273.15 || effectiveTemperature > 10000) throw new Error(`${part.ref} device temperature must be from −273.15 °C to 10000 °C after applying the circuit temperature offset.`)
+    }
   }
   // K cards can only couple inductors in the same SPICE sheet scope. Require a
   // single owner per pair so editing, copying, and netlist generation cannot

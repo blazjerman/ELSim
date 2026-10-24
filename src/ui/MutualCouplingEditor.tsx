@@ -2,6 +2,18 @@ import type { Part } from '../domain/project'
 
 type Coupling = NonNullable<Part['mutualCouplings']>[number]
 
+export function DeviceTemperatureEditor({ part, circuitTemperature, onChange }: { part: Part; circuitTemperature: string; onChange: (patch: Pick<Part, 'deviceTemperature' | 'deviceTemperatureDelta'>) => void }) {
+  return <>
+    <label className="field-label">Device temperature offset (°C)
+      <input aria-label={`Device temperature offset for ${part.ref}`} inputMode="decimal" value={part.deviceTemperatureDelta ?? ''} placeholder="0 °C (default)" onChange={(event) => onChange({ deviceTemperatureDelta: event.target.value || undefined, deviceTemperature: event.target.value ? undefined : part.deviceTemperature })}/>
+    </label>
+    <label className="field-label">Fixed device temperature (°C)
+      <input aria-label={`Fixed device temperature for ${part.ref}`} inputMode="decimal" value={part.deviceTemperature ?? ''} placeholder={`Circuit temperature (${circuitTemperature} °C)`} onChange={(event) => onChange({ deviceTemperature: event.target.value || undefined, deviceTemperatureDelta: event.target.value ? undefined : part.deviceTemperatureDelta })}/>
+    </label>
+    <div className="field-hint">Use the offset to add degrees to the circuit temperature, or set a fixed temperature to override it for this part. The two settings are exclusive. The selected model must support instance temperature.</div>
+  </>
+}
+
 export function PassiveTemperatureCoefficientsEditor({ part, onChange }: { part: Part; onChange: (patch: Pick<Part, 'tc1' | 'tc2'>) => void }) {
   return <details className="passive-temperature-coefficients">
     <summary>Temperature coefficients (advanced)</summary>
@@ -52,9 +64,10 @@ export function MutualCouplingEditor({ part, parts, onChange }: {
   </div>
 }
 
-export function PassiveAdvancedSettings({ part, parts, onChange }: { part: Part; parts: Part[]; onChange: (patch: Partial<Part>) => void }) {
+export function AdvancedDeviceSettings({ part, parts, circuitTemperature, supportsDeviceTemperature, onChange }: { part: Part; parts: Part[]; circuitTemperature: string; supportsDeviceTemperature: boolean; onChange: (patch: Partial<Part>) => void }) {
   return <>
-    <PassiveTemperatureCoefficientsEditor part={part} onChange={onChange}/>
+    {['resistor', 'lamp', 'potentiometer', 'capacitor', 'inductor'].includes(part.kind) && <PassiveTemperatureCoefficientsEditor part={part} onChange={onChange}/>}
+    {supportsDeviceTemperature && <DeviceTemperatureEditor part={part} circuitTemperature={circuitTemperature} onChange={onChange}/>}
     {part.kind === 'inductor' && <MutualCouplingEditor part={part} parts={parts} onChange={(mutualCouplings) => onChange({ mutualCouplings, mutualCoupling: undefined })}/>}
   </>
 }

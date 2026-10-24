@@ -276,7 +276,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const passiveModelType = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
     const passiveModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
     const temperatureModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
-    const deviceTemperatureSuffix = part.deviceTemperatureDelta !== undefined ? ` DTEMP=${part.deviceTemperatureDelta}` : ''
+    const deviceTemperatureSuffix = part.deviceTemperature !== undefined ? ` TEMP=${part.deviceTemperature}` : part.deviceTemperatureDelta !== undefined ? ` DTEMP=${part.deviceTemperatureDelta}` : ''
     const passiveTemperatureCoefficients = [part.tc1, part.tc2]
     const temperatureCoefficientValues = passiveTemperatureCoefficients.map((coefficient) => coefficient === undefined ? null : spiceScalar(coefficient, ''))
     const temperatureCoefficientInvalid = passiveTemperatureCoefficients.some((coefficient) => coefficient !== undefined && (spiceSignedScalarMagnitude(coefficient) === null || spiceScalar(coefficient, '') === null))
@@ -294,8 +294,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
       continue
     }
-    if (part.deviceTemperatureDelta !== undefined && !supportsDeviceTemperatureDelta(part.kind, temperatureModel)) {
-      const message = `${part.ref} device temperature offset (DTEMP) is unsupported for this device or imported model. Select a non-BSIM MOS model that supports DTEMP, or clear the offset.`
+    if ((part.deviceTemperatureDelta !== undefined || part.deviceTemperature !== undefined) && !supportsDeviceTemperatureDelta(part.kind, temperatureModel)) {
+      const message = `${part.ref} device temperature (TEMP/DTEMP) is unsupported for this device or imported model. Select a non-BSIM MOS model that supports instance temperature, or clear the setting.`
+      append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+      diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+      continue
+    }
+    if (part.deviceTemperature !== undefined && (part.deviceTemperatureDelta !== undefined || typeof part.deviceTemperature !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(part.deviceTemperature) || !Number.isFinite(Number(part.deviceTemperature)) || Number(part.deviceTemperature) < -273.15 || Number(part.deviceTemperature) > 10000)) {
+      const message = part.deviceTemperatureDelta !== undefined ? `${part.ref} cannot set both an absolute device temperature and a temperature offset.` : `${part.ref} device temperature must be from −273.15 °C to 10000 °C.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
       continue
@@ -777,7 +783,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? (part.kind === 'zener' ? 'DZENER' : 'DDEFAULT')
-      const instanceOptions = [part.diodeArea && `AREA=${part.diodeArea}`, part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.diodePerimeter && `PJ=${part.diodePerimeter}`, part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`, part.initialOff && 'OFF', diodeInitialConditionOption(project, part.ref)].filter(Boolean).join(' ')
+      const instanceOptions = [part.diodeArea && `AREA=${part.diodeArea}`, part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.diodePerimeter && `PJ=${part.diodePerimeter}`, deviceTemperatureSuffix.trim(), part.initialOff && 'OFF', diodeInitialConditionOption(project, part.ref)].filter(Boolean).join(' ')
       append(`${part.ref} ${positive} ${negative} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) {
         if (part.kind === 'zener') usesZener = true
@@ -813,7 +819,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         part.bjtArea?.collector && `AREAC=${part.bjtArea.collector}`,
         part.bjtArea?.base && `AREAB=${part.bjtArea.base}`,
         part.instanceMultiplier && `M=${part.instanceMultiplier}`,
-        part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`,
+        deviceTemperatureSuffix.trim(),
         part.initialOff && 'OFF',
       ].filter(Boolean).join(' ')
       append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}${bjtIcSuffix}`, part.id, 'component')
@@ -877,7 +883,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         part.mosfetGeometry?.sourcePerimeter && `PS=${part.mosfetGeometry.sourcePerimeter}`,
         part.mosfetGeometry?.drainSquares !== undefined && `NRD=${part.mosfetGeometry.drainSquares}`,
         part.mosfetGeometry?.sourceSquares !== undefined && `NRS=${part.mosfetGeometry.sourceSquares}`,
-        part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`,
+        deviceTemperatureSuffix.trim(),
         part.initialOff && 'OFF',
         fetInitialConditionSuffix(project, part.ref, true).trim(),
       ].filter(Boolean).join(' ')

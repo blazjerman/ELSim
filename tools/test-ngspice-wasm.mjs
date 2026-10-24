@@ -87,7 +87,9 @@ for (const fixture of selectedFixtures) {
   }
   if (fixture === 'passive-temperature-coefficients-op') {
     const voltage = Number(wasmResult.stdout.match(/tc1_divider\s*=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)/i)?.[1])
+    const fixedTemperatureVoltage = Number(wasmResult.stdout.match(/fixed_temp_divider\s*=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)/i)?.[1])
     assert.ok(Number.isFinite(voltage) && Math.abs(voltage - 10 / 3) < 1e-4, `TC1 should double R1 at 127 °C and produce a 3.333 V divider output, got ${voltage}`)
+    assert.ok(Number.isFinite(fixedTemperatureVoltage) && Math.abs(fixedTemperatureVoltage - 5) < 1e-4, `instance TEMP=27 should override circuit temperature 127 °C and produce a 5 V divider output, got ${fixedTemperatureVoltage}`)
   }
   if (fixture === 'mutual-inductor-coupling-ac') {
     assert.equal(wasmResult.status, 0, 'multi-pair inductor K cards should solve')

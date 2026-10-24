@@ -11691,9 +11691,11 @@ test('passive temperature coefficients are editable as advanced properties and a
   await page.getByText('Temperature coefficients (advanced)').click()
   await page.getByLabel('TC1 temperature coefficient for R1').fill('0.01')
   await page.getByLabel('TC2 temperature coefficient for R1').fill('-2e-5')
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1'))).toMatchObject({ tc1: '0.01', tc2: '-2e-5' })
+  await page.getByLabel('Device temperature offset for R1').fill('20')
+  await page.getByLabel('Fixed device temperature for R1').fill('27')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1'))).toMatchObject({ tc1: '0.01', tc2: '-2e-5', deviceTemperature: '27' })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText('R1 vin vout 1k TC1=0.01 TC2=-2e-5')
+  await expect(page.locator('.netlist-modal pre')).toContainText('R1 vin vout 1k TC1=0.01 TC2=-2e-5 TEMP=27')
 })
 
 test('transient measurements offer labeled nodes and common component currents', async ({ page }) => {

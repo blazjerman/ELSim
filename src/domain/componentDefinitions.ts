@@ -343,7 +343,7 @@ export function componentDefinitionFor(kind: PartKind): ComponentDefinition {
   return componentDefinitionByKind[kind]
 }
 
-/** ngspice supports DTEMP for these native passive and semiconductor instances. */
+/** ngspice supports per-instance TEMP/DTEMP for these native passive and semiconductor instances. */
 export function supportsDeviceTemperatureDelta(kind: PartKind, model?: { type: string; parameters: readonly { name: string; defaultValue: string }[] }): boolean {
   if (!['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'].includes(kind)) return false
   if ((kind === 'nmos' || kind === 'pmos') && model) {

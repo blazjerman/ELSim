@@ -323,6 +323,11 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const deviceTemperaturePattern = new RegExp(deviceTemperatureDelta.pattern, 'u')
   for (const value of ['0', '25', '-10', '+3.5', '.25']) assert.equal(deviceTemperaturePattern.test(value), true, `v8 DTEMP ${value}`)
   for (const value of ['warm', '1 °C', '1e2', '']) assert.equal(deviceTemperaturePattern.test(value), false, `v8 DTEMP ${value}`)
+  const deviceTemperature = schema.$defs.part.properties.deviceTemperature
+  assert.equal(deviceTemperature.maxLength, 64)
+  const absoluteTemperaturePattern = new RegExp(deviceTemperature.pattern, 'u')
+  for (const value of ['0', '25', '-10', '+3.5', '.25']) assert.equal(absoluteTemperaturePattern.test(value), true, `v8 TEMP ${value}`)
+  for (const value of ['warm', '1 °C', '1e2', '']) assert.equal(absoluteTemperaturePattern.test(value), false, `v8 TEMP ${value}`)
   assert.equal(schema.$defs.part.properties.initialOff.type, 'boolean')
   assert.equal(schema.$defs.part.properties.acResistance.type, 'string')
   assert.equal(schema.$defs.part.properties.noiseEnabled.type, 'boolean')
