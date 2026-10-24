@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { calculateTransientSpectrum } = require(path.join(build, 'engine/fourier.js'))
+const { calculateTransientSpectrum, interpolateSpectrumPeak } = require(path.join(build, 'engine/fourier.js'))
 
 function strongestNonzeroBin(spectrum) {
   let strongest = 1
@@ -43,6 +43,20 @@ test('transient FFT resamples adaptive time points onto a uniform grid', () => {
   assert.equal(spectrum.sampleCount, 4096)
   assert.equal(spectrum.frequencies[peak], 60)
   assert.ok(Math.abs(spectrum.peakAmplitudes[peak] - 1.4) < 0.003)
+})
+
+test('transient FFT interpolates tone peaks between frequency bins', () => {
+  const count = 8193
+  const axis = new Float64Array(count), values = new Float64Array(count)
+  for (let index = 0; index < count; index += 1) {
+    axis[index] = 2 * index / (count - 1)
+    values[index] = 2.5 * Math.sin(2 * Math.PI * 50.3 * axis[index])
+  }
+  const spectrum = calculateTransientSpectrum({ axis, values })
+  const peak = interpolateSpectrumPeak(spectrum)
+  assert.ok(peak)
+  assert.ok(Math.abs(peak.frequency - 50.3) < 0.03, `expected about 50.3 Hz, got ${peak.frequency}`)
+  assert.ok(Math.abs(peak.peakAmplitude - 2.5) < 0.08, `expected about 2.5 V, got ${peak.peakAmplitude}`)
 })
 
 test('transient FFT can analyze a selected time interval with its own resolution', () => {

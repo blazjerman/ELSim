@@ -6,6 +6,8 @@ export type TransientSpectrum = {
   window: 'hann'
 }
 
+export type SpectrumPeak = { bin: number; frequency: number; peakAmplitude: number }
+
 type TransientVector = { axis: Float64Array; values: Float64Array }
 
 function isPowerOfTwo(value: number): boolean {
@@ -118,6 +120,28 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
     peakAmplitudes[bin] = Math.hypot(real[bin], imaginary[bin]) * scale / windowSum
   }
   return { frequencies, peakAmplitudes, sampleCount, sampleRate, window: 'hann' }
+}
+
+/** Estimate a peak between FFT bins using a quadratic fit to neighboring dB magnitudes. */
+export function interpolateSpectrumPeak(spectrum: TransientSpectrum): SpectrumPeak | null {
+  const { frequencies, peakAmplitudes } = spectrum
+  if (frequencies.length < 3 || frequencies.length !== peakAmplitudes.length) return null
+  let bin = 1
+  for (let index = 2; index < peakAmplitudes.length - 1; index += 1) {
+    if (peakAmplitudes[index] > peakAmplitudes[bin]) bin = index
+  }
+  const lower = 20 * Math.log10(Math.max(peakAmplitudes[bin - 1], 1e-15))
+  const center = 20 * Math.log10(Math.max(peakAmplitudes[bin], 1e-15))
+  const upper = 20 * Math.log10(Math.max(peakAmplitudes[bin + 1], 1e-15))
+  const denominator = lower - 2 * center + upper
+  const offset = Math.abs(denominator) > 1e-12 ? Math.max(-1, Math.min(1, 0.5 * (lower - upper) / denominator)) : 0
+  const peakDb = center - 0.25 * (lower - upper) * offset
+  const binWidth = frequencies[bin + 1] - frequencies[bin]
+  return {
+    bin,
+    frequency: frequencies[bin] + offset * binWidth,
+    peakAmplitude: 10 ** (peakDb / 20),
+  }
 }
 
 function sampleAtIndex(axis: Float64Array, time: number): number {
