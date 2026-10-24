@@ -1680,6 +1680,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:dcGminStepping', line: rows.length })
     } else append(`.options gminsteps=${value}`, 'analysis:dcGminStepping', 'generated')
   }
+  if (includeHierarchyProbes && project.simulation.dcSkipInitialNewtonIteration === true) append('.options noopiter', 'analysis:dcSkipInitialNewtonIteration', 'generated')
   if (includeHierarchyProbes && project.simulation.transientTotalIterationLimit !== undefined) {
     const value = project.simulation.transientTotalIterationLimit
     if (!/^\d+$/.test(value.trim()) || !Number.isSafeInteger(Number(value)) || Number(value) < 0 || Number(value) > 1_000_000) {

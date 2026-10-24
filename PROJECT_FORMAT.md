@@ -46,6 +46,8 @@ An inductor may set `mutualCouplings: [{ "partnerId": "...", "coefficient": "0.9
 
 `simulation.dcGminStepping` optionally selects ngspice's GMIN stepping mode as the string `"0"`, `"1"`, or `"2"`. Mode `0` skips GMIN stepping, mode `1` selects ngspice's standard sequence (the default), and mode `2` selects the original SPICE 3 sequence. It applies when ngspice is solving an operating point, including the preliminary operating point for AC, noise, and transient analyses. Omission preserves ngspice's default behavior.
 
+`simulation.dcSkipInitialNewtonIteration` optionally emits ngspice `.options noopiter` when `true`, telling the solver to skip its first ordinary Newton iteration and proceed directly to GMIN stepping. It is off by default; omission or `false` preserves ngspice behavior.
+
 `simulation.skipAcOperatingPoint` optionally enables ngspice's `NOOPAC` behavior before AC analysis. This can help linear circuits with ideal LC loops that fail during an unnecessary DC operating-point solve. Ngspice still performs an operating-point solve when it detects nonlinear devices. The option is off by default and is emitted only for AC analysis.
 
 `simulation.startSavingTime` is an optional transient time string. It maps to ngspice's `.tran` `tstart` argument: the solver still integrates from time zero, but waveform samples before this time are not retained. The value must be nonnegative and earlier than `stopTime`; omitting it or leaving it blank saves data from time zero.

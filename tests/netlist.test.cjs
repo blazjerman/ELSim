@@ -923,6 +923,17 @@ test('ngspice GMIN stepping exposes its three documented modes', () => {
   assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:dcGminStepping'))
 })
 
+test('ngspice can skip the first Newton iteration and source-map NOOPITER', () => {
+  const project = createStarterProject()
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options noopiter$/mi)
+  project.simulation.dcSkipInitialNewtonIteration = true
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.match(artifact.text, /^\.options noopiter$/mi)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:dcSkipInitialNewtonIteration' && source.role === 'generated'))
+  project.simulation.dcSkipInitialNewtonIteration = false
+  assert.doesNotMatch(createNetlistArtifact(validateProject(project)).text, /^\.options noopiter$/mi)
+})
+
 test('transient truncation-error tolerance is validated and only emitted for transient analysis', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options trtol=/mi)

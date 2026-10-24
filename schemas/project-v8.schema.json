@@ -1470,6 +1470,7 @@
         "dcTransferIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "dcSourceSteppingSteps": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "dcGminStepping": { "enum": ["0", "1", "2"] },
+        "dcSkipInitialNewtonIteration": { "type": "boolean" },
         "transientLowerIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "transientIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "transientTotalIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },

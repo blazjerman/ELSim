@@ -43,6 +43,7 @@ export default function SolverConditioningEditor({
   dcTransferIterationLimit,
   dcSourceSteppingSteps,
   dcGminStepping,
+  dcSkipInitialNewtonIteration,
   transientLowerIterationLimit,
   transientIterationLimit,
   transientTotalIterationLimit,
@@ -63,6 +64,7 @@ export default function SolverConditioningEditor({
   onDcTransferIterationLimitChange,
   onDcSourceSteppingStepsChange,
   onDcGminSteppingChange,
+  onDcSkipInitialNewtonIterationChange,
   onTransientLowerIterationLimitChange,
   onTransientIterationLimitChange,
   onTransientTotalIterationLimitChange,
@@ -83,6 +85,7 @@ export default function SolverConditioningEditor({
   dcTransferIterationLimit?: string
   dcSourceSteppingSteps?: string
   dcGminStepping?: '0' | '1' | '2'
+  dcSkipInitialNewtonIteration?: boolean
   transientLowerIterationLimit?: string
   transientIterationLimit?: string
   transientTotalIterationLimit?: string
@@ -103,6 +106,7 @@ export default function SolverConditioningEditor({
   onDcTransferIterationLimitChange: (value?: string) => void
   onDcSourceSteppingStepsChange: (value?: string) => void
   onDcGminSteppingChange: (value?: '0' | '1' | '2') => void
+  onDcSkipInitialNewtonIterationChange: (value: boolean) => void
   onTransientLowerIterationLimitChange: (value?: string) => void
   onTransientIterationLimitChange: (value?: string) => void
   onTransientTotalIterationLimitChange: (value?: string) => void
@@ -165,6 +169,7 @@ export default function SolverConditioningEditor({
         </select>
         <small className="field-hint">GMIN stepping temporarily adds conductance to help find a DC operating point. Mode 1 is ngspice’s default; mode 2 uses the original SPICE 3 sequence. Leave blank to keep the default.</small>
       </label>
+      <label className="checkbox-field"><input type="checkbox" aria-label="Go directly to GMIN stepping" data-analysis-setting="dcSkipInitialNewtonIteration" checked={dcSkipInitialNewtonIteration === true} onChange={(event) => onDcSkipInitialNewtonIterationChange(event.target.checked)} /><span><strong>Go directly to GMIN stepping</strong><small>Skip the first ordinary Newton iteration when solving a DC operating point. This may help a difficult circuit reach ngspice’s convergence aids sooner.</small></span></label>
       {analysis === 'dc' && <NumericSetting label="DC transfer-curve iterations (ITL2)" ariaLabel="DC transfer-curve iteration limit" dataSetting="dcTransferIterationLimit" value={dcTransferIterationLimit} example="50" integer hint="Maximum iterations at each point in a DC source sweep. Ngspice default: 50." onChange={onDcTransferIterationLimitChange} />}
       {analysis === 'tran' && <NumericSetting label="Transient lower iteration limit (ITL3)" ariaLabel="Transient lower iteration limit" dataSetting="transientLowerIterationLimit" value={transientLowerIterationLimit} example="4" integer hint="Ngspice’s lower transient-analysis iteration limit. Default: 4. Leave blank to keep the default." onChange={onTransientLowerIterationLimitChange} />}
       {analysis === 'tran' && <NumericSetting label="Transient timepoint iterations (ITL4)" ariaLabel="Transient timepoint iteration limit" dataSetting="transientIterationLimit" value={transientIterationLimit} example="10" integer hint="Maximum iterations when solving each transient timepoint. Ngspice default: 10." onChange={onTransientIterationLimitChange} />}

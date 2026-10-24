@@ -390,6 +390,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   for (const name of ['dcIterationLimit', 'dcTransferIterationLimit', 'transientLowerIterationLimit', 'transientIterationLimit']) assert.equal(schema.$defs.simulation.properties[name].pattern, '^\\s*[0-9]+\\s*$')
   assert.equal(schema.$defs.simulation.properties.dcSourceSteppingSteps.pattern, '^\\s*[0-9]+\\s*$')
   assert.deepEqual(schema.$defs.simulation.properties.dcGminStepping.enum, ['0', '1', '2'])
+  assert.equal(schema.$defs.simulation.properties.dcSkipInitialNewtonIteration.type, 'boolean')
   assert.equal(schema.$defs.simulation.properties.transientTotalIterationLimit.pattern, '^\\s*[0-9]+\\s*$')
   assert.equal(schema.$defs.simulation.properties.shuntCapacitance.maxLength, 64)
   assert.deepEqual(schema.$defs.simulation.properties.integrationMethod.enum, ['trap', 'gear'])
@@ -473,6 +474,13 @@ test('GMIN stepping mode survives project archive round-trip', async () => {
   project.simulation.dcGminStepping = '2'
   const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
   assert.equal(restored.simulation.dcGminStepping, '2')
+})
+
+test('NOOPITER solver setting survives project archive round-trip', async () => {
+  const project = createStarterProject()
+  project.simulation.dcSkipInitialNewtonIteration = true
+  const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
+  assert.equal(restored.simulation.dcSkipInitialNewtonIteration, true)
 })
 
 test('current-source SINE settings survive project archive round-trip', async () => {
