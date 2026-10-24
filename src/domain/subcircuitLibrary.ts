@@ -1,10 +1,11 @@
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }
+export type UnparsedModelParameter = { name: string; sourceValue: string }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelConditionFrame = { id: number; branch: number; signature?: string; environmentIndependent?: boolean }
 export type ConditionalModelVariant = { model: SpiceModelDefinition; conditionPath: ModelConditionFrame[] }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalPath?: ModelConditionFrame[]; conditionalVariants?: ConditionalModelVariant[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; unparsedParameters?: UnparsedModelParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalPath?: ModelConditionFrame[]; conditionalVariants?: ConditionalModelVariant[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[]; topLevelParameterRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -581,30 +582,32 @@ export function parseModelCard(text: string, line: LogicalLine, scope?: string, 
   const vdmosChannel = type.toLowerCase() === 'vdmos'
     ? vdmosChannelFlags[0]?.[1].toLowerCase() === 'pchan' ? 'p' as const : 'n' as const
     : undefined
-  const parameters: SubcircuitParameter[] = []
-  const parameterIndex = new Map<string, number>()
+  const assignmentsByName = new Map<string, { name: string; sourceValue: string; sourceIndex: number; parsed?: SubcircuitParameter }>()
+  let assignmentIndex = 0
   for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g)) {
     if (/\bvec\s*\(\s*"/i.test(match[2])) {
       throw new Error(`Line ${line.start}: quoted vec("name") references are not supported in .MODEL values by the browser ngspice engine. Use vec(name) when the vector name is a bare identifier.`)
     }
     const value = match[2].replace(/^\{([\s\S]*)\}$|^'([\s\S]*)'$/, (_whole, braced: string | undefined, quoted: string | undefined) => braced ?? quoted ?? _whole)
-    if (!isSafeSubcircuitParameterValue(match[2], functions)) continue
-    const parameter = { name: match[1], defaultValue: value, ...(match[2].startsWith('{') || match[2].startsWith("'") ? { defaultIsExpression: true } : {}) }
-    const key = parameter.name.toLowerCase()
-    const existing = parameterIndex.get(key)
-    if (existing === undefined) {
-      parameterIndex.set(key, parameters.length)
-      parameters.push(parameter)
-    } else parameters[existing] = parameter
+    const parsed = isSafeSubcircuitParameterValue(match[2], functions)
+      ? { name: match[1], defaultValue: value, ...(match[2].startsWith('{') || match[2].startsWith("'") ? { defaultIsExpression: true } : {}) }
+      : undefined
+    // Keep the last case-insensitive assignment, matching ngspice. Retain an
+    // unrecognized value separately so the inspector can show it without
+    // treating it as a safe editable sweep target.
+    assignmentsByName.set(match[1].toLowerCase(), { name: match[1], sourceValue: match[2], parsed, sourceIndex: assignmentIndex++ })
   }
+  const assignments = [...assignmentsByName.values()].sort((left, right) => left.sourceIndex - right.sourceIndex)
+  const parameters = assignments.flatMap((assignment) => assignment.parsed ? [assignment.parsed] : [])
+  const unparsedParameters = assignments.flatMap((assignment) => assignment.parsed ? [] : [{ name: assignment.name, sourceValue: assignment.sourceValue }])
   const rawAssignmentNames = [...parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=/g)].map((match) => match[1].toLowerCase())
   const uniqueAssignments = new Set(rawAssignmentNames).size
   let residualPayload = rawParameterSource.replace(/[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g, '')
   if (type.toLowerCase() === 'vdmos') residualPayload = residualPayload.replace(/\b(?:pchan|nchan)\b/gi, '')
   const safeAkoPayload = vdmosChannelFlags.length <= 1 && residualPayload.replace(/[\s(),+]/g, '') === ''
-  const definition: SpiceModelDefinition = { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), ...(vdmosChannelFlags.length ? { channelExplicit: true } : {}), parameters, ...(akoHeader ? { akoBaseName: akoHeader[2] } : {}), ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
-  Object.defineProperty(definition, 'expansionPayloadSafe', { value: uniqueAssignments === parameters.length && safeAkoPayload })
-  if (akoHeader) Object.defineProperty(definition, 'akoSafeToExpand', { value: uniqueAssignments === parameters.length && safeAkoPayload })
+  const definition: SpiceModelDefinition = { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), ...(vdmosChannelFlags.length ? { channelExplicit: true } : {}), parameters, ...(unparsedParameters.length ? { unparsedParameters } : {}), ...(akoHeader ? { akoBaseName: akoHeader[2] } : {}), ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
+  Object.defineProperty(definition, 'expansionPayloadSafe', { value: uniqueAssignments === assignments.length && unparsedParameters.length === 0 && safeAkoPayload })
+  if (akoHeader) Object.defineProperty(definition, 'akoSafeToExpand', { value: uniqueAssignments === assignments.length && unparsedParameters.length === 0 && safeAkoPayload })
   return definition
 }
 

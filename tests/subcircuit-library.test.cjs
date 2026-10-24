@@ -240,6 +240,20 @@ test('parses .MODEL parameters that call forward-declared library functions', ()
   assert.deepEqual(parsed.functions.map(({ name, arity }) => ({ name, arity })), [{ name: 'SCALE', arity: 1 }])
 })
 
+test('retains unparsed .MODEL assignments for inspection while applying last-assignment semantics', () => {
+  const parsed = parseSubcircuitLibrary('.MODEL DUSER D(IS=1n N={vendor_shape(2)} RS=3 N=2)')
+  assert.deepEqual(parsed.models[0].parameters, [
+    { name: 'IS', defaultValue: '1n' },
+    { name: 'RS', defaultValue: '3' },
+    { name: 'N', defaultValue: '2' },
+  ])
+  assert.equal(parsed.models[0].unparsedParameters, undefined)
+
+  const unresolved = parseSubcircuitLibrary('.MODEL DUSER D(IS=1n N=2 N={vendor_shape(2)})')
+  assert.deepEqual(unresolved.models[0].parameters, [{ name: 'IS', defaultValue: '1n' }])
+  assert.deepEqual(unresolved.models[0].unparsedParameters, [{ name: 'N', sourceValue: '{vendor_shape(2)}' }])
+})
+
 test('retains ngspice interpreter functions in imported .MODEL parameters', () => {
   const expression = 'vec(pi)*1p+var(foo)*1p'
   const parsed = parseSubcircuitLibrary(`.MODEL DFAST D(IS={${expression}})\n`)
