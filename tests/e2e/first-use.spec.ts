@@ -11435,6 +11435,36 @@ test('circuit checks explain missing transitive model dependencies and select th
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('XAMP1 · AMP')
 })
 
+test('ambiguous included library diagnostics identify and link each imported file', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate(async () => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const content = '.MODEL DFAST D(IS=1n)\n'
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
+    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    const library = (id: string, filename: string) => ({ id, filename, sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() })
+    project.modelAssets = [
+      { ...library('include-owner', 'amp.lib'), content: '.INCLUDE "shared.lib"\n.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP\n', sha256: '' },
+      library('shared-one', 'shared.lib'),
+      library('shared-two', 'shared.lib'),
+    ]
+    const ownerContent = project.modelAssets[0].content
+    const ownerDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ownerContent))
+    project.modelAssets[0].sha256 = [...new Uint8Array(ownerDigest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  })
+  await page.reload()
+  const report = page.getByRole('region', { name: 'Model dependency report' })
+  await expect(report).toContainText('matches multiple imported filenames')
+  await expect(report).toContainText('Rename one source file')
+  const matches = report.getByRole('list', { name: 'Imported files matching shared.lib' })
+  await expect(matches.locator('a')).toHaveCount(2)
+  await matches.getByRole('link', { name: /shared\.lib · project asset shared-t$/ }).click()
+  await expect(page.locator('#model-asset-shared-two')).toBeInViewport()
+})
+
 test('circuit checks identify incompatible native passive and transmission-line models inside an imported IC', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)

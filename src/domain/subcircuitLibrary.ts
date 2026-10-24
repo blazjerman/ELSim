@@ -14,7 +14,7 @@ export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: st
 export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }
 export type ModelBaseTarget = { assetId: string; modelName: string }
 export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement' | 'function'; analysis?: 'tran' | 'ac' | 'dc'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
-export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section' }
+export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section'; matches?: { assetId: string; filename: string }[] }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string>; deviceModelBinAssets: Map<string, string[]>; modelBaseAssets: Map<string, ModelBaseTarget[]> }
 export type NgspiceBsim3BinFamily<T extends SpiceModelDefinition = SpiceModelDefinition> = { name: string; displayName: string; type: string; binCount: number; models: T[] }
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
@@ -1550,7 +1550,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     }
     const matches = assetsByBasename.get(include.filename.toLowerCase()) ?? []
     if (matches.length !== 1) {
-      missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: matches.length ? 'ambiguous' : 'missing' })
+      missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: matches.length ? 'ambiguous' : 'missing', ...(matches.length ? { matches: matches.map(({ asset: candidate }) => ({ assetId: candidate.id, filename: candidate.filename })) } : {}) })
       continue
     }
     const target = matches[0].asset

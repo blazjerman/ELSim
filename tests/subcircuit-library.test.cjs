@@ -403,6 +403,10 @@ test('project-local .LIB references select named sections and retain their trans
     { reference: 'vendor/devices.lib', reason: 'ambiguous' },
     { reference: 'devices.lib', reason: 'ambiguous' },
   ])
+  assert.deepEqual(ambiguous.missingIncludes[0].matches, [
+    { assetId: 'devices', filename: 'devices.lib' },
+    { assetId: 'duplicate-devices', filename: 'vendor/devices.lib' },
+  ])
   const unsafe = analyzeModelDependencies([{ ...wrapper, content: '.LIB ../outside.lib fast' }])
   assert.equal(unsafe.missingIncludes[0].reason, 'unsafe')
 })
