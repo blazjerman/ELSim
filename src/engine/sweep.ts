@@ -64,6 +64,11 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     const parameter = model?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
     if (!part || !parameter) throw new Error(`${sweep.component}.${sweep.parameter} is not a numeric parameter on its selected imported device model.`)
     const start = spiceModelParameterMagnitude(sweep.start), stop = spiceModelParameterMagnitude(sweep.stop)
+    if (sweep.listValues) {
+      const values = sweep.listValues.map(spiceModelParameterMagnitude)
+      if (values.length !== sweep.points || values.length < 2 || values.some((value) => value === null) || new Set(values).size !== values.length) throw new Error(`${part.ref}.${parameter.name} discrete values must be distinct numeric SPICE scalars.`)
+      return values as number[]
+    }
     if (start === null || stop === null || start === stop) throw new Error(`${part.ref}.${parameter.name} needs valid, different start and stop values.`)
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }

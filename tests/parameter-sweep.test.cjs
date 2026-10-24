@@ -311,6 +311,15 @@ test('imported device model parameters are validated and emitted with altermod',
   assert.match(runs[0].label, /Q1\.BF=80/)
   const control = addResultControl(createNetlistArtifact(validated).text, runs)
   assert.match(control, /altermod USER_NPN BF=8\.00000000e\+1\nrun/)
+  const discrete = structuredClone(project)
+  discrete.simulation.parameterSweeps = [{ component: 'Q1', parameter: 'BF', start: '10', stop: '200', listValues: ['10', '50', '200'], points: 3 }]
+  const discreteRuns = prepareParameterSweep(validateProject(discrete))
+  assert.deepEqual(discreteRuns.map((run) => Number(run.values[0].value)), [10, 50, 200])
+  assert.deepEqual(discreteRuns.map((run) => run.label), ['Q1.BF=10', 'Q1.BF=50', 'Q1.BF=200'])
+  assert.match(addResultControl(createNetlistArtifact(discrete).text, discreteRuns), /altermod USER_NPN BF=5\.00000000e\+1\nrun/)
+  const duplicates = structuredClone(discrete)
+  duplicates.simulation.parameterSweeps[0].listValues = ['10', '10', '200']
+  assert.throws(() => validateProject(duplicates), /discrete values must be distinct/)
   project.simulation.parameterSweeps[0].parameter = 'UNSAFE'
   assert.throws(() => validateProject(project), /numeric parameters on selected imported devices, ICs, or reusable blocks/)
 })

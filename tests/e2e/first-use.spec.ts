@@ -12794,6 +12794,18 @@ test('imported device model parameters can be stepped through the browser ngspic
   const labels = await page.locator('.trace-toggles button').allTextContents()
   expect(labels.some((label) => label.includes('Q1.BF=10'))).toBe(true)
   expect(labels.some((label) => label.includes('Q1.BF=200'))).toBe(true)
+
+  await page.getByRole('button', { name: /Close Waveform 1/ }).click()
+  const schematicBounds = await page.locator('svg.schematic').boundingBox()
+  await page.locator('svg.schematic').click({ position: { x: schematicBounds!.width - 20, y: schematicBounds!.height - 20 } })
+  await page.getByRole('button', { name: 'Use discrete values' }).click()
+  const discreteValues = page.getByRole('textbox', { name: 'Parameter 1 discrete values' })
+  await discreteValues.fill('10, 50, 200')
+  await discreteValues.press('Tab')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 3 cases/)).toBeVisible({ timeout: 60_000 })
+  const discreteLabels = await page.locator('.trace-toggles button').allTextContents()
+  expect(discreteLabels.some((label) => label.includes('Q1.BF=50'))).toBe(true)
 })
 
 test('imported passive R, C, and L model parameters sweep through the browser ngspice engine', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
