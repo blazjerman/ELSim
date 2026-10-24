@@ -952,15 +952,20 @@ test('identifies protected LTspice models and binary inputs without attempting t
   assert.equal(decodeModelLibrary(new TextEncoder().encode('* ordinary model comment\n.SUBCKT AMP A B\n.ENDS')), '* ordinary model comment\n.SUBCKT AMP A B\n.ENDS')
 })
 
-test('reports LTspice limit() mismatches and unsupported VSWITCH cards while recognizing the safe translated subset', () => {
+test('reports model-dialect mismatches and unsupported PSpice VSWITCH cards while recognizing the safe translated subset', () => {
   const source = '* uplim(V(x), 1) is only a comment\n.SUBCKT AMP IN OUT\nB1 OUT 0 V=limit(V(IN),0,5)\nB2 OUT 0 V=uplim(V(IN),0,5)\n.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)\n.ENDS AMP\n'
   assert.deepEqual(analyzeLtspiceModelDialect(source), [
     { sourceLine: 3, feature: 'LTspice limit() in imported model library', excerpt: 'B1 OUT 0 V=limit(V(IN),0,5)', impact: 'ELSim translates limit() on native schematic B sources to min(max(x, low), high), which provides the expected clamp for ordered bounds. Raw imported model-library text is not rewritten; the pinned browser ngspice engine returns 0 instead of 3 for limit(4,0,3), including in lta mode.', suggestion: 'For ordered bounds, replace limit(x, low, high) in the library with min(max(x, low), high) after checking the model author’s intended behavior. ELSim preserves imported model source unchanged.' },
     { sourceLine: 4, feature: 'LTspice limit function (ngspice lta mode)', excerpt: 'B2 OUT 0 V=uplim(V(IN),0,5)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
   ])
   assert.equal(analyzeLtspiceModelDialect('.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)\n').some(({ feature }) => feature.includes('VSWITCH')), false)
-  assert.equal(analyzeLtspiceModelDialect('.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1 MINV=0)\n').some(({ feature }) => feature.includes('VSWITCH')), true)
-  assert.equal(analyzeLtspiceModelDialect('.IF (1)\n.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)\n.ENDIF\n').some(({ feature }) => feature.includes('VSWITCH')), true)
+  const extraParameterWarning = analyzeLtspiceModelDialect('.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1 MINV=0)\n')[0]
+  assert.equal(extraParameterWarning.feature, 'PSpice VSWITCH model outside supported numeric subset')
+  assert.match(extraParameterWarning.impact, /only unconditional VSWITCH cards with numeric VON, VOFF, RON, and ROFF/)
+  assert.match(extraParameterWarning.suggestion, /native ngspice SW model/)
+  const conditionalWarning = analyzeLtspiceModelDialect('.IF (1)\n.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)\n.ENDIF\n')[0]
+  assert.equal(conditionalWarning.feature, 'PSpice VSWITCH model outside supported numeric subset')
+  assert.match(conditionalWarning.impact, /conditional values/)
   assert.equal(source.includes('uplim(V(IN)'), true)
   assert.equal(needsLtspiceFullDeckTranslation(source), true)
   assert.equal(needsLtspiceFullDeckTranslation('* B1 out 0 V=dnlim(V(in),2,0.1)\nR1 1 0 1k'), false)
