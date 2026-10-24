@@ -1,4 +1,3 @@
-
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelConditionFrame = { id: number; branch: number; signature?: string; environmentIndependent?: boolean }
@@ -9,7 +8,7 @@ export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' |
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[]; topLevelParameterRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
-export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
+export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string; sourceAssetId?: string }
 export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string; targetModelType?: string }
 export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }

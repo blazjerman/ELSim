@@ -1440,6 +1440,20 @@ test('warns for unsupported B-source functions hidden in used imported .FUNC hel
   assert.match(warnings[1].suggestion, /int\(x\) with sgn\(x\)\*floor\(abs\(x\)\)/)
 })
 
+test('follows global imported .FUNC helpers across library files and attributes the helper source', () => {
+  const source = '.SUBCKT helpers IN OUT\nB1 OUT 0 V=shared_square(V(IN))\n.ENDS helpers'
+  const warnings = analyzeLtspiceModelDialect(source, {
+    sourceAssetId: 'device-lib',
+    supportingLibraries: [
+      { assetId: 'device-lib', content: source },
+      { assetId: 'common-functions', content: '.FUNC shared_square(x) {square_inner(x)}\n.FUNC square_inner(x) {sqr(x)}' },
+    ],
+  })
+  assert.deepEqual(warnings.map(({ sourceLine, sourceAssetId, feature }) => [sourceLine, sourceAssetId, feature]), [
+    [2, 'common-functions', 'Imported .FUNC uses B-source sqr()'],
+  ])
+})
+
 test('flags LTspice idt() behavioral functions rejected by the pinned browser ngspice engine', () => {
   const source = '.SUBCKT integrator IN OUT\nB1 OUT 0 V=idt(V(IN))\n.ENDS integrator'
   const [warning] = analyzeLtspiceModelDialect(source)

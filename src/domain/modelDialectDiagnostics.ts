@@ -1,7 +1,23 @@
 import { translateVoltageSwitchModel } from './voltageSwitchModel'
 import { parseModelCard, withoutInlineComment, type ModelDialectWarning } from './subcircuitLibrary'
 
-export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[] {
+type LogicalSourceLine = { sourceLine: number; text: string; segments: { start: number; end: number; physicalLine: number }[] }
+export type ModelDialectLibrarySource = { assetId: string; content: string }
+
+function logicalSourceLines(source: string): LogicalSourceLine[] {
+  const lines: LogicalSourceLine[] = []
+  for (const [index, physicalLine] of source.replace(/^\uFEFF/, '').split(/\r?\n/).entries()) {
+    if (/^\s*\+/.test(physicalLine) && lines.length) {
+      const continuation = physicalLine.replace(/^\s*\+\s?/, '').trim()
+      const current = lines.at(-1)!
+      current.text += ` ${continuation}`
+      current.segments.push({ start: current.text.length - continuation.length, end: current.text.length, physicalLine: index + 1 })
+    } else lines.push({ sourceLine: index + 1, text: physicalLine, segments: [{ start: 0, end: physicalLine.length, physicalLine: index + 1 }] })
+  }
+  return lines
+}
+
+export function analyzeLtspiceModelDialect(source: string, options: { sourceAssetId?: string; supportingLibraries?: readonly ModelDialectLibrarySource[] } = {}): ModelDialectWarning[] {
   const features = [
     { pattern: /^\s*\.title\s+\S/i, name: 'ngspice .TITLE overrides the generated circuit heading', impact: 'This imported card replaces the generated project title in ngspice output. It does not change the circuit’s electrical behavior.', suggestion: 'Keep the card if its title is useful in solver output, or remove it to retain the ELSim project title.' },
     { pattern: /^\s*\.model\s+\S+\s+(?:nmos|pmos)\b(?=[\s\S]*?\blevel\s*=\s*(?:\{\s*)?54(?:\.0+)?(?=[\s,)}]|$))/i, name: 'BSIM4 MOSFET model unavailable in browser ngspice', impact: 'This model selects BSIM4 (LEVEL=54), which is omitted from ELSim’s browser ngspice build. The imported card is preserved, but this runtime cannot simulate it.', suggestion: 'Use a model supported by this browser build, or an equivalent imported .SUBCKT built from supported devices. ELSim preserves the original model card and does not convert BSIM4 parameters.' },
@@ -36,15 +52,7 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
     { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\b(?:idt|idtmod|sdt)\s*\(/i, name: 'LTspice behavioral integration function', impact: 'The pinned browser ngspice engine does not implement LTspice idt()/idtmod()/sdt() as behavioral expression functions; idt() fails with “no such function”.', suggestion: 'Replace the behavioral integrator with an explicit capacitor-based circuit or a tested ngspice-compatible subcircuit. ELSim preserves the imported expression and does not rewrite it.' },
     { pattern: /\b(?:tripdv|tripdt|nfft|window|mtol)\s*=/i, name: 'LTspice behavioral-source option', impact: 'This LTspice timestep/Laplace tuning option is not part of ngspice’s documented B-source instance syntax and may prevent the card from parsing.', suggestion: 'Remove or replace the option only after checking the model author’s intended behavior; ELSim does not rewrite it.' },
   ]
-  const logical: { sourceLine: number; text: string; segments: { start: number; end: number; physicalLine: number }[] }[] = []
-  for (const [index, physicalLine] of source.replace(/^\uFEFF/, '').split(/\r?\n/).entries()) {
-    if (/^\s*\+/.test(physicalLine) && logical.length) {
-      const continuation = physicalLine.replace(/^\s*\+\s?/, '').trim()
-      const current = logical.at(-1)!
-      current.text += ` ${continuation}`
-      current.segments.push({ start: current.text.length - continuation.length, end: current.text.length, physicalLine: index + 1 })
-    } else logical.push({ sourceLine: index + 1, text: physicalLine, segments: [{ start: 0, end: physicalLine.length, physicalLine: index + 1 }] })
-  }
+  const logical = logicalSourceLines(source)
   const conditionalModelLines = new Set<number>()
   let conditionalDepth = 0
   for (const { sourceLine, text } of logical) {
@@ -75,54 +83,75 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
   // rejects sqr()/int() in the resulting expression even when the call is
   // hidden behind one or more helper functions, so point at the helper source
   // only when a B source actually reaches it.
-  type BehavioralHelper = { name: string; body: string; sourceLine: number; excerpt: string }
+  type BehavioralHelper = { name: string; body: string; sourceLine: number; excerpt: string; assetId?: string; scope: string }
   const helpersByScope = new Map<string, Map<string, BehavioralHelper>>()
+  const globalHelpers = new Map<string, BehavioralHelper[]>()
   const behavioralCalls: { scope: string; calls: string[] }[] = []
-  const scopes: string[] = []
   const functionCalls = (expression: string) => [...expression.matchAll(/\b([A-Za-z_][A-Za-z0-9_.$]*)\s*\(/g)].map((match) => match[1].toLowerCase())
+  const addGlobalHelper = (helper: BehavioralHelper) => {
+    const key = helper.name.toLowerCase()
+    globalHelpers.set(key, [...(globalHelpers.get(key) ?? []), helper])
+  }
+  const sourceScopes: string[] = []
   for (const { sourceLine, text } of logical) {
     const line = withoutInlineComment(text).trim()
     if (!line || line.startsWith('*')) continue
     const tokens = line.split(/\s+/)
     const directive = tokens[0].toLowerCase()
-    if (directive === '.ends') { scopes.pop(); continue }
-    if (directive === '.subckt') { scopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
-    const scope = scopes.join('.')
+    if (directive === '.ends') { sourceScopes.pop(); continue }
+    if (directive === '.subckt') { sourceScopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
+    const scope = sourceScopes.join('.')
     const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
     if (definition) {
-      const helper: BehavioralHelper = { name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160) }
-      const helpers = helpersByScope.get(scope) ?? new Map<string, BehavioralHelper>()
-      if (!helpers.has(helper.name.toLowerCase())) helpers.set(helper.name.toLowerCase(), helper)
-      helpersByScope.set(scope, helpers)
+      const helper: BehavioralHelper = { name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160), assetId: options.sourceAssetId, scope }
+      if (scope) {
+        const helpers = helpersByScope.get(scope) ?? new Map<string, BehavioralHelper>()
+        if (!helpers.has(helper.name.toLowerCase())) helpers.set(helper.name.toLowerCase(), helper)
+        helpersByScope.set(scope, helpers)
+      } else addGlobalHelper(helper)
       continue
     }
     const bsource = line.match(/^b\S+\s+\S+\s+\S+\s+[vi]\s*=\s*(.*)$/i)
     if (bsource) behavioralCalls.push({ scope, calls: functionCalls(bsource[1]) })
   }
 
+  for (const library of options.supportingLibraries ?? []) {
+    if (library.assetId === options.sourceAssetId) continue
+    const scopes: string[] = []
+    for (const { sourceLine, text } of logicalSourceLines(library.content)) {
+      const line = withoutInlineComment(text).trim()
+      if (!line || line.startsWith('*')) continue
+      const tokens = line.split(/\s+/)
+      const directive = tokens[0].toLowerCase()
+      if (directive === '.ends') { scopes.pop(); continue }
+      if (directive === '.subckt') { scopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
+      if (scopes.length) continue
+      const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
+      if (definition) addGlobalHelper({ name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160), assetId: library.assetId, scope: '' })
+    }
+  }
+
   const helperWarnings = new Map<string, ModelDialectWarning>()
   for (const { scope, calls } of behavioralCalls) {
-    const pending = [...calls]
+    const pending = calls.map((name) => ({ name, scope }))
     const visited = new Set<string>()
     while (pending.length) {
-      const name = pending.pop()!
-      if (visited.has(name)) continue
-      visited.add(name)
-      const scopeParts = scope ? scope.split('.') : []
-      let helper: BehavioralHelper | undefined
-      for (let depth = scopeParts.length; depth >= 0 && !helper; depth -= 1) {
-        const key = scopeParts.slice(0, depth).join('.')
-        helper = helpersByScope.get(key)?.get(name)
-      }
-      if (!helper) continue
-      pending.push(...functionCalls(helper.body))
-      for (const feature of ['sqr', 'int'] as const) {
-        if (!new RegExp(`\\b${feature}\\s*\\(`, 'i').test(helper.body)) continue
-        const key = `${helper.sourceLine}:${feature}`
-        if (helperWarnings.has(key)) continue
-        helperWarnings.set(key, feature === 'sqr'
-          ? { sourceLine: helper.sourceLine, feature: 'Imported .FUNC uses B-source sqr()', excerpt: helper.excerpt, impact: 'Browser ngspice rejects sqr() in imported behavioral expressions, including calls expanded through .FUNC helpers.', suggestion: 'Replace sqr(x) with x*x in the helper after checking its behavior. ELSim preserves imported model source unchanged.' }
-          : { sourceLine: helper.sourceLine, feature: 'Imported .FUNC uses B-source int()', excerpt: helper.excerpt, impact: 'Browser ngspice rejects int() in imported behavioral expressions, including calls expanded through .FUNC helpers.', suggestion: 'Replace int(x) with sgn(x)*floor(abs(x)) in the helper. ELSim preserves imported model source unchanged.' })
+      const { name, scope: callScope } = pending.pop()!
+      const helper = helpersByScope.get(callScope)?.get(name)
+      const candidates = helper ? [helper] : globalHelpers.get(name) ?? []
+      for (const candidate of candidates) {
+        const visitedKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${candidate.name.toLowerCase()}`
+        if (visited.has(visitedKey)) continue
+        visited.add(visitedKey)
+        pending.push(...functionCalls(candidate.body).map((called) => ({ name: called, scope: candidate.scope })))
+        for (const feature of ['sqr', 'int'] as const) {
+          if (!new RegExp(`\\b${feature}\\s*\\(`, 'i').test(candidate.body)) continue
+          const warningKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${feature}`
+          if (helperWarnings.has(warningKey)) continue
+          helperWarnings.set(warningKey, feature === 'sqr'
+            ? { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature: 'Imported .FUNC uses B-source sqr()', excerpt: candidate.excerpt, impact: 'Browser ngspice rejects sqr() in imported behavioral expressions, including calls expanded through .FUNC helpers.', suggestion: 'Replace sqr(x) with x*x in the helper after checking its behavior. ELSim preserves imported model source unchanged.' }
+            : { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature: 'Imported .FUNC uses B-source int()', excerpt: candidate.excerpt, impact: 'Browser ngspice rejects int() in imported behavioral expressions, including calls expanded through .FUNC helpers.', suggestion: 'Replace int(x) with sgn(x)*floor(abs(x)) in the helper. ELSim preserves imported model source unchanged.' })
+        }
       }
     }
   }

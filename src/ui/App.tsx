@@ -743,7 +743,18 @@ export default function App() {
     if (!assets.length) { setModelDialectWarningState({ revision, warnings: [] }); return }
     let active = true
     void import('../domain/modelDialectDiagnostics').then(({ analyzeLtspiceModelDialect }) => {
-      if (active) setModelDialectWarningState({ revision, warnings: assets.flatMap((asset) => analyzeLtspiceModelDialect(asset.content).map((warning) => ({ ...warning, filename: asset.filename, assetId: asset.id }))) })
+      if (!active) return
+      const byId = new Map(assets.map((asset) => [asset.id, asset]))
+      const warnings = new Map<string, ModelDialectWarning & { filename: string; assetId: string }>()
+      const supportingLibraries = assets.map(({ id, content }) => ({ assetId: id, content }))
+      for (const asset of assets) {
+        for (const warning of analyzeLtspiceModelDialect(asset.content, { sourceAssetId: asset.id, supportingLibraries })) {
+          const sourceAsset = warning.sourceAssetId ? byId.get(warning.sourceAssetId) ?? asset : asset
+          const key = `${sourceAsset.id}:${warning.sourceLine}:${warning.feature}`
+          warnings.set(key, { ...warning, filename: sourceAsset.filename, assetId: sourceAsset.id })
+        }
+      }
+      setModelDialectWarningState({ revision, warnings: [...warnings.values()] })
     }).catch(() => {
       if (active) setModelDialectWarningState({ revision, warnings: [] })
     })
