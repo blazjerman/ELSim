@@ -126,7 +126,8 @@ export type PlotTraceReference =
   | { kind: 'part-current'; partId: string; sheetId: string; scopeSheetId: string; instancePath: string[]; winding?: 'P' | 'S'; port?: 1 | 2 }
   | { kind: 'component-voltage'; partId: string; positivePin: number; negativePin: number; sheetId: string; scopeSheetId: string; instancePath: string[] }
 export const PLOT_TRACE_COLORS = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d'] as const
-export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; componentVoltageProbes?: Record<string, ComponentVoltageProbe>; traceReferences?: Record<string, PlotTraceReference>; traceColors?: Record<string, string>; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>>; valueRanges?: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', Record<string, PlotValueRange>>> }
+export type PlotAnalysis = 'tran' | 'ac' | 'dc' | 'noise'
+export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; componentVoltageProbes?: Record<string, ComponentVoltageProbe>; traceReferences?: Record<string, PlotTraceReference>; traceColors?: Record<string, string>; ranges: Partial<Record<PlotAnalysis, PlotRange>>; valueRanges?: Partial<Record<PlotAnalysis, Record<string, PlotValueRange>>>; secondCursorValues?: Partial<Record<PlotAnalysis, number>> }
 export type PlotSettings = {
   selectedTraceIds: string[]
   ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>>
@@ -938,6 +939,7 @@ export function validateProject(input: unknown): Project {
       for (const panel of plotSettings.panels) {
         const bounds = panel?.bounds
         if (!panel || typeof panel.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(panel.id) || panelIds.has(panel.id) || !Array.isArray(panel.selectedTraceIds) || panel.selectedTraceIds.length > 256 || panel.selectedTraceIds.some((id) => typeof id !== 'string') || !panel.ranges || typeof panel.ranges !== 'object' || Array.isArray(panel.ranges) || !bounds || !Number.isFinite(bounds.x) || !Number.isFinite(bounds.y) || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height) || Math.abs(bounds.x) > 100_000 || Math.abs(bounds.y) > 100_000 || bounds.width < 280 || bounds.width > 4_000 || bounds.height < 160 || bounds.height > 3_000) throw new Error('Plot panel settings are malformed.')
+        if (panel.secondCursorValues !== undefined && (!panel.secondCursorValues || typeof panel.secondCursorValues !== 'object' || Array.isArray(panel.secondCursorValues) || Object.keys(panel.secondCursorValues).some((analysis) => !['tran', 'ac', 'dc', 'noise'].includes(analysis)) || Object.values(panel.secondCursorValues).some((value) => !Number.isFinite(value)))) throw new Error('Plot panel cursor settings are malformed.')
         if (panel.componentVoltageProbes !== undefined) {
           if (!panel.componentVoltageProbes || typeof panel.componentVoltageProbes !== 'object' || Array.isArray(panel.componentVoltageProbes) || Object.keys(panel.componentVoltageProbes).length > 256) throw new Error('Component voltage probe settings are malformed.')
           for (const probe of Object.values(panel.componentVoltageProbes)) {

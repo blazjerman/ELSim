@@ -144,7 +144,13 @@ export const AdditionalPlotWindow = memo(function AdditionalPlotWindow({ panel, 
     else delete valueRanges[analysis]
     return { ...current, valueRanges: Object.keys(valueRanges).length ? valueRanges : undefined }
   }), [onUpdate, panel.id])
+  const changeSecondCursor = useCallback((analysis: 'tran' | 'ac' | 'dc' | 'noise', value: number | null) => onUpdate(panel.id, (current) => {
+    const secondCursorValues = { ...current.secondCursorValues }
+    if (value === null) delete secondCursorValues[analysis]
+    else secondCursorValues[analysis] = value
+    return { ...current, secondCursorValues: Object.keys(secondCursorValues).length ? secondCursorValues : undefined }
+  }), [onUpdate, panel.id])
   return <FloatingPlotPanel panel={panel} index={index} title={title} onBoundsChange={onBoundsChange} onClose={close} onActivate={activate}>
-    {result ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={result} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={toggleTrace} onExport={exportTraces} ranges={panel.ranges} onRangeChange={changeRange} valueRanges={panel.valueRanges} onValueRangeChange={changeValueRanges}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
+    {result ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={result} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={toggleTrace} onExport={exportTraces} ranges={panel.ranges} onRangeChange={changeRange} valueRanges={panel.valueRanges} onValueRangeChange={changeValueRanges} secondCursorValues={panel.secondCursorValues} onSecondCursorValueChange={changeSecondCursor}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
   </FloatingPlotPanel>
 })

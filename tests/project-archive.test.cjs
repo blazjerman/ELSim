@@ -51,6 +51,7 @@ test('project ZIP archive is deterministic and round-trips the complete v8 proje
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'keep-me' } } }
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n', sourceUrl: 'https://example.invalid/source', licenseReference: 'Vendor terms', rightsNotes: 'User supplied; redistribution not checked.' }
   project.importedChildSchematicSources = [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4\nIOPIN 0 0 In\nFLAG 0 0 INPUT\n', sourceUrl: 'https://example.invalid/child', licenseReference: 'MIT?', rightsNotes: 'Need to verify.' }]
+  project.plotSettings.panels = [{ id: 'plot-cursor', bounds: { x: 12, y: 24, width: 640, height: 360 }, selectedTraceIds: ['V(vin)'], ranges: { tran: { start: 0.1, end: 0.9 } }, secondCursorValues: { tran: 0.004, ac: 1200, dc: -2.5, noise: 50 } }]
   const first = await createProjectArchive(project)
   const second = await createProjectArchive(project)
   assert.deepEqual(first, second)
@@ -71,6 +72,7 @@ test('project ZIP archive is deterministic and round-trips the complete v8 proje
   project.parts[4].componentDefinitionId = 'elsim.current-source'
   project.sheets[0].parts = project.parts
   assert.deepEqual(restored, project)
+  assert.deepEqual(restored.plotSettings.panels[0].secondCursorValues, { tran: 0.004, ac: 1200, dc: -2.5, noise: 50 })
   assert.deepEqual(restored.parts[1].extensions, project.parts[1].extensions)
   assert.match(restored.importedSchematicSource.originalText, /UNKNOWN_VENDOR_RECORD keep-me/)
   assert.match(restored.importedChildSchematicSources[0].originalText, /IOPIN 0 0 In/)
@@ -283,6 +285,9 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const mismatch = structuredClone(restored)
   mismatch.parts.at(-1).symbolPinOffsets[0] = [0, 0]
   assert.throws(() => validateProject(mismatch), /symbol pin order or coordinates do not match/)
+  const malformedCursor = structuredClone(restored)
+  malformedCursor.plotSettings.panels = [{ id: 'plot-invalid-cursor', bounds: { x: 0, y: 0, width: 640, height: 360 }, selectedTraceIds: [], ranges: {}, secondCursorValues: { tran: Number.NaN } }]
+  assert.throws(() => validateProject(malformedCursor), /Plot panel cursor settings are malformed/)
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v8.schema.json'), 'utf8'))
   const modelPinPattern = new RegExp(schema.$defs.part.properties.modelPins.items.pattern, 'u')
   for (const pin of ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+', 'GND']) assert.equal(modelPinPattern.test(pin), true, pin)
@@ -376,6 +381,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.plotSettings.properties.panels.maxItems, 8)
   assert.equal(schema.$defs.plotPanel.required.includes('selectedTraceIds'), true)
   assert.equal(schema.$defs.plotPanel.properties.valueRanges.$ref, '#/$defs/plotAnalysisValueRanges')
+  assert.equal(schema.$defs.plotPanel.properties.secondCursorValues.additionalProperties, false)
+  assert.deepEqual(Object.keys(schema.$defs.plotPanel.properties.secondCursorValues.properties), ['tran', 'ac', 'dc', 'noise'])
   assert.equal(schema.$defs.plotUnitValueRanges.maxProperties, 16)
   const initialConditions = schema.$defs.simulation.properties.initialConditions.items.oneOf
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('voltage') && condition.properties.element.pattern.startsWith('^C')))

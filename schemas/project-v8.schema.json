@@ -1230,6 +1230,16 @@
         },
         "valueRanges": {
           "$ref": "#/$defs/plotAnalysisValueRanges"
+        },
+        "secondCursorValues": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tran": { "type": "number" },
+            "ac": { "type": "number" },
+            "dc": { "type": "number" },
+            "noise": { "type": "number" }
+          }
         }
       }
     },
