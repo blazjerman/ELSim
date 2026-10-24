@@ -957,6 +957,10 @@ Added `--repeats 1..5` to the Linux memory sampler and ran two fresh one-window 
 
 Ran the same two-repeat command with eight plot windows and 32 traces. Both Firefox profiles solved 1,000,130 samples, reported 185,794,560 bytes of WASM linear-memory capacity, and observed every phase marker. Solve/result-transfer PSS peaks were 1,038.8 and 1,085.5 MiB (median 1,062.2); RSS peaks were 1,395.5 and 1,443.6 MiB (median 1,419.5). Across the two runs, PSS ranges were 588.3–611.4 MiB at startup, 1,038.8–1,085.5 MiB during solve/result transfer, 651.4–675.0 MiB during validation/transfer, and 672.7–705.8 MiB during plot interaction. Compared with the two one-window runs above, the solver/result-transfer PSS median was 48.9 MiB higher and the observed ranges did not overlap. Four total runs on one host are not enough to claim a stable plot-count cost or memory budget; the sampler measures Firefox and descendants rather than ELSim allocations. No WASM rebuild or Pages workflow ran.
 
+### Three-repeat eight-window process-memory refresh (2026-10-24)
+
+Ran three fresh Firefox profiles with eight plot windows and 32 traces against the existing local ngspice WASM. All runs solved 1,000,130 samples, reported identical 185,794,560-byte (177.2 MiB) WASM linear-memory capacity, and observed every phase marker. Solver/result-transfer PSS peaks were 1,012.2–1,079.8 MiB (median 1,013.8); RSS peaks were 1,367.2–1,420.7 MiB (median 1,370.0). Startup peaks were 598.7–613.8 MiB PSS / 947.4–964.6 MiB RSS; plot-validation/interaction peaks were 674.4–694.4 / 1,032.5–1,048.0 MiB. Validation/transfer had a large first-run outlier: PSS/RSS ranged 657.4–963.3 / 1,014.0–1,320.1 MiB, so the median (658.8/1,016.5) is more representative of these three runs but not a stable bound. Each run completed the million-sample Firefox workflow; result-ready time was 10.02–11.07 s and worker solver time 9.63–9.94 s. PSS/RSS include Firefox and descendants, not ELSim-only memory; this remains a same-host distribution and does not establish plot-count cost or a portable budget. No WASM rebuild or Pages workflow ran.
+
 
 ### Wire spatial-index reuse during pin edits (2026-10-24)
 
