@@ -60,6 +60,27 @@ test('unresolved imported native AKO models stop before an invalid default-mode 
   assert.match(artifact.text, /AKO:UNKNOWN/)
 })
 
+test('a placed device with duplicate imported model definitions cannot be simulated', () => {
+  const project = createStarterProject()
+  project.parts.find((part) => part.ref === 'R1').deviceModel = 'R_SHARED'
+  project.modelAssets = [
+    { id: 'r-shared-a', filename: 'first.lib', content: '.model R_SHARED R(R=1k)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'r-shared-b', filename: 'second.lib', content: '.model R_SHARED R(R=2k)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && /R1 uses ambiguous imported device model R_SHARED.*first\.lib:1, second\.lib:1/.test(diagnostic.message)), true)
+})
+
+test('unused duplicate imported device models do not block simulation', () => {
+  const project = createStarterProject()
+  project.modelAssets = [
+    { id: 'r-shared-a', filename: 'first.lib', content: '.model R_SHARED R(R=1k)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'r-shared-b', filename: 'second.lib', content: '.model R_SHARED R(R=2k)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+})
+
 test('resistor AC resistance is emitted only as the native AC instance option', () => {
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')

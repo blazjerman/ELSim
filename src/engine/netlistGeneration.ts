@@ -247,6 +247,26 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const availableModelFunctions = modelFunctionSignaturesForLibraries(modelAssets)
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections, availableModelFunctions))
   const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
+  const globalDeviceModelDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
+  for (const { asset, parsed } of parsedModelLibraryEntries) for (const model of parsed.models) {
+    if (model.scope) continue
+    const key = model.name.toLowerCase()
+    const definitions = globalDeviceModelDefinitions.get(key) ?? []
+    definitions.push({ filename: asset.filename, sourceLine: model.startLine })
+    globalDeviceModelDefinitions.set(key, definitions)
+  }
+  for (const part of project.parts) {
+    if (!part.deviceModel) continue
+    const definitions = globalDeviceModelDefinitions.get(part.deviceModel.toLowerCase())
+    if (!definitions || definitions.length < 2) continue
+    const locations = definitions.map(({ filename, sourceLine }) => `${filename}:${sourceLine}`).join(', ')
+    diagnostics.push({
+      severity: 'error',
+      message: `${part.ref} uses ambiguous imported device model ${part.deviceModel}, defined more than once (${locations}). Remove or rename one definition before simulating.`,
+      sourceId: part.id,
+      line: 1,
+    })
+  }
   const akoExpansion = expandNgspiceAkoModels(parsedModelLibraryEntries)
   for (const issue of akoExpansion.issues) diagnostics.push({ severity: 'error', message: issue.message, sourceId: `model-file:${issue.assetId}`, assetId: issue.assetId, assetLine: issue.sourceLine, line: issue.sourceLine })
   for (const entry of parsedModelLibraryEntries) for (const model of entry.parsed.models) {
