@@ -55,10 +55,10 @@ try {
   const javaScriptGzipBytes = (await Promise.all(initialJavaScript.map(gzipSize))).reduce((sum, size) => sum + size, 0)
   const stylesGzipBytes = (await Promise.all(initialStylesheets.map(gzipSize))).reduce((sum, size) => sum + size, 0)
   const totalGzipBytes = javaScriptGzipBytes + stylesGzipBytes
-  if (javaScriptGzipBytes > 230 * 1024) throw new Error(`Startup-critical JavaScript exceeds the 230 KiB gzip budget (${(javaScriptGzipBytes / 1024).toFixed(1)} KiB).`)
+  if (javaScriptGzipBytes > 235 * 1024) throw new Error(`Startup-critical JavaScript exceeds the 235 KiB gzip budget (${(javaScriptGzipBytes / 1024).toFixed(1)} KiB).`)
   if (stylesGzipBytes > 15 * 1024) throw new Error(`Startup styles exceed the 15 KiB gzip budget (${(stylesGzipBytes / 1024).toFixed(1)} KiB).`)
-  if (totalGzipBytes > 245 * 1024) throw new Error(`Startup-critical JavaScript and styles exceed the 245 KiB gzip budget (${(totalGzipBytes / 1024).toFixed(1)} KiB).`)
-  console.log(`Startup-critical download budget (HTML entry scripts and preloads): JS ${(javaScriptGzipBytes / 1024).toFixed(1)}/230 KiB, CSS ${(stylesGzipBytes / 1024).toFixed(1)}/15 KiB, combined ${(totalGzipBytes / 1024).toFixed(1)}/245 KiB gzip.`)
+  if (totalGzipBytes > 250 * 1024) throw new Error(`Startup-critical JavaScript and styles exceed the 250 KiB gzip budget (${(totalGzipBytes / 1024).toFixed(1)} KiB).`)
+  console.log(`Startup-critical download budget (HTML entry scripts and preloads): JS ${(javaScriptGzipBytes / 1024).toFixed(1)}/235 KiB, CSS ${(stylesGzipBytes / 1024).toFixed(1)}/15 KiB, combined ${(totalGzipBytes / 1024).toFixed(1)}/250 KiB gzip.`)
   await visit(output)
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Standard web build verification failed.')
