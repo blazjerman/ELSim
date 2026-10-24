@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { complexPlaneScale, extremaIndices, plotPolylinePoints, valueRange, valueRangeAtIndices } = require(path.join(build, 'engine/plot.js'))
+const { complexPlaneScale, complexPlaneTicks, extremaIndices, panComplexPlane, plotPolylinePoints, valueRange, valueRangeAtIndices, zoomComplexPlaneAt } = require(path.join(build, 'engine/plot.js'))
 
 test('complex-plane plot keeps real and imaginary units at the same pixel scale', () => {
   const scale = complexPlaneScale([-100, 0], [-25, 25], 688, 324)
@@ -14,6 +14,22 @@ test('complex-plane plot keeps real and imaginary units at the same pixel scale'
   assert.ok(scale.xExtent >= 100 * 1.12)
   assert.ok(scale.yExtent >= 25 * 1.12)
   assert.ok(scale.tickStep > 0)
+})
+
+test('complex-plane zoom keeps the pointer coordinate fixed and drag pan moves both axes', () => {
+  const base = complexPlaneScale([-100], [-25, 25], 688, 324)
+  const start = { centerReal: 0, centerImaginary: 0, zoom: 1 }
+  const beforeReal = start.centerReal + (0.7 * 2 - 1) * base.xExtent / start.zoom
+  const beforeImaginary = start.centerImaginary + (1 - 0.35 * 2) * base.yExtent / start.zoom
+  const zoomed = zoomComplexPlaneAt(start, 0.5, 0.7, 0.35, base)
+  const afterReal = zoomed.centerReal + (0.7 * 2 - 1) * base.xExtent / zoomed.zoom
+  const afterImaginary = zoomed.centerImaginary + (1 - 0.35 * 2) * base.yExtent / zoomed.zoom
+  assert.equal(afterReal, beforeReal)
+  assert.equal(afterImaginary, beforeImaginary)
+  const panned = panComplexPlane(zoomed, 0.1, -0.2, base)
+  assert.ok(panned.centerReal < zoomed.centerReal)
+  assert.ok(panned.centerImaginary < zoomed.centerImaginary)
+  assert.deepEqual(complexPlaneTicks(-12, 12, 5), [-10, -5, 0, 5, 10])
 })
 
 test('extrema sampling remains bounded and preserves narrow peaks in large traces', () => {

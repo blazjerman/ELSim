@@ -4,6 +4,37 @@ const sampledRanges = new WeakMap<object, Map<string, [number, number]>>()
 const formattedPolylinePoints = new WeakMap<object, WeakMap<object, WeakMap<object, Map<string, string>>>>()
 
 export type ComplexPlaneScale = { xExtent: number; yExtent: number; tickStep: number }
+export type ComplexPlaneView = { centerReal: number; centerImaginary: number; zoom: number }
+
+export function zoomComplexPlaneAt(view: ComplexPlaneView, factor: number, anchorX: number, anchorY: number, base: ComplexPlaneScale): ComplexPlaneView {
+  if (!Number.isFinite(factor) || factor <= 0) return view
+  const nextZoom = Math.max(0.05, Math.min(100, view.zoom / factor))
+  const xOffset = (Math.max(0, Math.min(1, anchorX)) * 2 - 1)
+  const yOffset = (1 - Math.max(0, Math.min(1, anchorY)) * 2)
+  const anchoredReal = view.centerReal + xOffset * base.xExtent / view.zoom
+  const anchoredImaginary = view.centerImaginary + yOffset * base.yExtent / view.zoom
+  return {
+    centerReal: anchoredReal - xOffset * base.xExtent / nextZoom,
+    centerImaginary: anchoredImaginary - yOffset * base.yExtent / nextZoom,
+    zoom: nextZoom,
+  }
+}
+
+export function panComplexPlane(view: ComplexPlaneView, deltaXFraction: number, deltaYFraction: number, base: ComplexPlaneScale): ComplexPlaneView {
+  return {
+    centerReal: view.centerReal - deltaXFraction * 2 * base.xExtent / view.zoom,
+    centerImaginary: view.centerImaginary + deltaYFraction * 2 * base.yExtent / view.zoom,
+    zoom: view.zoom,
+  }
+}
+
+export function complexPlaneTicks(min: number, max: number, step: number): number[] {
+  if (![min, max, step].every(Number.isFinite) || step <= 0 || max < min) return []
+  const first = Math.ceil(min / step - 1e-10)
+  const last = Math.floor(max / step + 1e-10)
+  const count = Math.min(201, Math.max(0, last - first + 1))
+  return Array.from({ length: count }, (_, index) => (first + index) * step)
+}
 
 /** Keep complex-plane units square on screen while fitting every finite root. */
 export function complexPlaneScale(realValues: readonly number[], imaginaryValues: readonly number[], width: number, height: number): ComplexPlaneScale {

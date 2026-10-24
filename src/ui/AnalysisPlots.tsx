@@ -2,7 +2,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange, type PlotValueRange } from '../domain/project'
-import { complexPlaneScale, extremaIndices, plotPolylinePoints, valueRangeAtIndices } from '../engine/plot'
+import { complexPlaneScale, complexPlaneTicks, extremaIndices, panComplexPlane, plotPolylinePoints, valueRangeAtIndices, zoomComplexPlaneAt } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import type { NgspiceFourierAnalysis } from '../engine/fourier'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
@@ -693,16 +693,68 @@ function PoleZeroView({ traces, selectedIds, onToggle, onExport, savedColors }: 
   const shown = traces.filter((trace) => visibility.visibleIdSet.has(trace.id))
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorById = useMemo(() => new Map(traces.map((trace, index) => [trace.id, colors[index % colors.length]])), [traces, colors])
+  const [view, setView] = useState({ centerReal: 0, centerImaginary: 0, zoom: 1 })
+  const viewRef = useRef(view)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; initialView: typeof view; base: ReturnType<typeof complexPlaneScale>; width: number; height: number } | null>(null)
   const left = 56, right = 744, top = 18, bottom = 342
   const plane = complexPlaneScale(shown.map((trace) => trace.values[0] ?? 0), shown.map((trace) => trace.imaginaryValues?.[0] ?? 0), right - left, bottom - top)
-  const xFor = (value: number) => left + (value + plane.xExtent) / (2 * plane.xExtent) * (right - left)
-  const yFor = (value: number) => bottom - (value + plane.yExtent) / (2 * plane.yExtent) * (bottom - top)
-  const xTicks = Array.from({ length: Math.floor(plane.xExtent / plane.tickStep) * 2 + 1 }, (_, index) => (index - Math.floor(plane.xExtent / plane.tickStep)) * plane.tickStep)
-  const yTicks = Array.from({ length: Math.floor(plane.yExtent / plane.tickStep) * 2 + 1 }, (_, index) => (index - Math.floor(plane.yExtent / plane.tickStep)) * plane.tickStep)
+  viewRef.current = view
+  const currentXExtent = plane.xExtent / view.zoom, currentYExtent = plane.yExtent / view.zoom
+  const xFor = (value: number) => left + (value - view.centerReal + currentXExtent) / (2 * currentXExtent) * (right - left)
+  const yFor = (value: number) => bottom - (value - view.centerImaginary + currentYExtent) / (2 * currentYExtent) * (bottom - top)
+  const tickStep = plane.tickStep / view.zoom
+  const xTicks = complexPlaneTicks(view.centerReal - currentXExtent, view.centerReal + currentXExtent, tickStep)
+  const yTicks = complexPlaneTicks(view.centerImaginary - currentYExtent, view.centerImaginary + currentYExtent, tickStep)
+  const zoomAt = (factor: number, anchorX = 0.5, anchorY = 0.5) => {
+    const next = zoomComplexPlaneAt(viewRef.current, factor, anchorX, anchorY, plane)
+    viewRef.current = next
+    setView(next)
+  }
+  const panBy = (deltaX: number, deltaY: number) => {
+    const next = panComplexPlane(viewRef.current, deltaX, deltaY, plane)
+    viewRef.current = next
+    setView(next)
+  }
+  const handleWheel = (event: ReactWheelEvent<SVGSVGElement>) => {
+    event.preventDefault()
+    const svg = event.currentTarget
+    const matrix = svg.getScreenCTM()
+    if (!matrix) return
+    const point = svg.createSVGPoint()
+    point.x = event.clientX
+    point.y = event.clientY
+    const viewPoint = point.matrixTransform(matrix.inverse())
+    const anchorX = (viewPoint.x - left) / (right - left)
+    const anchorY = (viewPoint.y - top) / (bottom - top)
+    zoomAt(event.deltaY < 0 ? 0.82 : 1.22, anchorX, anchorY)
+  }
+  const beginPan = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (!bounds.width || !bounds.height) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, initialView: viewRef.current, base: plane, width: bounds.width, height: bounds.height }
+  }
+  const movePan = (event: PointerEvent<SVGSVGElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const next = panComplexPlane(drag.initialView, (event.clientX - drag.startX) / drag.width * 760 / (right - left), (event.clientY - drag.startY) / drag.height * 380 / (bottom - top), drag.base)
+    viewRef.current = next
+    setView(next)
+  }
+  const endPan = (event: PointerEvent<SVGSVGElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
+  }
+  const resetView = () => {
+    const next = { centerReal: 0, centerImaginary: 0, zoom: 1 }
+    viewRef.current = next
+    setView(next)
+  }
   return <div className="waveform-view pz-view">
-    <div className="waveform-title"><strong>Pole-zero map</strong><span>{shown.length} roots shown · real and imaginary frequency in rad/s</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>Pole-zero map</strong><span>{shown.length} roots shown · real and imaginary frequency in rad/s</span><div className="plot-navigation" role="group" aria-label="Complex plane navigation"><button aria-label="Zoom out" title="Zoom out" onClick={() => zoomAt(1.5)} disabled={!shown.length}>−</button><button aria-label="Reset plot view" title="Reset plot view" onClick={resetView} disabled={!shown.length}>Reset</button><button aria-label="Zoom in" title="Zoom in" onClick={() => zoomAt(0.67)} disabled={!shown.length}>+</button><span className="plot-navigation-separator" aria-hidden="true"/><button aria-label="Pan left" title="Pan left" onClick={() => panBy(-0.2, 0)} disabled={!shown.length}>←</button><button aria-label="Pan up" title="Pan up" onClick={() => panBy(0, -0.2)} disabled={!shown.length}>↑</button><button aria-label="Pan down" title="Pan down" onClick={() => panBy(0, 0.2)} disabled={!shown.length}>↓</button><button aria-label="Pan right" title="Pan right" onClick={() => panBy(0.2, 0)} disabled={!shown.length}>→</button></div><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={visibility.disabledIdSet} onToggleVisibility={visibility.toggleVisibility} onRemove={visibility.remove} ariaLabel="Pole-zero roots" colorFor={(index) => colors[index % colors.length]}/>
-    <svg className="waveform-chart pz-chart" viewBox="0 0 760 380" role="img" aria-label="Complex pole-zero plane. Horizontal axis is real frequency in radians per second; vertical axis is imaginary frequency in radians per second.">
+    <svg ref={svgRef} className="waveform-chart pz-chart" viewBox="0 0 760 380" role="img" aria-label="Complex pole-zero plane. Horizontal axis is real frequency in radians per second; vertical axis is imaginary frequency in radians per second. Scroll to zoom at the pointer; drag to pan." onWheel={handleWheel} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} style={{ touchAction: 'none', cursor: 'grab' }}>
       {xTicks.map((tick) => <g key={`x:${tick}`}><line x1={xFor(tick)} x2={xFor(tick)} y1={top} y2={bottom} className={tick === 0 ? 'plot-axis' : 'plot-grid'}/><text x={xFor(tick)} y={bottom + 18} textAnchor="middle" className="plot-tick">{formatEngineeringTick(tick, 'rad/s')}</text></g>)}
       {yTicks.map((tick) => <g key={`y:${tick}`}><line x1={left} x2={right} y1={yFor(tick)} y2={yFor(tick)} className={tick === 0 ? 'plot-axis' : 'plot-grid'}/><text x={left - 7} y={yFor(tick) + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(tick, 'rad/s')}</text></g>)}
       {shown.map((trace) => { const real = trace.values[0] ?? 0, imaginary = trace.imaginaryValues?.[0] ?? 0; const zero = trace.id.startsWith('pz:zero:'); return <g key={trace.id} aria-label={`${trace.label}: ${real.toPrecision(5)} ${imaginary < 0 ? '−' : '+'} j${Math.abs(imaginary).toPrecision(5)} rad/s`}><title>{`${trace.label}: ${real.toPrecision(5)} ${imaginary < 0 ? '−' : '+'} j${Math.abs(imaginary).toPrecision(5)} rad/s`}</title>{zero ? <><line x1={xFor(real) - 7} x2={xFor(real) + 7} y1={yFor(imaginary) - 7} y2={yFor(imaginary) + 7} stroke={colorById.get(trace.id)} strokeWidth="2.5"/><line x1={xFor(real) - 7} x2={xFor(real) + 7} y1={yFor(imaginary) + 7} y2={yFor(imaginary) - 7} stroke={colorById.get(trace.id)} strokeWidth="2.5"/></> : <circle cx={xFor(real)} cy={yFor(imaginary)} r="6" fill={colorById.get(trace.id)} stroke="var(--plot-bg, #10151a)" strokeWidth="2"/>}</g>})}
