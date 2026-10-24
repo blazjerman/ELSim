@@ -468,6 +468,11 @@ test('BSIM3 bin-family parameter sweeps update every bin in each case', () => {
   assert.match(control, new RegExp(`^\\.MODEL NCH\\.2 .*VTH0=\\{${generated}\\}`, 'm'))
   assert.match(control, new RegExp(`alterparam ${generated}=7\\.00000000e-1\\nreset\\nrun`))
   assert.match(control, new RegExp(`alterparam ${generated}=1\\.50000000e\\+0\\nreset\\nrun`))
+
+  const collision = addResultControl(`.PARAM ELSIM_SWEEP_BIN_1=42\n${createNetlistArtifact(validated).text}`, runs)
+  assert.match(collision, /^\.PARAM ELSIM_SWEEP_BIN_1=42$/m)
+  assert.match(collision, /^\.param ELSIM_SWEEP_BIN_2=7\.00000000e-1$/m)
+  assert.match(collision, /alterparam ELSIM_SWEEP_BIN_2=1\.50000000e\+0\nreset\nrun/)
 })
 
 test('PSpice VSWITCH model sweeps map threshold fields to native SW parameters', () => {
