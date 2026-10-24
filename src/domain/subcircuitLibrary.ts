@@ -720,14 +720,12 @@ function topLevelParameterNames(text: string): string[] {
   const names: string[] = []
   for (let index = 0; index < fields.length; index += 1) {
     const field = fields[index]
-    // ngspice identifiers start with a letter and may then contain digits or
-    // ! # $ % [ ] _. These punctuation characters are valid in .PARAM names.
-    const inline = field.match(/^([A-Za-z][A-Za-z0-9!#$%_\[\]]*)\s*=(?!=)/)
+    const inline = field.match(/^([^\s=]+)\s*=(?!=)/)
     if (inline) {
       names.push(inline[1])
       continue
     }
-    if (/^[A-Za-z][A-Za-z0-9!#$%_\[\]]*$/.test(field) && /^=(?!=)/.test(fields[index + 1] ?? '')) {
+    if (/^[^\s=]+$/.test(field) && /^=(?!=)/.test(fields[index + 1] ?? '')) {
       names.push(field)
       index += 1
     }
@@ -739,6 +737,12 @@ const reservedNgspiceParameterNames = new Set([
   ...Object.keys(builtinFunctionArities),
   'not', 'and', 'or', 'div', 'mod', 'defined', 'sqr', 'time', 'temper', 'hertz',
 ])
+
+function isValidNgspiceParameterName(name: string): boolean {
+  // ngspice identifiers start with a letter and may then contain digits or
+  // ! # $ % [ ] _. These punctuation characters are valid in .PARAM names.
+  return /^[A-Za-z][A-Za-z0-9!#$%_\[\]]*$/.test(name)
+}
 
 function dependencyOnLine(text: string, owner: string, sourceLine: number): ModelDependency | null {
   const tokens = spiceFields(text)
@@ -1094,8 +1098,10 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
 
   for (const line of lines) {
     if (!/^\s*\.param\b/i.test(line.text)) continue
-    const reservedName = topLevelParameterNames(line.text).find((name) => reservedNgspiceParameterNames.has(name.toLowerCase()))
-    if (reservedName) throw new Error(`Line ${line.start}: .PARAM name ${reservedName} is reserved by ngspice and cannot be used as a parameter.`)
+    for (const name of topLevelParameterNames(line.text)) {
+      if (!isValidNgspiceParameterName(name)) throw new Error(`Line ${line.start}: .PARAM name ${name} is not a valid ngspice identifier.`)
+      if (reservedNgspiceParameterNames.has(name.toLowerCase())) throw new Error(`Line ${line.start}: .PARAM name ${name} is reserved by ngspice and cannot be used as a parameter.`)
+    }
   }
 
   const functions = parseLibraryFunctions(lines)

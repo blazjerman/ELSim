@@ -1770,6 +1770,16 @@ test('rejects reserved ngspice .PARAM identifiers with their source line', () =>
   assert.doesNotThrow(() => parseSubcircuitLibrary('.param my_sqrt=1 custom%=2'))
 })
 
+test('rejects malformed ngspice .PARAM identifiers instead of deferring failure to simulation', () => {
+  for (const name of ['_PRIVATE', 'GAIN-TRIM', '2X']) {
+    assert.throws(
+      () => parseSubcircuitLibrary(`.SUBCKT LOCAL IN OUT\n.PARAM ${name}=1\n.ENDS LOCAL`),
+      /Line 2: \.PARAM name .* is not a valid ngspice identifier/,
+      name,
+    )
+  }
+})
+
 test('rejects ngspice directives that are not supported in conditional blocks', () => {
   for (const directive of ['.FUNC SCALE(x) {x}', '.MEAS TRAN RESULT MAX V(out)', '.GLOBAL 0', '.OPTIONS reltol=.01']) {
     assert.throws(() => parseSubcircuitLibrary(`.IF (MODE == 1)\n${directive}\n.ENDIF`), /Line 2: .* is not supported inside an ngspice \.IF block/, directive)
