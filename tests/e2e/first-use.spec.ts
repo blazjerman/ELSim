@@ -10637,6 +10637,28 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', {
   await expect(currentSweep).toContainText('0.0100 A')
 })
 
+test('current-source symbol follows the solved branch-current direction', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  const source = page.locator('.circuit-part[data-part-id="isource-i1"]')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(source).toHaveAttribute('data-current-direction', 'first-to-last')
+  expect(await source.locator('.current-source-direction-arrow').getAttribute('d')).toContain('M10 0')
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click()
+  await page.locator('[data-part-setting="isource-i1:value"]').fill('-1 mA')
+  await expect(source).not.toHaveAttribute('data-current-direction', 'last-to-first')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(source).toHaveAttribute('data-current-direction', 'last-to-first')
+  expect(await source.locator('.current-source-direction-arrow').getAttribute('d')).toContain('M-10 0')
+})
+
 test('current-source inspector edits its multiplier and finite-cycle waveforms', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
