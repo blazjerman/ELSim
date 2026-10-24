@@ -1038,16 +1038,16 @@ test('matches conditional AKO bases across imported libraries by normalized nume
   assert.deepEqual(result.parameters.get('conditional-child-lib:2').map(({ name, defaultVariesByCondition }) => [name, defaultVariesByCondition]), [['IS', true], ['N', true]])
 })
 
-test('matches cross-library numeric AKO branches with equivalent ngspice comparison operators', () => {
+test('matches cross-library numeric AKO branches with equivalent ngspice equality and inequality operators', () => {
   const baseContent = [
-    '.IF (1k == 1000)',
+    '.IF (1k == 1000 && 2 <> 3)',
     '.MODEL BASE D(IS=1n)',
     '.ELSE',
     '.MODEL BASE D(IS=2n)',
     '.ENDIF',
   ].join('\n')
   const childContent = [
-    '.IF (1k = 1000)',
+    '.IF (1k = 1000 && 2 != 3)',
     '.MODEL CHILD AKO:BASE D(N=2)',
     '.ELSE',
     '.MODEL CHILD AKO:BASE D(N=3)',
