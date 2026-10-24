@@ -7,7 +7,7 @@ import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { importedSymbolBounds } from '../domain/symbolAsset'
-import { componentPins, createPartNavigationIndex, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { componentPins, createPartNavigationIndex, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget, transformerWindingCurrentVector, transmissionLinePortCurrentVector, urcLineCurrentSenseReference } from '../domain/probe'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
@@ -554,7 +554,8 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
     }
     return ids
   }, [project.parts])
-  const pinLocations = useMemo(() => projectPinLocations(project), [project.parts])
+  const pinLocationCache = useMemo(createProjectPinLocationCache, [])
+  const pinLocations = useMemo(() => pinLocationCache(project.parts), [pinLocationCache, project.parts])
   const pinsNear = useMemo(() => createPointViewportIndex(pinLocations, 0, 64), [pinLocations])
   const wiresNear = useMemo(() => createWireViewportIndex(project.wires), [project.wires])
   const [view, setViewState] = useState(project.view)

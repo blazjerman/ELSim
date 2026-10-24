@@ -291,7 +291,7 @@ try {
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
   const { analyzeModelLibraries } = build(path.join(output, 'domain/subcircuitLibrary.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
-  const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, projectPinLocations, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
+  const { componentPins, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireViewportIndex, projectPinLocations, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
   const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
@@ -414,6 +414,7 @@ try {
     let wireFlowSampling
     let wireViewportCulling
     let connectionDots
+    let pinLocationUpdate
     let groupDrag
     if (count === 5_000) {
       const bounds = { left: 0, top: 0, right: 1_600, bottom: 1_000 }
@@ -455,6 +456,18 @@ try {
       const dots = measure(() => wireConnectionDotPoints(project))
       const cachedPins = projectPinLocations(project)
       const cachedPinDots = measure(() => wireConnectionDotPoints(project, cachedPins))
+      const pinLocationCache = createProjectPinLocationCache()
+      pinLocationCache(project.parts)
+      const moveOnePartImmutably = () => project.parts.map((part, index) => index === Math.floor(project.parts.length / 2) ? { ...part, x: part.x + 10 } : part)
+      const fullPinRecompute = measure(() => projectPinLocations({ parts: moveOnePartImmutably() }), 1, 7)
+      const incrementalPinUpdate = measure(() => pinLocationCache(moveOnePartImmutably()), 1, 7)
+      if (JSON.stringify(fullPinRecompute.value) !== JSON.stringify(incrementalPinUpdate.value)) throw new Error('Incremental pin-location caching changed pin coordinates or order.')
+      pinLocationUpdate = {
+        parts: project.parts.length,
+        changedParts: 1,
+        fullRecompute: { medianMs: fullPinRecompute.medianMs, p95Ms: fullPinRecompute.p95Ms },
+        incremental: { medianMs: incrementalPinUpdate.medianMs, p95Ms: incrementalPinUpdate.p95Ms },
+      }
       const dotCoordinates = (items) => items.map(({ x, y }) => [x, y])
       if (JSON.stringify(dotCoordinates(cachedPinDots.value)) !== JSON.stringify(dotCoordinates(dots.value))) throw new Error('Reusing editor pin locations changed connection-dot membership or order.')
       if (dots.value.length !== wireSegments * 2) throw new Error(`Wire-grid fixture expected ${wireSegments * 2} pin-connection dots; got ${dots.value.length}.`)
@@ -533,6 +546,7 @@ try {
       ...(wireFlowSampling ? { wireFlowSampling } : {}),
       ...(wireViewportCulling ? { wireViewportCulling } : {}),
       ...(connectionDots ? { connectionDots } : {}),
+      ...(pinLocationUpdate ? { pinLocationUpdate } : {}),
       ...(groupDrag ? { groupDrag } : {}),
     })
   }

@@ -349,6 +349,23 @@ export function projectPinLocations(project: Pick<Project, 'parts'>): PinLocatio
   return project.parts.flatMap(componentPins)
 }
 
+/** Reuse pin coordinates for unchanged immutable part records between edits. */
+export function createProjectPinLocationCache(): (parts: readonly Part[]) => PinLocation[] {
+  const pinsByPart = new WeakMap<Part, PinLocation[]>()
+  return (parts) => {
+    const locations: PinLocation[] = []
+    for (const part of parts) {
+      let pins = pinsByPart.get(part)
+      if (!pins) {
+        pins = componentPins(part)
+        pinsByPart.set(part, pins)
+      }
+      locations.push(...pins)
+    }
+    return locations
+  }
+}
+
 /** Find schematic dots at pin/wire joins and wire-to-wire endpoint joins.
  * The spatial broadphase avoids testing every pin against every wire on edits;
  * pointOnSegment remains the exact geometry check. */

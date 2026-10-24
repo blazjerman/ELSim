@@ -894,6 +894,10 @@ The repeatable `npm run benchmark:performance:quick` synthetic raw-file case use
 
 The full benchmark also compares parser modes on actual ngspice operating-point output for 100, 1,000, and 5,000 resistor sections. Those `.save all` decks produced only displayable node-voltage vectors, so trace-only mode avoided no arrays. At 5,000 sections it parsed in 6.244 ms versus 5.886 ms for all-vector mode (0.358 ms difference in this single paired run). This shows the synthetic reduction applies only when a result contains hidden or duplicate vectors; simple resistor-chain output gains no memory reduction. The million-sample transient still produces only the time axis and `V(out)` and completed raw parsing in 16.167 ms; no extra arrays were available to filter.
 
+### Incremental pin-location update (2026-10-24)
+
+The version-14 quick domain benchmark now compares recalculating every pin coordinate with the editor's immutable-part cache when one of 5,000 parts changes. Full recomputation measured 1.473 ms median / 2.886 ms p95; the incremental path measured 0.263/0.274 ms and returned identical coordinates and order (about 82% lower median in this run). This is a local Node microbenchmark for a one-part edit, not end-to-end browser latency. The production build passed at 236.8/237 KiB startup JavaScript and 250.5/251 KiB combined JavaScript/CSS gzip. No WASM rebuild or Pages workflow ran.
+
 ### Domain benchmark recheck (2026-10-24)
 
 `npm run benchmark:performance:quick` completed with benchmark version 14 on the documented i7-12700F host. It skips ngspice and reports seven-run medians and nearest-rank p95 for the general cases. The 5,000-part resistor chain measured 38.422/46.990 ms for connectivity and 47.337/57.517 ms for netlisting; the 5,000-part/4,900-wire fixture measured 34.553/42.999 ms and 43.656/57.760 ms respectively. The 5,000-instance hierarchy measured 76.125/88.520 ms for connectivity and 110.323/123.655 ms for netlisting. These local results remain within the existing 500 ms domain budget.

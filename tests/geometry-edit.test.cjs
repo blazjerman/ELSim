@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, createPartNavigationIndex, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createPartNavigationIndex, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
@@ -131,6 +131,23 @@ test('wire-connection dot broadphase preserves exact pin, T-join, and crossing g
   assert.deepEqual(wireConnectionDotPoints(project), [...expected.values()])
   assert.deepEqual(wireConnectionDotPoints(project, projectPinLocations(project)), [...expected.values()])
   assert.deepEqual(wireConnectionDotPoints(project).map(({ x, y }) => [x, y]), [[-50, 0], [50, 0], [0, 0]])
+})
+
+test('incremental pin-location cache refreshes edited parts and reuses unchanged part coordinates', () => {
+  const project = createStarterProject()
+  project.parts = [
+    { id: 'pin-cache-r1', kind: 'resistor', ref: 'R1', value: '1k', x: 100, y: 100, rotation: 0 },
+    { id: 'pin-cache-c1', kind: 'capacitor', ref: 'C1', value: '1u', x: 300, y: 100, rotation: 90 },
+  ]
+  const getPinLocations = createProjectPinLocationCache()
+  const original = getPinLocations(project.parts)
+  const movedParts = [{ ...project.parts[0], x: 120, rotation: 90 }, project.parts[1]]
+  const updated = getPinLocations(movedParts)
+  assert.deepEqual(updated, projectPinLocations({ parts: movedParts }))
+  assert.notStrictEqual(updated[0], original[0])
+  assert.notStrictEqual(updated[1], original[1])
+  assert.strictEqual(updated[2], original[2])
+  assert.strictEqual(updated[3], original[3])
 })
 
 test('wire-connection dot spatial cells support large positive and negative coordinates', () => {
