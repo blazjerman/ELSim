@@ -2683,6 +2683,8 @@ test('transient FFT dialog supports window selection and time intervals', { tag:
   await plot.getByRole('button', { name: 'FFT spectrum' }).click()
   const dialog = page.getByRole('dialog', { name: 'FFT spectrum' })
   await expect(dialog).toBeVisible()
+  await expectVisibleKeyboardControlsNamed(page)
+  await expectDialogTextContrast(dialog, 'FFT spectrum dialog', ['.modal-heading h2', '#spectrum-description', '.field-label', '.spectrum-summary span', '.spectrum-cursor-readout'])
   const closeFft = dialog.getByRole('button', { name: 'Close FFT spectrum' })
   await expect(closeFft).toBeFocused()
   const fftTrace = dialog.getByRole('combobox', { name: 'Transient trace for FFT' })
