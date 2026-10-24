@@ -846,11 +846,12 @@ export default function App() {
     }
     return byType
   }, [importedDeviceModelsByType, importedNmosBsim3BinModels, importedPmosBsim3BinModels])
+  const importedDeviceModelSearchText = useMemo(() => importedDeviceModels.map((model) => `${model.name} ${model.type} ${model.filename}`.toLowerCase()), [importedDeviceModels])
   const filteredImportedDeviceModels = useMemo(() => {
     const query = importedDeviceModelQuery.trim().toLowerCase()
     if (!query) return importedDeviceModels
-    return importedDeviceModels.filter((model) => `${model.name} ${model.type} ${model.filename}`.toLowerCase().includes(query))
-  }, [importedDeviceModels, importedDeviceModelQuery])
+    return importedDeviceModels.filter((_, index) => importedDeviceModelSearchText[index].includes(query))
+  }, [importedDeviceModels, importedDeviceModelSearchText, importedDeviceModelQuery])
   const visibleImportedDeviceModels = filteredImportedDeviceModels.slice(0, visibleImportedDeviceModelCount)
   const modelDependencyAnalysis = modelLibraryAnalysis.dependencies
   const modelDialectWarnings = useMemo(() => (project.modelAssets ?? []).flatMap((asset) => analyzeLtspiceModelDialect(asset.content).map((warning) => ({ ...warning, filename: asset.filename, assetId: asset.id }))), [modelLibraryRevision])

@@ -3821,7 +3821,7 @@ test('large imported IC lists can be searched and expanded on demand', async ({ 
     const pins = index === 50 ? 'SPECIAL_PIN OUT PARAMS: GAIN_051=1k' : 'IN OUT'
     return `.SUBCKT ${name} ${pins}\nR1 ${index === 50 ? 'SPECIAL_PIN' : 'IN'} OUT 1k\n.ENDS ${name}`
   })
-  const deviceModels = Array.from({ length: 52 }, (_, index) => `.MODEL DMOD_${String(index + 1).padStart(3, '0')} D(IS=1n)`)
+  const deviceModels = Array.from({ length: 52 }, (_, index) => index === 50 ? '.MODEL NPNMOD_051 NPN(BF=100)' : `.MODEL DMOD_${String(index + 1).padStart(3, '0')} D(IS=1n)`)
   const library = [...subcircuitSources, ...deviceModels].join('\n')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -3850,7 +3850,13 @@ test('large imported IC lists can be searched and expanded on demand', async ({ 
   const devices = page.locator('.imported-models').filter({ has: page.getByRole('textbox', { name: 'Find an imported device model' }) })
   await expect(devices.locator('.imported-model')).toHaveCount(50)
   await expect(devices.getByRole('button', { name: 'Show 2 more device models' })).toBeVisible()
-  await devices.getByRole('textbox', { name: 'Find an imported device model' }).fill('DMOD_052')
+  const deviceModelSearch = devices.getByRole('textbox', { name: 'Find an imported device model' })
+  await deviceModelSearch.fill('large-user-library.lib')
+  await expect(devices.getByText('52 MATCHING DEVICE MODELS')).toBeVisible()
+  await deviceModelSearch.fill('npn')
+  await expect(devices.locator('.imported-model')).toHaveCount(1)
+  await expect(devices.locator('.imported-model').first()).toContainText('NPNMOD_051')
+  await deviceModelSearch.fill('DMOD_052')
   await expect(devices.locator('.imported-model')).toHaveCount(1)
   await expect(devices.locator('.imported-model').first()).toContainText('DMOD_052')
 
