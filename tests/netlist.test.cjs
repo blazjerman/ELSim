@@ -203,6 +203,51 @@ test('global parameter tracing respects punctuation in ngspice parameter names',
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.message.includes('ambiguous global .FUNC SCALE!')), false)
 })
 
+test('a used imported model cannot resolve duplicate global parameters by library order', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'ambiguous-parameter-diode', kind: 'diode', ref: 'D1', value: '', deviceModel: 'DLOCAL', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'device-model-library', filename: 'device.lib', content: '.PARAM ISAT={BASE}\n.MODEL DLOCAL D(IS={ISAT} N=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'first-parameter-library', filename: 'first.lib', content: '.PARAM BASE=1e-14\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-parameter-library', filename: 'second.lib', content: '.PARAM BASE=2e-14\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'ambiguous-parameter-diode' && /D1 uses imported model DLOCAL parameter that references ambiguous global \.PARAM base \(first\.lib:1, second\.lib:1\)/i.test(diagnostic.message)), true)
+})
+
+test('unused duplicate imported global parameters do not block simulation', () => {
+  const project = createStarterProject()
+  project.modelAssets = [
+    { id: 'first-parameter-library', filename: 'first.lib', content: '.PARAM UNUSED=1\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-parameter-library', filename: 'second.lib', content: '.PARAM UNUSED=2\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.message.includes('ambiguous global .PARAM')), false)
+})
+
+test('a behavioral source cannot reference duplicate imported global parameters', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'ambiguous-parameter-source', kind: 'behavioral', ref: 'B1', value: 'GAIN', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'first-parameter-library', filename: 'first.lib', content: '.PARAM GAIN=1\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-parameter-library', filename: 'second.lib', content: '.PARAM GAIN=2\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'ambiguous-parameter-source' && /B1 uses behavioral source B1 expression that references ambiguous global \.PARAM gain \(first\.lib:1, second\.lib:1\)/i.test(diagnostic.message)), true)
+})
+
+test('a scoped subcircuit parameter shadows duplicate imported globals', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'scoped-parameter-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'PARAM_STAGE', modelPins: ['IN', 'OUT'], value: 'PARAM_STAGE', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'parameter-stage-library', filename: 'stage.lib', content: '.SUBCKT PARAM_STAGE IN OUT\n.PARAM GAIN=3\nB1 OUT 0 V={GAIN}\n.ENDS PARAM_STAGE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'first-parameter-library', filename: 'first.lib', content: '.PARAM GAIN=1\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-parameter-library', filename: 'second.lib', content: '.PARAM GAIN=2\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'scoped-parameter-stage' && diagnostic.message.includes('ambiguous global .PARAM')), false)
+})
+
 test('preflight follows a scoped imported function through its helper body', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })

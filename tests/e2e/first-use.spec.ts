@@ -13650,6 +13650,23 @@ test('different-arity imported .FUNC conflicts stop before ngspice runs', { tag:
   await expect(page.getByText(/X1 uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE!/i)).toBeVisible()
 })
 
+test('used duplicate imported .PARAM conflicts stop before ngspice runs', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await modelInput.setInputFiles([
+    { name: 'parameter-stage.lib', mimeType: 'text/plain', buffer: Buffer.from('.SUBCKT PARAM_STAGE IN OUT\nB1 OUT 0 V={GAIN}\n.ENDS PARAM_STAGE\n') },
+    { name: 'parameter-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.PARAM GAIN=1\n') },
+    { name: 'parameter-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.PARAM GAIN=2\n') },
+  ])
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'PARAM_STAGE' })
+  await expect(importedModel).toBeVisible()
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/X1 uses imported subcircuit PARAM_STAGE body.*ambiguous global \.PARAM gain \(parameter-a\.lib:1, parameter-b\.lib:1\)/i)).toBeVisible()
+})
+
 test('nested native ngspice .IF model branches import and select the active diode model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
