@@ -10345,6 +10345,9 @@ test('CMOS inverter lesson simulates complementary MOSFET switching', { tag: ['@
   await expect(prediction.getByRole('status')).toContainText('Correct.')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 45_000 })
+  const lessonNextStep = page.locator('.example-lesson-next-step')
+  await expect(lessonNextStep).toContainText('At 1 ms, ngspice solved VIN =')
+  await expect(lessonNextStep).toContainText('at 3 ms it solved VIN =')
   await expectAvailableTrace(page, 'V(VIN)')
   await expectAvailableTrace(page, 'V(VOUT)')
   await page.getByRole('button', { name: /Pause result playback/ }).click()
@@ -10366,6 +10369,9 @@ test('CMOS inverter lesson simulates complementary MOSFET switching', { tag: ['@
   expect(Number.isFinite(outputAtLowInput), lowInputText).toBe(true)
   expect(outputAtLowInput).toBeGreaterThan(4)
   expect(Math.abs(outputAtLowInput - outputAtHighInput)).toBeGreaterThan(3)
+  await page.locator('.circuit-part[data-part-id="cmos-inverter-rload"]').click()
+  await page.locator('[data-part-setting="cmos-inverter-rload:value"]').fill('100k')
+  await expect(lessonNextStep).toContainText('The circuit has changed since these samples; rerun to refresh the measurements.')
 })
 
 test('parallel RLC lesson peaks near the calculated tank resonance', { tag: '@ngspice' }, async ({ page }) => {

@@ -67,6 +67,12 @@ function nearestAxisIndex(axis: Float64Array, target: number): number {
   return target - axis[lower] <= axis[upper] - target ? lower : upper
 }
 
+function transientVoltageAt(trace: Trace | undefined, timeSeconds: number): number | null {
+  if (!trace?.axis.length || !trace.values.length) return null
+  const value = trace.values[nearestAxisIndex(trace.axis, timeSeconds)]
+  return Number.isFinite(value) ? value : null
+}
+
 export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, partsById: ReadonlyMap<string, Project['parts'][number]>, initialConditions: Project['simulation']['initialConditions'], simulationResult: SimulationResult | null, simulationResultStale: boolean, rlcResonancePeak: ResonancePeak): string | null {
   const lessonId = exampleLesson.id
   const ohmsLawSupply = lessonId === 'ohms-law' ? componentMagnitude(partsById.get('ohms-law-v1')?.value ?? '5 V', 'source') : null
@@ -202,6 +208,19 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
     const outputPhase = Math.atan2(output.imaginaryValues?.[index] ?? 0, output.values[index] ?? 0)
     const phaseDifference = Math.abs(Math.atan2(Math.sin(outputPhase - inputPhase), Math.cos(outputPhase - inputPhase))) * 180 / Math.PI
     return { frequency: input.axis[index], gainDb: 20 * Math.log10(outputMagnitude / inputMagnitude), phaseDifference }
+  })()
+  const cmosInverterSamples = (() => {
+    if (lessonId !== 'cmos-inverter' || simulationResult?.analysis !== 'tran') return null
+    const input = simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vin)')
+    const output = simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')
+    const sample = (time: number): { input: number; output: number } | null => {
+      const inputValue = transientVoltageAt(input, time)
+      const outputValue = transientVoltageAt(output, time)
+      return inputValue === null || outputValue === null ? null : { input: inputValue, output: outputValue }
+    }
+    const first = sample(0.001)
+    const second = sample(0.003)
+    return first && second ? { first, second } : null
   })()
   const isLoadedDividerLesson = lessonId === 'loaded-voltage-divider'
   const loadedDividerR1 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r1')?.value ?? '1 kΩ', 'resistor') : null
@@ -926,6 +945,10 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
               ? `With RD = ${formatLessonResistance(commonSourceDrainResistance)}, ngspice measured VOUT/VIN = ${formatLessonDecibels(commonSourceMeasurement.gainDb)} and a ${Number(commonSourceMeasurement.phaseDifference.toPrecision(3))}° phase difference near ${formatLessonFrequency(commonSourceMeasurement.frequency)}. Compare this with the original 100 kΩ result; restoring RD to 100 kΩ should lower the gain. The drain bias also changes with RD, so the stage can leave its useful operating range. This is an AC small-signal result from an approximate Level 1 teaching model.`
               : `At ${formatLessonFrequency(commonSourceMeasurement.frequency)}, ngspice measured VOUT/VIN = ${formatLessonDecibels(commonSourceMeasurement.gainDb)} and a ${Number(commonSourceMeasurement.phaseDifference.toPrecision(3))}° phase difference. Increase RD from ${formatLessonResistance(commonSourceDrainResistance)} to 150 kΩ and rerun to compare the voltage gain; the drain bias also changes, so the stage can leave its useful operating range. This is an AC small-signal result from an approximate Level 1 teaching model.`
           : 'Run the AC sweep with V(VIN) and V(VOUT) selected to inspect the amplifier gain and phase near 1 kHz.'
+      : exampleLesson?.id === 'cmos-inverter' && simulationResult
+        ? cmosInverterSamples
+          ? `At 1 ms, ngspice solved VIN = ${formatLessonVoltage(cmosInverterSamples.first.input)}, VOUT = ${formatLessonVoltage(cmosInverterSamples.first.output)}; at 3 ms it solved VIN = ${formatLessonVoltage(cmosInverterSamples.second.input)}, VOUT = ${formatLessonVoltage(cmosInverterSamples.second.output)}. The input pulse starts high and then goes low, so compare the shared drain node with each gate level. ${simulationResultStale ? 'The circuit has changed since these samples; rerun to refresh the measurements.' : 'Pause playback and scrub between the two states. The built-in MOSFETs are simplified teaching models, not a CMOS process model.'}`
+          : 'Run the transient with V(VIN) and V(VOUT) selected to inspect the complementary switching states.'
       : simulationResult && !simulationResultStale
         ? simulationResult.analysis === 'tran'
           ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'
