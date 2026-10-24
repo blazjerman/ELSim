@@ -311,7 +311,7 @@ export function createCommonEmitterExampleProject(): Project {
 export function createCommonSourceExampleProject(): Project {
   const project = createStarterProject()
   const input: Part = { id: 'common-source-vin', kind: 'source', ref: 'VIN', value: '0 V', acMagnitude: '1 V', acPhase: '0', x: 150, y: 400, rotation: 0 }
-  const inputCapacitor: Part = { id: 'common-source-cin', kind: 'capacitor', ref: 'CIN', value: '10 µF', x: 400, y: 400, rotation: 0 }
+  const inputCapacitor: Part = { id: 'common-source-cin', kind: 'capacitor', ref: 'CIN', value: '10 µF', x: 350, y: 400, rotation: 0 }
   const biasTop: Part = { id: 'common-source-rbias1', kind: 'resistor', ref: 'RBIAS1', value: '1 MΩ', x: 600, y: 250, rotation: 90 }
   const biasBottom: Part = { id: 'common-source-rbias2', kind: 'resistor', ref: 'RBIAS2', value: '470 kΩ', x: 600, y: 550, rotation: 90 }
   const transistor: Part = { id: 'common-source-m1', kind: 'nmos', ref: 'M1', value: '0', x: 850, y: 400, rotation: 0 }
@@ -326,21 +326,35 @@ export function createCommonSourceExampleProject(): Project {
   }
   project.name = 'NMOS common-source amplifier'
   project.parts = parts
-  project.wires = []
+  project.wires = [
+    { id: 'common-source-input-rise', points: [[150, 350], [220, 350]] },
+    { id: 'common-source-input-turn', points: [[220, 350], [220, 400]] },
+    { id: 'common-source-input-cap-wire', points: [[220, 400], [300, 400]] },
+    { id: 'common-source-cap-gate-link', points: [[400, 400], [600, 400]] },
+    { id: 'common-source-gate-wire', points: [[600, 400], [800, 400]] },
+    { id: 'common-source-bias-top-gate', points: [[600, 300], [600, 400]] },
+    { id: 'common-source-gate-bias-bottom', points: [[600, 400], [600, 500]] },
+    { id: 'common-source-bias-vdd-drop', points: [[600, 50], [600, 200]] },
+    { id: 'common-source-vdd-rail-left', points: [[600, 50], [850, 50]] },
+    { id: 'common-source-vdd-rail-right', points: [[850, 50], [900, 50]] },
+    { id: 'common-source-vdd-rail-drop', points: [[900, 50], [900, 200]] },
+    { id: 'common-source-vdd-rd-feed', points: [[900, 200], [850, 200]] },
+    { id: 'common-source-rd-drain-link', points: [[850, 300], [850, 350]] },
+    { id: 'common-source-drain-cout-link', points: [[850, 350], [1000, 350]] },
+    { id: 'common-source-cout-load-link', points: [[1100, 350], [1200, 350]] },
+    { id: 'common-source-load-turn', points: [[1200, 350], [1200, 300]] },
+    { id: 'common-source-load-wire', points: [[1200, 300], [1250, 300]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    atPin('common-source-vin-source', 'VIN', input, 0), atPin('common-source-vin-cap', 'VIN', inputCapacitor, 0),
-    atPin('common-source-gate-cap', 'GATE', inputCapacitor, 1), atPin('common-source-gate-bias-top', 'GATE', biasTop, 1),
-    atPin('common-source-gate-bias-bottom', 'GATE', biasBottom, 0), atPin('common-source-gate-mos', 'GATE', transistor, 1),
-    atPin('common-source-vdd-source', 'VDD', supply, 0), atPin('common-source-vdd-rd', 'VDD', drainLoad, 0),
-    atPin('common-source-vdd-bias', 'VDD', biasTop, 0), atPin('common-source-drain-rd', 'DRAIN', drainLoad, 1),
-    atPin('common-source-drain-mos', 'DRAIN', transistor, 0), atPin('common-source-drain-cap', 'DRAIN', outputCapacitor, 0),
-    atPin('common-source-vout-cap', 'VOUT', outputCapacitor, 1), atPin('common-source-vout-load', 'VOUT', outputLoad, 0),
+    atPin('common-source-vin-source', 'VIN', input, 0), atPin('common-source-gate-mos', 'GATE', transistor, 1),
+    atPin('common-source-vdd-source', 'VDD', supply, 0), atPin('common-source-drain-mos', 'DRAIN', transistor, 0),
+    atPin('common-source-vout-load', 'VOUT', outputLoad, 0),
     atPin('common-source-ground-input', '0', input, 1), atPin('common-source-ground-vdd', '0', supply, 1),
     atPin('common-source-ground-mos-source', '0', transistor, 2), atPin('common-source-ground-mos-bulk', '0', transistor, 3),
     atPin('common-source-ground-bias', '0', biasBottom, 1), atPin('common-source-ground-load', '0', outputLoad, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '100 kHz' } }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'V(GATE)', 'V(DRAIN)'], ranges: {} }
   project.view = { zoom: 0.8, panX: -80, panY: -10 }

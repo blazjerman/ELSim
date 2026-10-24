@@ -10279,6 +10279,8 @@ test('NMOS common-source lesson measures amplified, inverted AC output', { tag: 
   await expect(page.locator('.project-title')).toHaveText('NMOS common-source amplifier')
   await expect(page.getByLabel('Guided example')).toContainText('about 180° out of phase')
   await expect(page.getByLabel('Analysis type')).toHaveValue('ac')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(17)
   const prediction = page.getByLabel('Guided example').locator('.example-prediction')
   await prediction.getByRole('radio', { name: 'No' }).check()
   await prediction.getByRole('button', { name: 'Check prediction' }).click()

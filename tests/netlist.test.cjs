@@ -1191,7 +1191,7 @@ test('common-source amplifier lesson generates an AC-coupled and biased NMOS sta
   assert.deepEqual(artifact.diagnostics, [])
   assert.equal(project.name, 'NMOS common-source amplifier')
   assert.equal(project.simulation.analysis, 'ac')
-  assert.equal(project.wires.length, 0)
+  assert.equal(project.wires.length, 17)
   assert.match(artifact.text, /^VIN VIN 0 AC 1 0$/m)
   assert.match(artifact.text, /^VDD VDD 0 DC 12 AC 0 0$/m)
   assert.match(artifact.text, /^M1 DRAIN GATE 0 0 ELSIM_MODEL_M1$/m)
