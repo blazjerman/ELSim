@@ -294,14 +294,17 @@ test('imported functions are scoped to the model and its project-local include c
 
 test('library analysis accepts subcircuit defaults using functions from included libraries', () => {
   const analysis = analyzeModelLibraries([
-    { id: 'amplifier', filename: 'amplifier.lib', content: '.include helpers.lib\n.SUBCKT AMP IN OUT PARAMS: RLOAD={SCALE!(2)}\nR1 IN OUT {RLOAD}\n.ENDS AMP' },
+    { id: 'amplifier', filename: 'amplifier.lib', content: '.include helpers.lib\n.MODEL DFAST D(IS={SCALE!(2)})\n.SUBCKT AMP IN OUT PARAMS: RLOAD={SCALE!(2)}\nR1 IN OUT {RLOAD}\n.ENDS AMP' },
     { id: 'helpers', filename: 'helpers.lib', content: '.FUNC SCALE!(x$) {2k*x$}\n' },
     { id: 'unrelated', filename: 'unrelated.lib', content: '.FUNC SECRET(x) {x}\n' },
+    { id: 'conflicting-helper', filename: 'conflicting-helper.lib', content: '.FUNC SCALE!(x$, y$) {x$ + y$}\n' },
   ])
   const amplifier = analysis.assets.find(({ asset }) => asset.id === 'amplifier')
   assert.ok(amplifier)
+  assert.deepEqual(amplifier.parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'SCALE!(2)', defaultIsExpression: true }])
   assert.deepEqual(amplifier.parsed.subcircuits[0].parameters, [{ name: 'RLOAD', defaultValue: '{SCALE!(2)}' }])
   assert.deepEqual([...modelFunctionsForAsset(analysis.assets, 'amplifier')], [['scale!', 1]])
+  assert.equal(isSafeSubcircuitParameterValue('{SCALE!(2)}', modelFunctionsForAsset(analysis.assets, 'amplifier')), true)
   assert.deepEqual(analysis.dependencies.missingIncludes, [])
 })
 

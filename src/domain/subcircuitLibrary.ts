@@ -530,7 +530,9 @@ export function modelFunctionSignaturesForLibraries<T extends Pick<ModelLibraryI
     if (ambiguous.has(name)) continue
     const previous = signatures.get(name)
     if (previous !== undefined && previous !== arity) {
-      signatures.delete(name)
+      // Keep ambiguous names parseable. Later include-chain validation checks
+      // the actual definition visible to each placed model.
+      signatures.set(name, ambiguousFunctionArity)
       ambiguous.add(name)
     } else signatures.set(name, arity)
   }
@@ -738,6 +740,7 @@ const reservedNgspiceParameterNames = new Set([
   ...Object.keys(builtinFunctionArities),
   'not', 'and', 'or', 'div', 'mod', 'defined', 'sqr', 'time', 'temper', 'hertz',
 ])
+const ambiguousFunctionArity = -1
 
 function isValidNgspiceParameterName(name: string): boolean {
   // ngspice identifiers start with a letter and may then contain digits or
@@ -891,7 +894,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
           index += 1
         }
       }
-      const valid = tokens[index] === ')' && argumentCount === arity
+      const valid = tokens[index] === ')' && (arity === ambiguousFunctionArity || argumentCount === arity)
       if (tokens[index] === ')') index += 1
       depth -= 1
       return valid
@@ -1110,7 +1113,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   for (const definition of functions) {
     const key = definition.name.toLowerCase()
     const availableArity = functionArities.get(key)
-    if (availableArity !== undefined && availableArity !== definition.arity) throw new Error(`Line ${definition.sourceLine}: .FUNC ${definition.name} conflicts with an available function signature.`)
+    if (availableArity !== undefined && availableArity !== ambiguousFunctionArity && availableArity !== definition.arity) throw new Error(`Line ${definition.sourceLine}: .FUNC ${definition.name} conflicts with an available function signature.`)
     functionArities.set(key, definition.arity)
   }
   const scopedFunctions = parseScopedLibraryFunctions(lines)
