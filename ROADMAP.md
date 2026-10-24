@@ -8,6 +8,8 @@ M2.4 imported-device model inspector cache reuse (2026-10-24): The inspector now
 
 M2.4 imported switch model inspection (2026-10-24): Voltage-controlled `SW`/numeric `VSWITCH` and current-controlled `CSW` instances now show the selected imported model’s parameter list and link to its original library card, alongside the existing concise behavior guidance. Firefox verifies parameter values and source navigation for both switch families. No solver or WASM change.
 
+M2.4 BSIM3 bin-family inspection (2026-10-24): Selecting an imported BSIM3 binned MOSFET family now exposes each underlying `.MODEL` bin separately, including its parameters and source-card navigation, while retaining the existing family-level selector and range checks. Firefox verifies parameter visibility and source navigation for a two-bin imported model. No solver or WASM change.
+
 ## 1. Product goal
 
 Build an original, open-source circuit simulator that runs in modern browsers and can later be packaged for Windows, macOS, and Linux. The first experience should be as quick to learn as CircuitJS/Falstad: place parts, connect wires, press Run, see current flow, interact with switches, and probe voltages. It should grow toward LTspice-style schematic capture, hierarchical sheets, imported IC macromodels, and serious waveform analysis.
