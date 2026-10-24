@@ -4,7 +4,14 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak, parseNgspiceFourierOutput, parseNgspiceFourierOutputs } = require(path.join(build, 'engine/fourier.js'))
+const { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak, parseNgspiceFourierOutput, parseNgspiceFourierOutputs, transientSpectrumMagnitudeAxisRange } = require(path.join(build, 'engine/fourier.js'))
+
+test('transient FFT magnitude axis stays ordered for weak, silent, and normal signals', () => {
+  assert.deepEqual(transientSpectrumMagnitudeAxisRange(Float64Array.of(0, 1e-20)), { minimum: -300, maximum: -280 })
+  assert.deepEqual(transientSpectrumMagnitudeAxisRange(Float64Array.of(0, 1e-10)), { minimum: -280, maximum: -200 })
+  assert.deepEqual(transientSpectrumMagnitudeAxisRange(Float64Array.of(0, 0.5)), { minimum: -80, maximum: 0 })
+  assert.deepEqual(transientSpectrumMagnitudeAxisRange(Float64Array.of(0)), { minimum: -300, maximum: -280 })
+})
 
 function strongestNonzeroBin(spectrum) {
   let strongest = 1

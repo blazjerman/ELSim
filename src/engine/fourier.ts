@@ -11,6 +11,20 @@ export type TransientSpectrum = {
 
 export type SpectrumPeak = { bin: number; frequency: number; peakAmplitude: number }
 
+/** Keep the FFT magnitude axis ordered and readable for weak or silent signals. */
+export function transientSpectrumMagnitudeAxisRange(amplitudes: ArrayLike<number>): { minimum: number; maximum: number } {
+  const floor = -300
+  const tick = 20
+  let strongestDb = floor
+  for (let index = 1; index < amplitudes.length; index += 1) {
+    const amplitude = amplitudes[index]
+    if (Number.isFinite(amplitude)) strongestDb = Math.max(strongestDb, 20 * Math.log10(Math.max(amplitude, 1e-15)))
+  }
+  const roundedMaximum = Math.ceil(strongestDb / tick) * tick
+  const maximum = Math.max(floor + tick, roundedMaximum === 0 ? 0 : roundedMaximum)
+  return { minimum: Math.max(floor, maximum - 80), maximum }
+}
+
 export type HarmonicComponent = { order: number; frequency: number; peakAmplitude: number; phaseDegrees: number }
 export type HarmonicAnalysis = { fundamentalFrequency: number; dc: number; components: HarmonicComponent[]; thdPercent: number }
 export type NgspiceFourierAnalysis = {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { X } from 'lucide-react'
-import { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak } from '../engine/fourier'
+import { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak, transientSpectrumMagnitudeAxisRange } from '../engine/fourier'
 import type { SpectrumWindow } from '../engine/fourier'
 import type { NgspiceFourierAnalysis } from '../engine/fourier'
 import type { Trace } from '../engine/contract'
@@ -72,8 +72,9 @@ export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFou
     const firstFrequency = frequencies[1], lastFrequency = frequencies.at(-1) ?? 0
     if (!(firstFrequency > 0) || !(lastFrequency > firstFrequency)) return null
     const values = bins.map((bin) => display === 'magnitude' ? 20 * Math.log10(Math.max(peakAmplitudes[bin], 1e-15)) : phaseDegrees[bin])
-    const maximum = display === 'magnitude' ? Math.max(...values) : 180
-    const minimum = display === 'magnitude' ? Math.max(-180, maximum - 80) : -180
+    const magnitudeRange = display === 'magnitude' ? transientSpectrumMagnitudeAxisRange(peakAmplitudes) : null
+    const maximum = magnitudeRange?.maximum ?? 180
+    const minimum = magnitudeRange?.minimum ?? -180
     const top = 20, bottom = 300, left = 78, right = 760
     const x = (frequency: number) => left + Math.log(frequency / firstFrequency) / Math.log(lastFrequency / firstFrequency) * (right - left)
     const y = (value: number) => bottom - (value - minimum) / Math.max(1, maximum - minimum) * (bottom - top)
