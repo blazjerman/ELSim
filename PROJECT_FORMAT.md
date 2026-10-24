@@ -20,6 +20,8 @@ A resistor may set the optional part-level `acResistance` string (for example, `
 
 Controlled voltage and current switches may set a part-level `switchInitialState` to `"on"` or `"off"`; omission preserves the historical `off` default. The setting is passed as ngspice's native SW/CSW instance flag and seeds the schematic's hysteresis animation. It determines the initial state when the control value begins inside the model's hysteresis band; if the transient operating-point solve overrides it, enabling `skipInitialOperatingPoint` (UIC) applies the selected startup state directly.
 
+An inductor may set `mutualCoupling: { "partnerId": "...", "coefficient": "0.98" }` to couple it to another inductor in the same sheet. The coefficient must be numeric and greater than zero through one. ELSim emits ngspice's native `K` card; the first terminal of each inductor is the dotted terminal, shown with a dot on both symbols. A pair is stored once, on the owning inductor. Deleting its partner clears the relationship; copying both coils remaps the pair, while copying only one produces an uncoupled inductor.
+
 `simulation.temperature` is an optional decimal string in degrees Celsius. Projects that omit it use 27 °C. Non-default values emit a single top-level ngspice `.temp` directive and apply to temperature-sensitive device models across analyses. Accepted range is −273.15 °C through 10000 °C.
 
 `simulation.startSavingTime` is an optional transient time string. It maps to ngspice's `.tran` `tstart` argument: the solver still integrates from time zero, but waveform samples before this time are not retained. The value must be nonnegative and earlier than `stopTime`; omitting it or leaving it blank saves data from time zero.

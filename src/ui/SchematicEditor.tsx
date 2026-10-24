@@ -26,6 +26,7 @@ type SchematicTransform = { left: number; top: number; scale: number; offsetX: n
 const EMPTY_SUBCIRCUIT_PIN_OFFSETS: [number, number][] = []
 const EMPTY_SHEET_PORT_LAYOUT: NonNullable<Part['sheetPortLayout']> = []
 const EMPTY_SYMBOL_GEOMETRY: NonNullable<ReturnType<typeof componentDefinitionFor>['symbolGeometry']> = []
+const MUTUAL_INDUCTOR_DOT_GEOMETRY = [{ kind: 'circle', cx: -42, cy: -7, r: 3.5, fill: 'stroke', className: 'mutual-inductor-dot' }] as const satisfies NonNullable<ReturnType<typeof componentDefinitionFor>['symbolGeometry']>
 const LOGIC_OUTPUT_PART_KINDS: ReadonlySet<PartKind> = new Set(['inverter', 'logicGate'])
 const TRANSISTOR_CHANNEL_PART_KINDS: ReadonlySet<PartKind> = new Set(['nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet'])
 const DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS: ReadonlySet<PartKind> = new Set(['npn', 'pnp', ...TRANSISTOR_CHANNEL_PART_KINDS])
@@ -257,7 +258,7 @@ function navigateMenuByKeyboard(event: ReactKeyboardEvent<HTMLElement>) {
   items[next].focus()
 }
 
-const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, componentSample, animate = false, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; componentSample: (part: Part, sampleIndex: number | null) => ComponentSampleValues; animate?: boolean; symbol?: ImportedSymbol; detailed?: boolean }) {
+const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, componentSample, animate = false, symbol, detailed = true, mutuallyCoupled = false }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; componentSample: (part: Part, sampleIndex: number | null) => ComponentSampleValues; animate?: boolean; symbol?: ImportedSymbol; detailed?: boolean; mutuallyCoupled?: boolean }) {
   const uiState = usePartUiState(part.id)
   const selected = (uiState & 1) !== 0
   const focusable = (uiState & 2) !== 0
@@ -306,7 +307,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const transformerSecondaryFieldGeometry = part.kind === 'transformer' && secondaryCurrentGlow > 0 ? componentDefinition.symbolAnimations?.['field.secondaryCurrent']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const ledBrightness = Math.min(1, Math.max(0, (current ?? 0) - .0002) / .01)
   const ledBrightnessGeometry = componentDefinition.symbolAnimations?.['brightness.current']?.[ledBrightness > 0 ? 'active' : 'inactive'] ?? EMPTY_SYMBOL_GEOMETRY
-  const symbolGeometry = useMemo(() => [...((symbolVariantKey ? componentDefinition.symbolVariants?.[symbolVariantKey] : undefined) ?? componentDefinition.symbolGeometry ?? EMPTY_SYMBOL_GEOMETRY), ...capacitorChargeGeometry, ...potentiometerWiperGeometry, ...lampPowerGeometry, ...inductorFieldGeometry, ...transformerPrimaryFieldGeometry, ...transformerSecondaryFieldGeometry, ...ledBrightnessGeometry], [componentDefinition, symbolVariantKey, capacitorChargeGeometry, potentiometerWiperGeometry, lampPowerGeometry, inductorFieldGeometry, transformerPrimaryFieldGeometry, transformerSecondaryFieldGeometry, ledBrightnessGeometry])
+  const symbolGeometry = useMemo(() => [...((symbolVariantKey ? componentDefinition.symbolVariants?.[symbolVariantKey] : undefined) ?? componentDefinition.symbolGeometry ?? EMPTY_SYMBOL_GEOMETRY), ...(mutuallyCoupled && part.kind === 'inductor' ? MUTUAL_INDUCTOR_DOT_GEOMETRY : EMPTY_SYMBOL_GEOMETRY), ...capacitorChargeGeometry, ...potentiometerWiperGeometry, ...lampPowerGeometry, ...inductorFieldGeometry, ...transformerPrimaryFieldGeometry, ...transformerSecondaryFieldGeometry, ...ledBrightnessGeometry], [componentDefinition, symbolVariantKey, mutuallyCoupled, part.kind, capacitorChargeGeometry, potentiometerWiperGeometry, lampPowerGeometry, inductorFieldGeometry, transformerPrimaryFieldGeometry, transformerSecondaryFieldGeometry, ledBrightnessGeometry])
   const hasDynamicSymbolGeometry = useMemo(() => symbolGeometry.some(isDynamicComponentSymbolPrimitive), [symbolGeometry])
   const symbolAnimation = useMemo<ComponentSymbolAnimation | undefined>(() => hasDynamicSymbolGeometry ? ({
     capacitorChargeLevel, capacitorVoltage, voltage, logicOutput, logicState, logicOutputStroke,
@@ -410,9 +411,10 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   </g>
 })
 
-const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, tool, componentSample, animationEnabled, onSelect, onPointerDown, onNavigate, onProbe, onSwitchToggle, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
+const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, coupledInductorIds, tool, componentSample, animationEnabled, onSelect, onPointerDown, onNavigate, onProbe, onSwitchToggle, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
   parts: Part[]
   symbolsById: Map<string, ImportedSymbol>
+  coupledInductorIds: ReadonlySet<string>
   tool: ToolMode
   componentSample: (part: Part, sampleIndex: number | null) => ComponentSampleValues
   animationEnabled: boolean
@@ -454,7 +456,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
     const detailed = part.x >= viewportLeft - margin && part.x <= viewportRight + margin && part.y >= viewportTop - margin && part.y <= viewportBottom + margin
     const animate = animationEnabled && part.kind !== 'subcircuit' && part.x >= viewportLeft - 100 && part.x <= viewportRight + 100 && part.y >= viewportTop - 100 && part.y <= viewportBottom + 100
     if (!detailed && part.id !== focusedPartId) return null
-    return <CircuitPart key={part.id} part={part} symbol={symbol} detailed={detailed} animate={animate} componentSample={componentSample} onSelect={onSelect} onPointerDown={onPointerDown} onNavigate={onNavigate} tool={tool} onProbe={onProbe} onSwitchToggle={onSwitchToggle}/>
+    return <CircuitPart key={part.id} part={part} symbol={symbol} detailed={detailed} animate={animate} mutuallyCoupled={coupledInductorIds.has(part.id)} componentSample={componentSample} onSelect={onSelect} onPointerDown={onPointerDown} onNavigate={onNavigate} tool={tool} onProbe={onProbe} onSwitchToggle={onSwitchToggle}/>
   })}</>
 })
 
@@ -537,6 +539,14 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
   const selectedWireIdSet = useMemo(() => new Set(selectedWireIds), [selectedWireIds])
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
+  const coupledInductorIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const part of project.parts) if (part.kind === 'inductor' && part.mutualCoupling) {
+      ids.add(part.id)
+      ids.add(part.mutualCoupling.partnerId)
+    }
+    return ids
+  }, [project.parts])
   const pinLocations = useMemo(() => projectPinLocations(project), [project.parts])
   const pinsNear = useMemo(() => createPointViewportIndex(pinLocations, 0, 64), [pinLocations])
   const wiresNear = useMemo(() => createWireViewportIndex(project.wires), [project.wires])
@@ -1641,7 +1651,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3" pointerEvents="none"/>}
       {componentPreview && <g className="component-placement-preview" aria-hidden="true" pointerEvents="none"><CircuitPart part={componentPreview} onSelect={() => {}} onPointerDown={() => {}} onNavigate={() => {}} onProbe={() => {}} onSwitchToggle={() => {}} componentSample={() => ({})} tool="select"/></g>}
       {selectionBox && <rect className={`selection-box${selectionBox.crossing ? ' crossing' : ''}`} x={selectionBox.x} y={selectionBox.y} width={selectionBox.width} height={selectionBox.height} pointerEvents="none"/>}
-      <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationEnabled={resultIsCurrent} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
+      <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} coupledInductorIds={coupledInductorIds} tool={tool} animationEnabled={resultIsCurrent} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       {hoveredWire && tool === 'select' && <g className="wire-endpoint-handles" role="group" aria-label="Wire endpoints" onPointerEnter={() => setHoveredWireId(hoveredWire.id)}>{([0, 1] as const).map((index) => {
         const [x, y] = hoveredWire.points[index]
         return <circle key={index} data-wire-endpoint-id={hoveredWire.id} data-endpoint-index={index} cx={x} cy={y} r="7" role="button" tabIndex={0} aria-label={`Move wire endpoint ${index + 1} at ${x}, ${y}. Use arrow keys to move one grid step; press Escape to return to the wire.`} aria-keyshortcuts="Escape ArrowUp ArrowDown ArrowLeft ArrowRight" onFocus={() => setSelectedWireId(hoveredWire.id)} onKeyDown={(event) => {

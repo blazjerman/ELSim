@@ -638,6 +638,16 @@
           "maxLength": 64,
           "description": "Optional nonnegative series resistance (ohms) for capacitor ESR or inductor winding loss."
         },
+        "mutualCoupling": {
+          "type": "object",
+          "required": ["partnerId", "coefficient"],
+          "additionalProperties": false,
+          "properties": {
+            "partnerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "coefficient": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$", "description": "Dimensionless magnetic coupling coefficient greater than zero and at most one; valid only for inductors. The first listed inductor terminals are the dotted terminals." }
+          },
+          "description": "Optional pairwise mutual coupling to another inductor in the same sheet."
+        },
         "primaryWindingResistance": {
           "type": "string",
           "maxLength": 64,

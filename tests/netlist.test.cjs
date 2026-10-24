@@ -627,6 +627,30 @@ test('AC transformer example emits coupled windings with the selected turns rati
   assert.match(createNetlistArtifact(overflow).text, /ERROR: T1 needs a positive finite primary inductance/i)
 })
 
+test('mutually coupled inductor parts emit a native K card and retain polarity source mapping', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'coupled-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 600, y: 600, rotation: 0, mutualCoupling: { partnerId: 'coupled-l2', coefficient: '0.98' } },
+    { id: 'coupled-l2', kind: 'inductor', ref: 'L2', value: '5 mH', x: 800, y: 600, rotation: 0 },
+  )
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^L1 \S+ \S+ 10m$/m)
+  assert.match(artifact.text, /^L2 \S+ \S+ 5m$/m)
+  assert.match(artifact.text, /^KL1 L1 L2 0\.98$/m)
+  assert.equal(artifact.sourceMap.find((entry) => entry.sourceId === 'coupled-l1' && artifact.text.split('\n')[entry.line - 1] === 'KL1 L1 L2 0.98')?.role, 'component')
+
+  const invalid = structuredClone(project)
+  invalid.parts.find((part) => part.id === 'coupled-l1').mutualCoupling.partnerId = 'missing'
+  invalid.sheets[0] = { ...invalid.sheets[0], parts: invalid.parts }
+  assert.throws(() => validateProject(invalid), /must couple to another inductor in the same sheet/i)
+  const invalidCoefficient = structuredClone(project)
+  invalidCoefficient.parts.find((part) => part.id === 'coupled-l1').mutualCoupling.coefficient = '1.01'
+  invalidCoefficient.sheets[0] = { ...invalidCoefficient.sheets[0], parts: invalidCoefficient.parts }
+  assert.throws(() => validateProject(invalidCoefficient), /coupling coefficient must be greater than 0 and at most 1/i)
+})
+
 test('transformer-current example is ready for transient winding animation', () => {
   const project = createTransformerCurrentExampleProject()
   const source = project.parts.find((part) => part.ref === 'V1')

@@ -11424,6 +11424,27 @@ test('ngspice parser failure without a source line identifies its only imported 
   await expect(diagnostic.getByRole('button', { name: 'Replace model library' })).toBeVisible()
 })
 
+test('inductors expose mutual coupling, mark pin-one polarity, and emit a native K card', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  project.parts.push(
+      { id: 'coupled-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 180, y: 180, rotation: 0 },
+      { id: 'coupled-l2', kind: 'inductor', ref: 'L2', value: '5 mH', x: 300, y: 180, rotation: 0 },
+  )
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  await page.addInitScript((projectJson) => {
+    localStorage.setItem('elsim:project:v7', projectJson)
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  }, JSON.stringify(project))
+  await page.goto('/')
+  await page.locator('.circuit-part[data-part-id="coupled-l1"]').click()
+  await page.getByLabel('Mutual coupling partner for L1').selectOption('coupled-l2')
+  await page.getByLabel('Mutual coupling coefficient for L1').fill('0.95')
+  await expect(page.locator('.circuit-part[data-part-id="coupled-l1"] .mutual-inductor-dot')).toBeVisible()
+  await expect(page.locator('.circuit-part[data-part-id="coupled-l2"] .mutual-inductor-dot')).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')).toContainText('KL1 L1 L2 0.95')
+})
+
 test('LTspice model compatibility check warns about limit() clamp semantics', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()

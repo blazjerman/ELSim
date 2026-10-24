@@ -84,6 +84,8 @@ export type Part = {
   coupling?: string
   /** Optional series resistance in ohms for capacitor ESR or inductor winding loss. */
   seriesResistance?: string
+  /** Pairwise ngspice K coupling from this inductor's pin 1 to another inductor's pin 1. */
+  mutualCoupling?: { partnerId: string; coefficient: string }
   /** Optional transformer primary and secondary copper-loss resistances in ohms. */
   primaryWindingResistance?: string
   secondaryWindingResistance?: string
@@ -411,6 +413,7 @@ export function validateProject(input: unknown): Project {
     if (candidate.coupling !== undefined && (candidate.kind !== 'transformer' || typeof candidate.coupling !== 'string' || candidate.coupling.length > 64)) throw new Error(`${candidate.ref} has invalid transformer coupling metadata.`)
     if (candidate.seriesResistance !== undefined && ((candidate.kind !== 'capacitor' && candidate.kind !== 'inductor') || typeof candidate.seriesResistance !== 'string' || candidate.seriesResistance.length > 64)) throw new Error(`${candidate.ref} has invalid series-resistance metadata.`)
     if (candidate.seriesResistance !== undefined && (componentMagnitude(candidate.seriesResistance, 'resistor') === null || componentMagnitude(candidate.seriesResistance, 'resistor')! < 0)) throw new Error(`${candidate.ref} series resistance must be a nonnegative numeric resistance.`)
+    if (candidate.mutualCoupling !== undefined && (candidate.kind !== 'inductor' || !candidate.mutualCoupling || typeof candidate.mutualCoupling !== 'object' || Array.isArray(candidate.mutualCoupling) || Object.keys(candidate.mutualCoupling).some((key) => !['partnerId', 'coefficient'].includes(key)) || typeof candidate.mutualCoupling.partnerId !== 'string' || !candidate.mutualCoupling.partnerId || candidate.mutualCoupling.partnerId.length > 128 || typeof candidate.mutualCoupling.coefficient !== 'string' || candidate.mutualCoupling.coefficient.length > 64)) throw new Error(`${candidate.ref} has malformed mutual-inductor coupling settings.`)
     if (candidate.acResistance !== undefined && (candidate.kind !== 'resistor' || typeof candidate.acResistance !== 'string' || candidate.acResistance.length > 64 || componentMagnitude(candidate.acResistance, 'resistor') === null || componentMagnitude(candidate.acResistance, 'resistor')! <= 0)) throw new Error(`${candidate.ref} AC resistance must be a positive numeric resistance and is available only for resistors.`)
     if (candidate.noiseEnabled !== undefined && (!['resistor', 'potentiometer', 'lamp'].includes(candidate.kind) || typeof candidate.noiseEnabled !== 'boolean')) throw new Error(`${candidate.ref} noise setting is available only for resistor-based components.`)
     if (candidate.mosfetGeometry !== undefined) {
@@ -682,6 +685,27 @@ export function validateProject(input: unknown): Project {
     if (!supportsDeviceTemperatureDelta(part.kind) || typeof delta !== 'string' || delta.length > 64 || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(delta) || !Number.isFinite(Number(delta))) throw new Error(`${part.ref} device temperature offset must be a numeric °C value on a passive or semiconductor device.`)
     const effectiveTemperature = Number(simulation.temperature) + Number(delta)
     if (effectiveTemperature < -273.15 || effectiveTemperature > 10000) throw new Error(`${part.ref} device temperature must be from −273.15 °C to 10000 °C after applying the circuit temperature offset.`)
+  }
+  // K cards can only couple inductors in the same SPICE sheet scope. Require a
+  // single owner per pair so editing, copying, and netlist generation cannot
+  // emit the same mutual relationship twice.
+  const couplingScopes = Array.isArray(data.sheets)
+    ? (data.sheets as ProjectSheet[]).flatMap((sheet) => Array.isArray(sheet?.parts) ? [sheet.parts] : [])
+    : []
+  for (const parts of couplingScopes) {
+    const pairs = new Set<string>()
+    for (const part of parts) {
+      const coupling = part.mutualCoupling
+      if (!coupling) continue
+      if (part.kind !== 'inductor' || !coupling || typeof coupling !== 'object' || Array.isArray(coupling) || Object.keys(coupling).some((key) => !['partnerId', 'coefficient'].includes(key)) || typeof coupling.partnerId !== 'string' || typeof coupling.coefficient !== 'string' || coupling.coefficient.length > 64) throw new Error(`${part.ref} has malformed mutual-inductor coupling settings.`)
+      const partner = parts.find((candidate) => candidate.id === coupling.partnerId)
+      if (!partner || partner.id === part.id || partner.kind !== 'inductor') throw new Error(`${part.ref} must couple to another inductor in the same sheet.`)
+      const coefficient = Number(coupling.coefficient)
+      if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(coupling.coefficient) || !Number.isFinite(coefficient) || coefficient <= 0 || coefficient > 1) throw new Error(`${part.ref} coupling coefficient must be greater than 0 and at most 1.`)
+      const pair = [part.id, partner.id].sort().join(':')
+      if (pairs.has(pair)) throw new Error(`${part.ref} and ${partner.ref} define the same mutual-inductor pair more than once.`)
+      pairs.add(pair)
+    }
   }
   for (const part of deviceInstanceOptionParts) {
     if (part.initialOff === undefined) continue

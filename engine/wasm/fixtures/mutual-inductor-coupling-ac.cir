@@ -1,0 +1,14 @@
+* Two native inductor parts coupled by a mutual-inductance K card.
+V1 IN 0 AC 1
+RSOURCE IN PRI 1
+L1 PRI 0 10m
+L2 SEC 0 10m
+K1 L1 L2 0.98
+RLOAD SEC 0 1k
+.control
+ac lin 1 1k 1k
+let coupled_magnitude = vm(SEC)
+print coupled_magnitude
+quit
+.endc
+.end
