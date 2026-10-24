@@ -1,20 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
-import type { Project } from '../domain/project'
-import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import type { AnalyzedModelLibraries } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 
 type Model = SpiceModelDefinition & { assetId: string; filename: string }
 
-export default function ImportedDeviceModelParameters({ model, modelAssets, onReview }: {
+export default function ImportedDeviceModelParameters({ model, parsedAssets, onReview }: {
   model: Model
-  modelAssets: NonNullable<Project['modelAssets']>
+  parsedAssets: AnalyzedModelLibraries['assets']
   onReview: (assetId: string, sourceLine: number) => void
 }) {
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(16)
   useEffect(() => { setQuery(''); setVisibleCount(16) }, [model.assetId, model.name, model.startLine])
-  const parsedAssets = useMemo(() => modelAssets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) })), [modelAssets])
   const parameters = useMemo(() => {
     if (!model.akoBaseName) return model.parameters
     return expandNgspiceAkoModels(parsedAssets).parameters.get(`${model.assetId}:${model.startLine}`) ?? model.parameters
