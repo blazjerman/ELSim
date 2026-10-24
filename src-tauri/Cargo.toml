@@ -1,0 +1,13 @@
+[package]
+name = "elsim-desktop"
+version = "0.1.0"
+description = "ELSim desktop shell"
+authors = ["ELSim contributors"]
+edition = "2021"
+rust-version = "1.90"
+
+[build-dependencies]
+tauri-build = { version = "2" }
+
+[dependencies]
+tauri = { version = "2" }
