@@ -59,6 +59,29 @@ test('transient FFT interpolates tone peaks between frequency bins', () => {
   assert.ok(Math.abs(peak.peakAmplitude - 2.5) < 0.08, `expected about 2.5 V, got ${peak.peakAmplitude}`)
 })
 
+test('transient FFT windows retain amplitude calibration and control leakage', () => {
+  const count = 8193
+  const axis = new Float64Array(count), values = new Float64Array(count), alignedValues = new Float64Array(count)
+  for (let index = 0; index < count; index += 1) {
+    axis[index] = 2 * index / (count - 1)
+    values[index] = 2.5 * Math.sin(2 * Math.PI * 50.3 * axis[index])
+    alignedValues[index] = 2.5 * Math.sin(2 * Math.PI * 50 * axis[index])
+  }
+  const rectangular = calculateTransientSpectrum({ axis, values }, 16384, undefined, 'rectangular')
+  const hann = calculateTransientSpectrum({ axis, values }, 16384, undefined, 'hann')
+  const hamming = calculateTransientSpectrum({ axis, values }, 16384, undefined, 'hamming')
+  const blackman = calculateTransientSpectrum({ axis, values }, 16384, undefined, 'blackman')
+  for (const window of ['rectangular', 'hann', 'hamming', 'blackman']) {
+    const spectrum = calculateTransientSpectrum({ axis, values: alignedValues }, 16384, undefined, window)
+    const peak = interpolateSpectrumPeak(spectrum)
+    assert.ok(peak)
+    assert.ok(Math.abs(peak.peakAmplitude - 2.5) < 0.01, `${spectrum.window} window amplitude ${peak.peakAmplitude}`)
+  }
+  const distantLeakage = (spectrum) => Math.max(...Array.from(spectrum.peakAmplitudes.slice(1), (amplitude, index) => Math.abs(spectrum.frequencies[index + 1] - 50.3) > 5 ? amplitude : 0))
+  assert.ok(distantLeakage(blackman) < distantLeakage(rectangular) * 0.2)
+  assert.throws(() => calculateTransientSpectrum({ axis, values }, 16384, undefined, 'invalid'), /window must be/)
+})
+
 test('transient FFT can analyze a selected time interval with its own resolution', () => {
   const count = 4097
   const axis = new Float64Array(count), values = new Float64Array(count)

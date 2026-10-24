@@ -1,9 +1,11 @@
+export type SpectrumWindow = 'rectangular' | 'hann' | 'hamming' | 'blackman'
+
 export type TransientSpectrum = {
   frequencies: Float64Array
   peakAmplitudes: Float64Array
   sampleCount: number
   sampleRate: number
-  window: 'hann'
+  window: SpectrumWindow
 }
 
 export type SpectrumPeak = { bin: number; frequency: number; peakAmplitude: number }
@@ -66,7 +68,7 @@ function fft(real: Float64Array, imaginary: Float64Array): void {
  * Calculate a Hann-windowed, single-sided FFT from an ngspice transient trace.
  * Adaptive solver samples are linearly resampled to a uniform grid first.
  */
-export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 16384, timeRange?: { start: number; end: number }): TransientSpectrum {
+export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 16384, timeRange?: { start: number; end: number }, window: SpectrumWindow = 'hann'): TransientSpectrum {
   const { axis, values } = trace
   if (!(axis instanceof Float64Array) || !(values instanceof Float64Array) || axis.length !== values.length || axis.length < 32) {
     throw new Error('FFT needs at least 32 transient samples on one axis.')
@@ -74,6 +76,7 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
   if (!Number.isSafeInteger(maxSamples) || maxSamples < 32 || !isPowerOfTwo(maxSamples)) {
     throw new Error('FFT maximum sample count must be a power of two of at least 32.')
   }
+  if (!['rectangular', 'hann', 'hamming', 'blackman'].includes(window)) throw new Error('FFT window must be rectangular, hann, hamming, or blackman.')
   const start = timeRange?.start ?? axis[0]
   const end = timeRange?.end ?? axis[axis.length - 1]
   if (!Number.isFinite(start) || !Number.isFinite(end) || start < axis[0] || end > axis[axis.length - 1] || end <= start) {
@@ -104,7 +107,11 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
   mean /= sampleCount
   let windowSum = 0
   for (let index = 0; index < sampleCount; index += 1) {
-    const weight = 0.5 - 0.5 * Math.cos(2 * Math.PI * index / (sampleCount - 1))
+    const angle = 2 * Math.PI * index / (sampleCount - 1)
+    const weight = window === 'rectangular' ? 1
+      : window === 'hann' ? 0.5 - 0.5 * Math.cos(angle)
+        : window === 'hamming' ? 0.54 - 0.46 * Math.cos(angle)
+          : 0.42 - 0.5 * Math.cos(angle) + 0.08 * Math.cos(2 * angle)
     real[index] = (real[index] - mean) * weight
     windowSum += weight
   }
@@ -119,7 +126,7 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
     const scale = bin === 0 || bin === sampleCount / 2 ? 1 : 2
     peakAmplitudes[bin] = Math.hypot(real[bin], imaginary[bin]) * scale / windowSum
   }
-  return { frequencies, peakAmplitudes, sampleCount, sampleRate, window: 'hann' }
+  return { frequencies, peakAmplitudes, sampleCount, sampleRate, window }
 }
 
 /** Estimate a peak between FFT bins using a quadratic fit to neighboring dB magnitudes. */
