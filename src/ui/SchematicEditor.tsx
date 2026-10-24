@@ -31,6 +31,7 @@ const MUTUAL_INDUCTOR_DOT_GEOMETRY = [{ kind: 'circle', cx: -42, cy: -7, r: 3.5,
 const LOGIC_OUTPUT_PART_KINDS: ReadonlySet<PartKind> = new Set(['inverter', 'logicGate'])
 const TRANSISTOR_CHANNEL_PART_KINDS: ReadonlySet<PartKind> = new Set(['nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet'])
 const DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS: ReadonlySet<PartKind> = new Set(['npn', 'pnp', ...TRANSISTOR_CHANNEL_PART_KINDS])
+const CURRENT_POLARITY_MARKER_PART_KINDS: ReadonlySet<PartKind> = new Set(['resistor', 'lamp', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'currentSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral'])
 
 const CanvasConnectionDotLayer = memo(function CanvasConnectionDotLayer({ dots, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
   dots: { x: number; y: number }[]
@@ -206,13 +207,14 @@ function isDynamicComponentSymbolPrimitive(primitive: ComponentSymbolPrimitive):
 }
 
 function isCurrentPolarityPrimitive(primitive: ComponentSymbolPrimitive): boolean {
-  return primitive.kind === 'text' && (primitive.className === 'capacitor-current-polarity' || primitive.className === 'inductor-current-polarity')
+  return primitive.kind === 'text' && (primitive.className === 'capacitor-current-polarity' || primitive.className === 'inductor-current-polarity' || primitive.className === 'component-current-polarity')
 }
 
-const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView({ primitive, stroke, animation }: {
+const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView({ primitive, stroke, animation, rotation = 0 }: {
   primitive: ComponentSymbolPrimitive
   stroke: string
   animation?: ComponentSymbolAnimation
+  rotation?: Part['rotation']
 }) {
   const common = { stroke, strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
   const sample = animation ?? EMPTY_COMPONENT_SYMBOL_ANIMATION
@@ -229,7 +231,10 @@ const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView(
     const ledGlow = primitive.className === 'led-glow'
     return <circle className={primitive.className} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={lampGlow ? '#ffd36d' : resistorPowerGlow ? '#ff9b55' : ledGlow ? '#ff766d' : primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={lampGlow || resistorPowerGlow || ledGlow ? 'none' : common.stroke} strokeWidth={common.strokeWidth} opacity={lampGlow ? sample.lampGlow * .82 : resistorPowerGlow ? sample.resistorPowerGlow * .34 : ledGlow ? Math.min(.3, sample.ledBrightness * .3) : undefined} pointerEvents={lampGlow || resistorPowerGlow || primitive.className === 'lamp-glow-outline' || ledGlow ? 'none' : undefined} style={primitive.className === 'lamp-glow-outline' ? { filter: `drop-shadow(0 0 ${sample.lampGlow * 15}px #ffd36d)` } : resistorPowerGlow ? { filter: `drop-shadow(0 0 ${sample.resistorPowerGlow * 8}px #ff9b55)` } : undefined}/>
   }
-  if (primitive.kind === 'text') return <text className={primitive.className} x={primitive.x} y={primitive.y} data-pin={primitive.pin} data-polarity={isCurrentPolarityPrimitive(primitive) ? primitive.text : undefined} fill={common.stroke} stroke="none" pointerEvents="none">{primitive.text}{isCurrentPolarityPrimitive(primitive) && primitive.pin !== undefined && <title>{`Pin ${primitive.pin}: conventional current ${primitive.text === '+' ? 'flows out' : 'flows in'}`}</title>}</text>
+  if (primitive.kind === 'text') {
+    const currentPolarity = isCurrentPolarityPrimitive(primitive)
+    return <text className={primitive.className} x={primitive.x} y={primitive.y} transform={currentPolarity && rotation ? `rotate(${-rotation} ${primitive.x} ${primitive.y})` : undefined} data-pin={primitive.pin} data-polarity={currentPolarity ? primitive.text : undefined} fill={common.stroke} stroke="none" pointerEvents="none">{primitive.text}{currentPolarity && primitive.pin !== undefined && <title>{`Pin ${primitive.pin}: conventional current ${primitive.text === '+' ? 'flows out' : 'flows in'}`}</title>}</text>
+  }
   const transistorCurrent = primitive.className === 'transistor-current-indicator'
   const ledRay = primitive.className === 'led-light-rays'
   const inductorGlow = primitive.className === 'inductor-current-glow'
@@ -239,12 +244,13 @@ const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView(
   return <path className={primitive.className} d={primitive.d} transform={primitive.className === 'potentiometer-wiper-arrow' ? `translate(0 ${sample.potentiometerWiperY})` : undefined} fill={primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={transistorCurrent ? '#79d9a4' : ledRay ? '#ff766d' : common.stroke} strokeWidth={primitive.className === 'lamp-filament' || ledRay ? 2 : transistorCurrent ? 2.5 : common.strokeWidth} strokeLinecap={common.strokeLinecap} strokeLinejoin={common.strokeLinejoin} opacity={transistorCurrent ? sample.channelCurrentGlow : ledRay ? sample.ledBrightness : undefined} pointerEvents={transistorCurrent || ledRay || inductorGlow || transformerGlow ? 'none' : undefined} aria-hidden={transistorCurrent || ledRay || inductorGlow || transformerGlow ? true : undefined} style={primitive.className === 'lamp-filament' ? { stroke: sample.lampGlow > .05 ? '#ffe6a8' : common.stroke } : inductorGlow || transformerPrimaryGlow ? { filter: `drop-shadow(0 0 ${sample.currentGlow * 7}px #e9bc70)` } : transformerSecondaryGlow ? { filter: `drop-shadow(0 0 ${sample.secondaryCurrentGlow * 7}px #e9bc70)` } : undefined}/>
 })
 
-const ComponentSymbolGeometry = memo(function ComponentSymbolGeometry({ geometry, stroke, animation }: {
+const ComponentSymbolGeometry = memo(function ComponentSymbolGeometry({ geometry, stroke, animation, rotation = 0 }: {
   geometry: readonly ComponentSymbolPrimitive[]
   stroke: string
   animation?: ComponentSymbolAnimation
+  rotation?: Part['rotation']
 }) {
-  return <>{geometry.map((primitive, index) => <ComponentSymbolPrimitiveView key={index} primitive={primitive} stroke={stroke} animation={isDynamicComponentSymbolPrimitive(primitive) ? animation : undefined}/>)}</>
+  return <>{geometry.map((primitive, index) => <ComponentSymbolPrimitiveView key={index} primitive={primitive} stroke={stroke} animation={isDynamicComponentSymbolPrimitive(primitive) ? animation : undefined} rotation={rotation}/>)}</>
 })
 
 function usePartUiState(id: string): number {
@@ -306,6 +312,20 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const potentiometerPosition = Number(part.wiperPosition ?? '0.5')
   const potentiometerWiperY = -24 + potentiometerPosition * 48
   const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'currentSwitch' ? switchClosed ? 'on' : 'off' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : (part.kind === 'capacitor' || part.kind === 'inductor') && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS.has(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
+  const currentPolarityGeometry = useMemo<readonly ComponentSymbolPrimitive[]>(() => {
+    if (!CURRENT_POLARITY_MARKER_PART_KINDS.has(part.kind) || !hasCurrentDirection) return EMPTY_SYMBOL_GEOMETRY
+    // SPICE branch current is positive into pin 1 and out of pin 2. The
+    // markers follow the requested visual convention: + marks where current
+    // exits the component, and − where it enters.
+    const pin1Polarity = current! < 0 ? '+' : '−'
+    const pin2Polarity = current! < 0 ? '−' : '+'
+    const pin1X = part.flipX ? 31 : -31
+    const pin2X = -pin1X
+    return [
+      { kind: 'text', className: 'component-current-polarity', x: pin1X, y: -18, text: pin1Polarity, pin: 1 },
+      { kind: 'text', className: 'component-current-polarity', x: pin2X, y: -18, text: pin2Polarity, pin: 2 },
+    ]
+  }, [part.kind, part.flipX, current, hasCurrentDirection])
   const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
   const powerGlowGeometry = (lampGlow > 0 || resistorPowerGlow > 0) ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
@@ -405,7 +425,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     {(voltage !== undefined || current !== undefined || logicOutput !== undefined) && <title>{`${part.ref}: ${logicOutput === undefined ? '' : `output ${logicState} (${logicOutput.toPrecision(4)} V); `}${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; no thermal behavior is simulated; ` : part.kind === 'resistor' ? `illustrative glow follows solved electrical power (${dissipatedPower.toPrecision(4)} W); reference ${part.animationNominalPower ?? 0.25} W; no thermal behavior is simulated; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'zener' ? 'reverse breakdown follows the selected Zener model; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `plate charge animation follows solved charge; ${Number.isFinite(capacitorCharge) ? `Q = C × V = ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined || logicOutput !== undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${currentDescription}`}`}</title>}
     <rect x={hitBounds.x} y={hitBounds.y} width={hitBounds.width} height={hitBounds.height} rx="9" className="part-hit" />
     {detailed || symbol ? <><g transform={part.flipX ? 'scale(-1 1)' : undefined}>
-    <ComponentSymbolGeometry geometry={symbolGeometry} stroke={common.stroke} animation={symbolAnimation}/>
+    <ComponentSymbolGeometry geometry={symbolGeometry} stroke={common.stroke} animation={symbolAnimation} rotation={part.rotation}/>
     {part.kind === 'potentiometer' && <title>{`Potentiometer ${part.value}, wiper at ${(potentiometerPosition * 100).toFixed(1)}% from upper terminal`}</title>}
     {part.kind === 'capacitor' && part.polarized && <><text className="capacitor-polarity" data-pin="1" data-mark="+" x="-22" y="26">+<title>Pin 1 is the positive terminal</title></text><text className="capacitor-polarity" data-pin="2" data-mark="−" x="22" y="26">−<title>Pin 2 is the negative terminal</title></text></>}
     {part.kind === 'transformer' && <g className="transformer-symbol" data-turns-ratio={part.turnsRatio ?? '2'}><title>{`Coupled-inductor transformer, ${part.turnsRatio ?? '2'} secondary-to-primary turns ratio; primary current ${current === undefined ? 'not available' : `${current.toPrecision(4)} A`}; secondary current ${secondaryCurrent === undefined ? 'not available' : `${secondaryCurrent.toPrecision(4)} A`}`}</title></g>}
@@ -413,6 +433,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     {part.kind === 'currentSwitch' && <g className="current-switch-symbol" data-state={switchClosed === undefined ? 'unknown' : switchClosed ? 'closed' : 'open'}><title>{`Current-controlled switch, ${switchClosed === undefined ? 'state unavailable' : switchClosed ? 'closed' : 'open'} at the displayed simulation time. Control follows current through ${part.controlSource || 'the selected voltage source'}.`}</title></g>}
     {symbol ? <ImportedSymbolArt symbol={symbol} stroke={common.stroke}/> : part.kind === 'subcircuit' && <><rect x={-customWidth / 2} y={-customHeight / 2} width={customWidth} height={customHeight} rx="4" {...common}/>{customOffsets.map(([x, y], index) => { const side = part.sheetPortLayout?.[index]?.side ?? (x < 0 ? 'left' : 'right'); const vertical = side === 'top' || side === 'bottom'; const direction = part.sheetPortLayout?.[index]?.direction ?? 'inout'; const portSide = side === 'auto' ? (x < 0 ? 'left' : 'right') : side; const directionPath = subcircuitPortDirectionPath(x, y, portSide, direction); return <g key={index} data-port-side={side} data-port-direction={direction}><title>{`${part.modelPins?.[index]} · ${direction} · ${side}`}</title><line x1={vertical ? x : x < 0 ? x + 20 : x - 20} y1={vertical ? y < 0 ? y + 20 : y - 20 : y} x2={x} y2={y} {...common}/>{directionPath && <path className="subcircuit-port-direction" data-direction={direction} d={directionPath} fill={common.stroke} stroke="none" aria-hidden="true"/>}<text x={vertical ? x : x < 0 ? -customWidth / 2 + 8 : customWidth / 2 - 8} y={vertical ? y < 0 ? y + 14 : y - 8 : y + 4} textAnchor={vertical ? 'middle' : x < 0 ? 'start' : 'end'} className="subcircuit-pin-label">{part.modelPins?.[index]}</text></g> })}</>}
     </g>
+    {currentPolarityGeometry.length > 0 && <ComponentSymbolGeometry geometry={currentPolarityGeometry} stroke="#f0c674" rotation={part.rotation}/>}
     <g className="component-labels"><g transform={`rotate(${-part.rotation} ${refAnchor.x} ${refAnchor.y})`}><text className="part-ref" x={refAnchor.x} y={refAnchor.y}>{part.kind === 'subcircuit' ? `${part.ref} · ${part.value || part.modelName}` : part.ref}</text></g>
     {part.value && part.kind !== 'subcircuit' && <g transform={`rotate(${-part.rotation} ${valueAnchor.x} ${valueAnchor.y})`}><text className="part-value" x={valueAnchor.x} y={valueAnchor.y}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.kind === 'behavioral' ? `${part.behavioralOutput === 'current' ? 'I' : 'V'}=f(...)` : part.kind === 'logicGate' ? (part.logicOperation ?? 'and').toUpperCase() : part.value}</text></g>}</g></> : null}
   </g>

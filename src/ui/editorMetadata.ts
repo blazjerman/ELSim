@@ -14,7 +14,8 @@ export const FUTURE_COMPONENT_SHORTCUTS: Record<string, string> = {
 }
 
 export const RESULT_ANIMATED_PART_KINDS = new Set<PartKind>([
-  'resistor', 'capacitor', 'inductor', 'transformer', 'lamp', 'led', 'voltageSwitch', 'currentSwitch',
+  'resistor', 'capacitor', 'inductor', 'transformer', 'lamp', 'led', 'diode', 'zener', 'switch', 'voltageSwitch', 'currentSwitch',
+  'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral',
   'inverter', 'logicGate', 'npn', 'pnp', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet',
 ])
 
