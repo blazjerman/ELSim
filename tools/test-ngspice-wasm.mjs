@@ -19,6 +19,7 @@ fixtures.push('controlled-switch-initial-state-tran')
 fixtures.push('mutual-inductor-coupling-ac')
 fixtures.push('resistor-ac-value', 'resistor-noise-disabled', 'resistor-noise-default')
 fixtures.push('passive-temperature-coefficients-op')
+fixtures.push('imported-subckt-sqr-parameter-op')
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
 const requestedFixtures = process.env.NGSPICE_WASM_ONLY?.split(',').map((name) => name.trim()).filter(Boolean) ?? []
@@ -324,6 +325,10 @@ for (const fixture of selectedFixtures) {
   if (fixture === 'imported-subckt-math-params-op') {
     assert.match(wasmResult.stdout, /out_default\s+2\.000000e\+01/i, 'deterministic math in the subcircuit default should produce 20 V')
     assert.match(wasmResult.stdout, /out_override\s+1\.500000e\+01/i, 'sqrt() in the instance override should produce 15 V')
+  }
+  if (fixture === 'imported-subckt-sqr-parameter-op') {
+    assert.match(wasmResult.stdout, /out_default\s+8\.000000e\+01/i, 'sqr() in the subcircuit default should produce 80 V')
+    assert.match(wasmResult.stdout, /out_override\s+4\.500000e\+01/i, 'sqr() in the instance override should produce 45 V')
   }
   if (fixture === 'imported-subckt-log10-params-op') {
     assert.match(wasmResult.stdout, /out\s+2\.000000e\+00/i, 'the imported subcircuit default should evaluate log10(100) to 2 V')

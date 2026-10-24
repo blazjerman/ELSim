@@ -412,6 +412,7 @@ function parseParameterDefaults(source: string, line: number, functions: Readonl
 }
 
 const builtinFunctionArities: Readonly<Record<string, number>> = {
+  sqr: 1,
   sqrt: 1,
   sin: 1, cos: 1, tan: 1,
   sinh: 1, cosh: 1, tanh: 1,

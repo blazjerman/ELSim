@@ -47,6 +47,13 @@ test('parses native ngspice conditional expressions in subcircuit parameter defa
   ])
 })
 
+test('accepts ngspice sqr() in imported subcircuit parameter expressions', () => {
+  const parsed = parseSubcircuitLibrary('.SUBCKT SQUARED IN OUT PARAMS: GAIN={sqr(4)}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS SQUARED')
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '{sqr(4)}' }])
+  assert.equal(isSafeSubcircuitParameterValue('{sqr(4)}'), true)
+  assert.equal(isSafeSubcircuitParameterValue('{sqr(4,2)}'), false)
+})
+
 test('validates native ngspice Monte Carlo functions without evaluating them', () => {
   for (const value of [
     '{gauss(1k, 0.1, 3)}', '{agauss(1k, 100, 3)}',

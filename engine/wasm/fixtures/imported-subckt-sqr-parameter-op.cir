@@ -1,0 +1,10 @@
+ELSim imported subcircuit sqr() parameter operating point
+V1 IN 0 5
+XDEFAULT IN OUT_DEFAULT AMP_SQR
+XOVERRIDE IN OUT_OVERRIDE AMP_SQR gain={sqr(3)}
+.SUBCKT AMP_SQR IN OUT gain={sqr(4)}
+EGAIN OUT 0 IN 0 {gain}
+.ENDS AMP_SQR
+.op
+.print op v(out_default) v(out_override)
+.end
