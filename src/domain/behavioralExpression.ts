@@ -312,7 +312,10 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
     const signature = ngspiceFunctions.get(name)
       ?? (dialect === 'ltspice' ? ltspiceOnlyFunctions.get(name) : ngspiceOnlyFunctions.get(name))
       ?? piecewiseSignature
-    if (!signature) throw new Error(`Function “${token.text}” is not supported.`)
+    if (!signature) {
+      if (dialect === 'ngspice' && name === 'sqr') throw new Error('sqr() is not available in native ngspice B-source expressions; write the value as x * x, for example V(in) * V(in).')
+      throw new Error(`Function “${token.text}” is not supported.`)
+    }
     let count = 0
     const argumentsTokens: Token[][] = []
     if (!peek(')')) {

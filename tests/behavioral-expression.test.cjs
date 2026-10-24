@@ -96,6 +96,13 @@ test('native ngspice accepts only documented B-source functions and preserves na
   }
 })
 
+test('native B-source diagnostics explain that sqr() is only available in parameter expressions', () => {
+  assert.throws(
+    () => parseBehavioralExpression('sqr(V(in))'),
+    /sqr\(\) is not available in native ngspice B-source expressions; write the value as x \* x, for example V\(in\) \* V\(in\)/,
+  )
+})
+
 test('LTspice behavioral XOR is dialect-specific while native ngspice caret remains exponentiation', () => {
   assert.equal(translateBehavioralExpression('V(a) ^ V(b)', 'ltspice').includes('&&'), true)
   assert.equal(translateBehavioralExpression('(V(a) ^ V(b)) & V(enable)', 'ltspice').includes('&&'), true)
