@@ -29,6 +29,15 @@ test('result control saves device currents needed for probes and visualizations'
   assert.match(instrumented, /\.control\nset filetype=binary\ntran 1u 1m\nwrite \/result\.raw all\nquit\n\.endc\n\.end\n$/)
 })
 
+test('result control selects the requested distortion harmonic before writing raw data', () => {
+  const netlist = 'V1 in 0 DC 1 DISTOF1 1m 0\n.disto dec 10 100 100k\n.print disto vm(out)\n.end'
+  const second = addResultControl(netlist)
+  assert.match(second, /disto dec 10 100 100k\nsetplot disto1\nwrite \/result\.raw all/i)
+  const third = addResultControl(netlist, [], [], undefined, 3)
+  assert.match(third, /disto dec 10 100 100k\nsetplot disto2\nwrite \/result\.raw all/i)
+  assert.throws(() => addResultControl(netlist, [{ values: [{ component: 'R1', value: '2k' }], label: 'R1=2k' }]), /not supported.*distortion/i)
+})
+
 test('result control executes the selected AC and DC analyses instead of the default transient run', () => {
   const ac = addResultControl('V1 in 0 AC 1\nR1 in 0 1k\n.ac dec 20 10 1meg\n.end')
   assert.match(ac, /\.control\nset filetype=binary\nac dec 20 10 1meg\nwrite \/result\.raw all/)

@@ -84,6 +84,8 @@ Values:
 \t2.000000e-03,-3.000000e-03
 `
 
+const validDistoRaw = `Title: Diode distortion\nPlotname: DISTORTION - 2nd harmonic\nFlags: complex\nNo. Variables: 2\nNo. Points: 2\nVariables:\n  0 frequency frequency grid=3\n  1 v(out) voltage\nValues:\n 0\t1.000000e+02,0.000000e+00\n\t8.140051e-09,1.000000e-10\n 1\t1.000000e+03,0.000000e+00\n\t8.140051e-09,1.000000e-10\n`
+
 const validDcRaw = `Title: DC sweep
 Plotname: DC transfer characteristic
 Flags: real
@@ -192,6 +194,17 @@ test('ASCII raw parser preserves AC frequencies and complex voltage/current vect
   assert.deepEqual([...parsed.variables[0].values], [1, 0.5])
   assert.deepEqual([...parsed.variables[0].imaginaryValues], [0, -0.5])
   assert.deepEqual([...parsed.variables[1].imaginaryValues], [-0.002, -0.003])
+})
+
+test('ASCII raw parser identifies ngspice harmonic distortion as complex frequency data', () => {
+  const parsed = parseAsciiRawFile(validDistoRaw)
+  assert.equal(parsed.analysis, 'disto')
+  assert.equal(parsed.axisLabel, 'Frequency')
+  assert.equal(parsed.axisUnit, 'Hz')
+  assert.equal(parsed.isComplex, true)
+  assert.deepEqual([...parsed.axis], [100, 1000])
+  assert.deepEqual([...parsed.variables[0].values], [8.140051e-9, 8.140051e-9])
+  assert.deepEqual([...parsed.variables[0].imaginaryValues], [1e-10, 1e-10])
 })
 
 test('ASCII raw parser exposes DC sweep source values as the analysis axis', () => {

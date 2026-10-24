@@ -50,6 +50,23 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('harmonic distortion settings generate a labeled ngspice frequency sweep and isolate the selected input', () => {
+  const project = createStarterProject()
+  project.simulation = {
+    ...project.simulation,
+    analysis: 'disto',
+    distortion: { outputNode: 'vout', inputSource: 'V1', harmonic: 2 },
+    acSweep: { scale: 'dec', points: 10, startFrequency: '100 Hz', stopFrequency: '100 kHz' },
+  }
+  const validated = validateProject(project)
+  const artifact = createNetlistArtifact(validated)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.disto dec 10 100 100k$/m)
+  assert.match(artifact.text, /^\.print disto vm\(vout\)$/m)
+  assert.match(artifact.text, /^V1 vin 0 DC .* DISTOF1 1 0$/m)
+  assert.doesNotMatch(artifact.text, /^\.ac /m)
+})
+
 test('pole-zero settings generate native ngspice analysis and validate source terminals', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'pz'

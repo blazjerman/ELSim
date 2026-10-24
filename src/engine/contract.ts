@@ -71,7 +71,7 @@ export type SimulationResult = {
   sourceMap: NetlistSource[]
   traces: Trace[]
   diagnostics: SimulationDiagnostic[]
-  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz'
+  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz' | 'disto'
   sensitivityMode?: 'dc' | 'ac'
   measurements: MeasurementResult[]
   noiseSummaries?: NoiseSummary[]
@@ -373,7 +373,7 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
       || !Array.isArray(result.sourceMap) || !result.sourceMap.every(isSource)
       || !Array.isArray(result.traces) || result.traces.length === 0 && result.analysis !== 'pz'
       || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
-      || !['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens', 'pz'].includes(String(result.analysis))
+      || !['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens', 'pz', 'disto'].includes(String(result.analysis))
       || (result.sensitivityMode !== undefined && !['dc', 'ac'].includes(String(result.sensitivityMode)))
       || (result.analysis === 'sens' && !['dc', 'ac'].includes(String(result.sensitivityMode)))
       || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)
@@ -422,7 +422,7 @@ export function engineResponseIssue(value: unknown): string {
       if (!isTrace(trace, validatedVectors)) return `trace ${index + 1} metadata is malformed`
     }
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
-    if (!['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens', 'pz'].includes(String(result.analysis))) return 'analysis type is invalid'
+    if (!['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens', 'pz', 'disto'].includes(String(result.analysis))) return 'analysis type is invalid'
     if (result.sensitivityMode !== undefined && !['dc', 'ac'].includes(String(result.sensitivityMode))) return 'sensitivity analysis mode is invalid'
     if (result.analysis === 'sens' && !['dc', 'ac'].includes(String(result.sensitivityMode))) return 'sensitivity analysis mode is missing'
     if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'

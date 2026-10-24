@@ -86,7 +86,7 @@ function labelPoleZeroTraces(rawTraces: Trace[]): Trace[] {
 
 async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: Extract<EngineRequest, { type: 'run' }>['ngspiceFourier']): Promise<void> {
   const configuredAnalysis = metadata.settings.analysis
-  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' || configuredAnalysis === 'tf' || configuredAnalysis === 'sens' || configuredAnalysis === 'pz' ? configuredAnalysis : undefined
+  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' || configuredAnalysis === 'tf' || configuredAnalysis === 'sens' || configuredAnalysis === 'pz' || configuredAnalysis === 'disto' ? configuredAnalysis : undefined
   const stdout: string[] = []
   const stderr: string[] = []
   const profileStarted = profileWorker ? performance.now() : 0
@@ -112,12 +112,17 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     }
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.15, message: 'Preparing simulation' } satisfies EngineResponse)
     if (profileWorker) moduleLoadMs = performance.now() - moduleLoadStarted
-    const runDeck = addResultControl(artifact.text, parameterSweep, measurements, ngspiceFourier)
+    let distortionHarmonic: 2 | 3 = 2
+    try {
+      const simulation = typeof metadata.settings.simulation === 'string' ? JSON.parse(metadata.settings.simulation) as { distortion?: { harmonic?: number } } : undefined
+      if (simulation?.distortion?.harmonic === 3) distortionHarmonic = 3
+    } catch { /* Use second harmonic if older engine clients omit saved settings. */ }
+    const runDeck = addResultControl(artifact.text, parameterSweep, measurements, ngspiceFourier, distortionHarmonic)
     if (needsLtspiceFullDeckTranslation(runDeck)) {
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
     module.FS.writeFile('/project.cir', runDeck)
-    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'tf' ? 'small-signal transfer-function' : metadata.settings.analysis === 'sens' ? 'sensitivity' : metadata.settings.analysis === 'pz' ? 'pole-zero' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'tf' ? 'small-signal transfer-function' : metadata.settings.analysis === 'sens' ? 'sensitivity' : metadata.settings.analysis === 'pz' ? 'pole-zero' : metadata.settings.analysis === 'disto' ? 'harmonic distortion' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
     const solverStarted = profileWorker ? performance.now() : 0
     const status = module.callMain(['-b', '/project.cir'])
     if (profileWorker) solverMs = performance.now() - solverStarted
@@ -148,7 +153,9 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     } catch { /* Labels fall back when older or external engine clients omit this setting. */ }
     const inputRef = typeof tfSettings?.inputSource === 'string' ? tfSettings.inputSource : 'input source'
     const inputUnit = /^I/i.test(inputRef) ? 'A' : 'V'
-    const traces = analysis === 'pz'
+    const traces = analysis === 'disto'
+      ? rawTraces.map((trace) => ({ ...trace, label: `H${distortionHarmonic} (${distortionHarmonic === 2 ? '2nd' : '3rd'} harmonic) · ${trace.label}` }))
+      : analysis === 'pz'
       ? labelPoleZeroTraces(rawTraces)
       : analysis === 'sens'
       ? labelSensitivityTraces(rawTraces, (() => {
@@ -189,7 +196,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       sourceMap: artifact.sourceMap,
       traces,
       diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics, ...importedMeasurementOutput.diagnostics],
-      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz',
+      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz' | 'disto',
       ...(analysis === 'sens' ? { sensitivityMode: (() => {
         try {
           const rawSettings = metadata.settings.simulation

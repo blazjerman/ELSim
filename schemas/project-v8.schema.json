@@ -1454,7 +1454,8 @@
             "noise",
             "tf",
             "sens",
-            "pz"
+            "pz",
+            "disto"
           ]
         },
         "stopTime": {
@@ -1554,6 +1555,16 @@
             "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
             "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
             "roots": { "enum": ["poles", "zeros", "both"] }
+          }
+        },
+        "distortion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "inputSource", "harmonic"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
+            "harmonic": { "enum": [2, 3] }
           }
         },
         "sourceAcMagnitude": {

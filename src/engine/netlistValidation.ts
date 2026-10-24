@@ -8,7 +8,7 @@ import {
   spiceSheetScalar, spiceSheetTimeMagnitude, spiceSheetValue, spiceValueMagnitude,
 } from './spiceValues'
 
-export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'tfOutput' | 'tfSource' | 'sensOutput' | 'sensMode' | 'pzOutput' | 'pzSource' | 'pzRoots' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase' | 'trnoise.gaussianRms' | 'trnoise.timeStep' | 'trnoise.flickerExponent' | 'trnoise.flickerAmplitude' | 'trnoise.rtsAmplitude' | 'trnoise.rtsCaptureTime' | 'trnoise.rtsEmissionTime'
+export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'tfOutput' | 'tfSource' | 'sensOutput' | 'sensMode' | 'pzOutput' | 'pzSource' | 'pzRoots' | 'distoOutput' | 'distoSource' | 'distoScale' | 'distoPoints' | 'distoStartFrequency' | 'distoStopFrequency' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase' | 'trnoise.gaussianRms' | 'trnoise.timeStep' | 'trnoise.flickerExponent' | 'trnoise.flickerAmplitude' | 'trnoise.rtsAmplitude' | 'trnoise.rtsCaptureTime' | 'trnoise.rtsEmissionTime'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project, connectivity?: Connectivity): AnalysisSettingError[] {
@@ -191,6 +191,27 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       if (start === null || start <= 0) add('acStartFrequency', 'Enter a positive start frequency, such as 10 Hz.')
       if (stop === null || stop <= 0 || start !== null && stop <= start) add('acStopFrequency', 'Stop frequency must be greater than the start frequency.')
     }
+  } else if (project.simulation.analysis === 'disto') {
+    const settings = project.simulation.distortion ?? { outputNode: '', inputSource: '', harmonic: 2 as const }
+    const resolved = connectivity ?? analyzeConnectivity(project)
+    const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    if (!output || resolved.labelNets.get(output.id) === '0') add('distoOutput', 'Choose a labeled, non-ground output node for distortion analysis.')
+    const source = independentSources.find((part) => part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
+    if (!source) add('distoSource', 'Choose an independent voltage or current source as the distortion input.')
+    else {
+      for (const pin of [0, 1]) if (resolved.pinNets.get(`${source.id}:${pin}`) === undefined) add('distoSource', `${source.ref} must have both input terminals connected for distortion analysis.`, source.id)
+      const magnitudeText = source.acMagnitude ?? (source.kind === 'source' ? project.simulation.sourceAcMagnitude ?? '1 V' : source.value)
+      const magnitude = spiceNumber(magnitudeText, source.kind === 'source' ? 'source' : 'currentSource')
+      const phase = spiceScalar(source.acPhase ?? '0', '')
+      if (magnitude === null || phase === null) add('distoSource', `${source.ref} distortion magnitude and phase must be valid SPICE values.`, source.id)
+    }
+    const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
+    if (!['dec', 'oct', 'lin'].includes(sweep.scale)) add('distoScale', 'Choose a supported frequency sweep scale.')
+    if (!Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000) add('distoPoints', 'Enter from 1 to 10,000 frequency points.')
+    const start = spiceMagnitude(sweep.startFrequency, 'frequency'), stop = spiceMagnitude(sweep.stopFrequency, 'frequency')
+    if (start === null || start <= 0) add('distoStartFrequency', 'Enter a positive start frequency, such as 10 Hz.')
+    if (stop === null || stop <= 0 || start !== null && stop <= start) add('distoStopFrequency', 'Stop frequency must be greater than the start frequency.')
+    if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('distoSource', 'Parameter stepping is not available for distortion analysis.')
   } else if (project.simulation.analysis === 'noise') {
     const sweep = project.simulation.noiseSweep ?? { outputNode: '', inputSource: '', scale: 'dec' as const, points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
     const resolved = connectivity ?? analyzeConnectivity(project)

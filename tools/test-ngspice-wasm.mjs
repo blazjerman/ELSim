@@ -23,7 +23,7 @@ fixtures.push('imported-subckt-sqr-parameter-op')
 fixtures.push('imported-library-global-node-op')
 fixtures.push('bracketed-subckt-parameter-op')
 fixtures.push('bsim3-bin-family-sweep')
-fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac')
+fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'disto-diode-harmonics')
 const fixturesWithRawResults = new Set(['pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac'])
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
@@ -98,6 +98,14 @@ for (const fixture of selectedFixtures) {
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status\nstdout:\n${wasmResult.stdout}\nstderr:\n${wasmResult.stderr}`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
+  if (fixture === 'disto-diode-harmonics') {
+    const secondHarmonic = Number(wasmResult.stdout.match(/DISTORTION - 2nd harmonic[\s\S]*?\n0\s+1\.000000e\+02\s+([\d.e+-]+)/i)?.[1])
+    const thirdHarmonic = Number(wasmResult.stdout.match(/DISTORTION - 3rd harmonic[\s\S]*?\n0\s+1\.000000e\+02\s+([\d.e+-]+)/i)?.[1])
+    assert.ok(Math.abs(secondHarmonic - 8.140051e-9) < 1e-14, `second harmonic at 100 Hz should be about 8.140051 nV, got ${secondHarmonic}`)
+    assert.ok(Math.abs(thirdHarmonic - 2.208504e-12) < 1e-16, `third harmonic at 100 Hz should be about 2.208504 pV, got ${thirdHarmonic}`)
+    process.stdout.write('PASS disto-diode-harmonics: H2 = 8.140051 nV, H3 = 2.208504 pV at 100 Hz\n')
+    continue
+  }
   if (fixture === 'pole-zero-rc') {
     assert.ok(wasmResult.raw, 'pole-zero analysis should write its complex raw result')
     const pole = complexRawVector(wasmResult.raw, 'v(pole(1))')[0]

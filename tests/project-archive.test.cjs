@@ -86,6 +86,14 @@ test('project ZIP archive is deterministic and round-trips the complete v8 proje
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
 })
 
+test('harmonic distortion settings round-trip in native project archives', async () => {
+  const project = createStarterProject()
+  project.simulation = { ...project.simulation, analysis: 'disto', distortion: { outputNode: 'vout', inputSource: 'V1', harmonic: 3 }, acSweep: { scale: 'oct', points: 8, startFrequency: '100 Hz', stopFrequency: '10 kHz' } }
+  const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
+  assert.deepEqual(restored.simulation.distortion, project.simulation.distortion)
+  assert.deepEqual(restored.simulation.acSweep, project.simulation.acSweep)
+})
+
 test('project ZIP archives efficiently round-trip valid project JSON entries larger than 20 MiB', async () => {
   const project = createStarterProject()
   const source = 'X'.repeat(7 * 1024 * 1024)
@@ -299,6 +307,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v8.schema.json'), 'utf8'))
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('sens'))
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('pz'))
+  assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('disto'))
+  assert.deepEqual(schema.$defs.simulation.properties.distortion.properties.harmonic.enum, [2, 3])
   assert.deepEqual(schema.$defs.simulation.properties.poleZero.properties.roots.enum, ['poles', 'zeros', 'both'])
   assert.deepEqual(schema.$defs.simulation.properties.sensitivity.properties.mode.enum, ['dc', 'ac'])
   const modelPinPattern = new RegExp(schema.$defs.part.properties.modelPins.items.pattern, 'u')
