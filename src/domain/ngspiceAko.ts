@@ -59,10 +59,17 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
     }
   }
   const keyFor = (asset: T, model: SpiceModelDefinition) => `${asset.id}:${model.startLine}`
-  const branchCompatible = (base: ModelEntry<T>, child: ModelEntry<T>) => !base.conditionPath.length || (
-    base.asset.id === child.asset.id
-    && base.conditionPath.every((frame) => child.conditionPath.some((candidate) => candidate.id === frame.id && candidate.branch === frame.branch))
-  )
+  const branchCompatible = (base: ModelEntry<T>, child: ModelEntry<T>) => {
+    if (!base.conditionPath.length) return true
+    if (base.conditionPath.length > child.conditionPath.length) return false
+    return base.conditionPath.every((frame, index) => {
+      const candidate = child.conditionPath[index]
+      if (!candidate) return false
+      return base.asset.id === child.asset.id
+        ? candidate.id === frame.id && candidate.branch === frame.branch
+        : Boolean(frame.environmentIndependent && candidate.environmentIndependent && frame.signature && candidate.signature && candidate.signature === frame.signature)
+    })
+  }
   const basesFor = (asset: T, child: ModelEntry<T>, baseName: string) => {
     let sawIncompatibleConditional = false
     const select = (entries: ModelEntry<T>[]) => {

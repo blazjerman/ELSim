@@ -1023,6 +1023,47 @@ test('expands each conditional AKO child against the base in the matching branch
   assert.deepEqual(result.parameters.get('conditional-branches:3').map(({ name, defaultVariesByCondition }) => [name, defaultVariesByCondition]), [['IS', true], ['N', true]])
 })
 
+test('matches conditional AKO bases across imported libraries by normalized numeric branch conditions', () => {
+  const baseContent = '.IF (1 = 1)\n.MODEL BASE D(IS=1n N=1)\n.ELSE\n.MODEL BASE D(IS=9n N=2)\n.ENDIF'
+  const childContent = '.IF ( 1=1 )\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ELSE\n.MODEL CHILD AKO:BASE D(IS=3n)\n.ENDIF'
+  const assets = [
+    { id: 'conditional-base-lib', filename: 'base.lib', content: baseContent },
+    { id: 'conditional-child-lib', filename: 'child.lib', content: childContent },
+  ]
+  const result = expandNgspiceAkoModels(assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) })))
+
+  assert.deepEqual(result.issues, [])
+  assert.equal(result.cards.get('conditional-child-lib:2'), '.model CHILD D(IS=2n N=1)')
+  assert.equal(result.cards.get('conditional-child-lib:4'), '.model CHILD D(IS=3n N=2)')
+  assert.deepEqual(result.parameters.get('conditional-child-lib:2').map(({ name, defaultVariesByCondition }) => [name, defaultVariesByCondition]), [['IS', true], ['N', true]])
+})
+
+test('does not infer cross-library conditional AKO equivalence from parameter names', () => {
+  const baseContent = '.IF (LEVEL = 1)\n.MODEL BASE D(IS=1n)\n.ELSE\n.MODEL BASE D(IS=9n)\n.ENDIF'
+  const childContent = '.IF (level=1)\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ELSE\n.MODEL CHILD AKO:BASE D(IS=3n)\n.ENDIF'
+  const assets = [
+    { id: 'unmatched-base-lib', filename: 'base.lib', content: baseContent },
+    { id: 'unmatched-child-lib', filename: 'child.lib', content: childContent },
+  ]
+  const result = expandNgspiceAkoModels(assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) })))
+
+  assert.match(result.issues.map(({ message }) => message).join('\n'), /no definition in the child model’s active conditional branch/)
+  assert.equal(result.cards.size, 0)
+})
+
+test('does not pair cross-library numeric AKO branches when their normalized conditions differ', () => {
+  const baseContent = '.IF (1)\n.MODEL BASE D(IS=1n)\n.ELSE\n.MODEL BASE D(IS=9n)\n.ENDIF'
+  const childContent = '.IF (0)\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ELSE\n.MODEL CHILD AKO:BASE D(IS=3n)\n.ENDIF'
+  const assets = [
+    { id: 'different-base-lib', filename: 'base.lib', content: baseContent },
+    { id: 'different-child-lib', filename: 'child.lib', content: childContent },
+  ]
+  const result = expandNgspiceAkoModels(assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) })))
+
+  assert.match(result.issues.map(({ message }) => message).join('\n'), /no definition in the child model’s active conditional branch/)
+  assert.equal(result.cards.size, 0)
+})
+
 test('reports missing, ambiguous, cyclic, mismatched, conditional, and unsafe AKO inheritance', () => {
   const makeEntries = (assets) => assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) }))
   const cases = [

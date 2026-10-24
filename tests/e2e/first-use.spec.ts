@@ -7494,17 +7494,22 @@ test('native ngspice AKO models import and simulate after cross-library expansio
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
-    name: 'ako-base.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL DBAS D(Is=1n N=1)\n'),
+    name: 'ako-base.lib', mimeType: 'text/plain', buffer: Buffer.from([
+      '.MODEL DBAS D(Is=1n N=1)',
+      '.IF (1)',
+      '.MODEL DBRANCH D(IS=5n N=2)',
+      '.ELSE',
+      '.MODEL DBRANCH D(IS=7n N=3)',
+      '.ENDIF',
+    ].join('\n') + '\n'),
   })
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'ako-child.lib', mimeType: 'text/plain', buffer: Buffer.from([
       '.MODEL DCHILD AKO:DBAS D(IS=2n)',
       '.IF (1)',
-      '.MODEL DBRANCH D(IS=5n N=2)',
       '.MODEL DCOND AKO:DBRANCH D(IS=4n)',
       '.ELSE',
-      '.MODEL DBRANCH D(IS=7n N=3)',
       '.MODEL DCOND AKO:DBRANCH D(IS=8n)',
       '.ENDIF',
       '.SUBCKT LOCAL_DIODE A K',
@@ -7513,7 +7518,7 @@ test('native ngspice AKO models import and simulate after cross-library expansio
       '.ENDS LOCAL_DIODE',
     ].join('\n') + '\n'),
   })
-  await expect(page.getByText(/Imported 1 subcircuit and 5 device models from ako-child\.lib/)).toBeVisible()
+  await expect(page.getByText(/Imported 1 subcircuit and 4 device models from ako-child\.lib/)).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()

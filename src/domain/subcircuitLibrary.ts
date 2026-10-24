@@ -2,7 +2,7 @@ import { translateVoltageSwitchModel } from './voltageSwitchModel'
 
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
-export type ModelConditionFrame = { id: number; branch: number }
+export type ModelConditionFrame = { id: number; branch: number; signature?: string; environmentIndependent?: boolean }
 export type ConditionalModelVariant = { model: SpiceModelDefinition; conditionPath: ModelConditionFrame[] }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
@@ -661,6 +661,20 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   })
 }
 
+function conditionalBranchSignature(block: { branch: number; sawElse: boolean; conditions: string[] }): string {
+  const conditions = block.conditions.map((condition) => condition.toLowerCase().trim().replace(/\s+/g, ' ').replace(/\s*([=<>!+*/^(),-])\s*/g, '$1'))
+  return `${conditions.map((condition, index) => `${index ? 'elseif' : 'if'}:${condition}`).join('|')}|${block.sawElse ? 'else' : `branch:${block.branch}`}`
+}
+
+function conditionalPathEnvironmentIndependent(block: { conditions: string[] }): boolean {
+  // Across separate files, identical source text is not enough when names can
+  // bind to different .PARAM values. Only numeric-only expressions are safe.
+  return block.conditions.every((condition) => {
+    const withoutNumbers = condition.replace(/(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/gi, '')
+    return /^[\s+\-*/^%<>=!&|(),{}]*$/.test(withoutNumbers)
+  })
+}
+
 function spiceFields(text: string): string[] {
   const fields: string[] = []
   let start = -1, braceDepth = 0, quote = ''
@@ -1051,7 +1065,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const seenModelNames = new Map<string, SeenModelCard>()
   const modelLines: LogicalLine[] = []
   const activeSubcircuits: { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; start: number }[] = []
-  const conditionalBlocks: { id: number; branch: number; sawElse: boolean }[] = []
+  const conditionalBlocks: { id: number; branch: number; sawElse: boolean; conditions: string[] }[] = []
   let nextConditionalId = 0
   let sawTopLevelRecord = false
   let activeLibrarySection: string | null = null
@@ -1062,7 +1076,8 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     const tokens = text.split(/\s+/)
     const directive = tokens[0].toLowerCase()
     if (directive === '.if') {
-      conditionalBlocks.push({ id: nextConditionalId++, branch: 0, sawElse: false })
+      const condition = text.slice(tokens[0].length).trim().toLowerCase().replace(/\s+/g, ' ')
+      conditionalBlocks.push({ id: nextConditionalId++, branch: 0, sawElse: false, conditions: [condition] })
       modelLines.push(line)
       if (!activeSubcircuits.length) sawTopLevelRecord = true
       continue
@@ -1070,6 +1085,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (directive === '.elseif') {
       const active = conditionalBlocks.at(-1)!
       active.branch += 1
+      active.conditions.push(text.slice(tokens[0].length).trim().toLowerCase().replace(/\s+/g, ' '))
       modelLines.push(line)
       continue
     }
@@ -1176,7 +1192,9 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (directive === '.model') {
         const activeScopes = activeSubcircuits.map(({ name }) => name)
         const model = parseModelCard(text, line, activeSubcircuits.at(-1)!.name, functionAritiesForScopes(functionArities, activeScopes, scopedFunctions))
-        registerModelCard(model, conditionalBlocks.map(({ id, branch }) => ({ id, branch })), seenModelNames, models)
+        registerModelCard(model, conditionalBlocks.map((block) => ({
+          id: block.id, branch: block.branch, signature: conditionalBranchSignature(block), environmentIndependent: conditionalPathEnvironmentIndependent(block),
+        })), seenModelNames, models)
         continue
       }
       if (!directive.startsWith('.')) {
@@ -1211,7 +1229,9 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       modelLines.push(line)
       if (directive === '.model') {
         const model = parseModelCard(text, line, undefined, functionArities)
-        registerModelCard(model, conditionalBlocks.map(({ id, branch }) => ({ id, branch })), seenModelNames, models)
+        registerModelCard(model, conditionalBlocks.map((block) => ({
+          id: block.id, branch: block.branch, signature: conditionalBranchSignature(block), environmentIndependent: conditionalPathEnvironmentIndependent(block),
+        })), seenModelNames, models)
       }
       sawTopLevelRecord = true
       continue
