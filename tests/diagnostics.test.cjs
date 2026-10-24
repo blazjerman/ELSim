@@ -32,6 +32,15 @@ test('ngspice errors written to stderr are retained and map original model lines
   assert.match(diagnostic.hint, /if\(\).*does not provide/i)
 })
 
+test('missing punctuation-named ngspice functions retain their full identifier and imported source line', () => {
+  const modelArtifact = { text: '.SUBCKT AMP IN OUT\nB1 OUT 0 V=twice#(V(IN))', sourceMap: [{ line: 3, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 18 }], diagnostics: [] }
+  const diagnostic = diagnosticForNgspice("Error: no such function 'twice#' at line 3", modelArtifact)
+  assert.equal(diagnostic.sourceId, 'model-file:asset-7')
+  assert.equal(diagnostic.assetId, 'asset-7')
+  assert.equal(diagnostic.assetLine, 18)
+  assert.match(diagnostic.hint, /twice#\(\).*does not provide/i)
+})
+
 test('fatal ngspice errors retain their message and source-line location', () => {
   const message = firstNgspiceError('', 'Fatal error: unknown device model\n    in line no. 7 from file /project.cir', 1)
   assert.equal(message, 'Fatal error: unknown device model in line no. 7 from file /project.cir')

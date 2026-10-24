@@ -39,7 +39,7 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
     ? importedModelAssetIds
     : undefined
   let hint: string | undefined
-  const missingFunction = message.match(/no such function\s+['"]?([A-Za-z_][A-Za-z0-9_]*)/i)?.[1]
+  const missingFunction = message.match(/no such function\s+['"]?([A-Za-z_][A-Za-z0-9!#$%_.\[\]]*)/i)?.[1]
   if (missingFunction && source?.assetId) {
     hint = `The imported model calls ${missingFunction}(), which this ngspice build does not provide. Check for simulator-specific syntax or ask the model supplier for an ngspice-compatible library (source line ${source.assetLine ?? '?'}).`
   } else if (missingFunction) {
