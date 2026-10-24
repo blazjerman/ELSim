@@ -81,6 +81,17 @@ test('unused duplicate imported device models do not block simulation', () => {
   assert.deepEqual(artifact.diagnostics, [])
 })
 
+test('duplicate imported models used inside a placed IC stop simulation', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-amp', kind: 'subcircuit', ref: 'XAMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], value: 'AMP', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'amp-model', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nD1 IN OUT D_SHARED\n.ENDS AMP\n.MODEL D_SHARED D(Is=1n)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'diode-model', filename: 'diode.lib', content: '.MODEL D_SHARED D(Is=2n)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-amp' && /XAMP uses ambiguous imported device model D_SHARED.*amp\.lib:4, diode\.lib:1/.test(diagnostic.message)), true)
+})
+
 test('resistor AC resistance is emitted only as the native AC instance option', () => {
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')

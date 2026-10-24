@@ -255,17 +255,42 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     definitions.push({ filename: asset.filename, sourceLine: model.startLine })
     globalDeviceModelDefinitions.set(key, definitions)
   }
-  for (const part of project.parts) {
-    if (!part.deviceModel) continue
-    const definitions = globalDeviceModelDefinitions.get(part.deviceModel.toLowerCase())
-    if (!definitions || definitions.length < 2) continue
-    const locations = definitions.map(({ filename, sourceLine }) => `${filename}:${sourceLine}`).join(', ')
+  const importedSubcircuitsByName = new Map<string, { assetId: string; definition: ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number] }[]>()
+  for (const { asset, parsed } of parsedModelLibraryEntries) for (const definition of parsed.subcircuits) {
+    const key = definition.name.toLowerCase()
+    const matches = importedSubcircuitsByName.get(key) ?? []
+    matches.push({ assetId: asset.id, definition })
+    importedSubcircuitsByName.set(key, matches)
+  }
+  const reportAmbiguousDeviceModel = (part: Part, modelName: string) => {
+    const definitions = globalDeviceModelDefinitions.get(modelName.toLowerCase())
+    if (!definitions || definitions.length < 2) return
+    const key = `${part.id}:${modelName.toLowerCase()}`
+    if (reportedAmbiguousModels.has(key)) return
+    reportedAmbiguousModels.add(key)
     diagnostics.push({
       severity: 'error',
-      message: `${part.ref} uses ambiguous imported device model ${part.deviceModel}, defined more than once (${locations}). Remove or rename one definition before simulating.`,
+      message: `${part.ref} uses ambiguous imported device model ${modelName}, defined more than once (${definitions.map(({ filename, sourceLine }) => `${filename}:${sourceLine}`).join(', ')}). Remove or rename one definition before simulating.`,
       sourceId: part.id,
       line: 1,
     })
+  }
+  const reportedAmbiguousModels = new Set<string>()
+  for (const part of project.parts) {
+    if (part.deviceModel) reportAmbiguousDeviceModel(part, part.deviceModel)
+    if (part.kind !== 'subcircuit' || !part.modelName || part.sheetId) continue
+    const queue = [...(importedSubcircuitsByName.get(part.modelName.toLowerCase()) ?? [])]
+    const visited = new Set<string>()
+    while (queue.length) {
+      const current = queue.pop()!
+      const key = `${current.assetId}:${current.definition.name.toLowerCase()}`
+      if (visited.has(key)) continue
+      visited.add(key)
+      for (const dependency of current.definition.dependencies) {
+        if (dependency.kind === 'device') reportAmbiguousDeviceModel(part, dependency.modelName)
+        else queue.push(...(importedSubcircuitsByName.get(dependency.modelName.toLowerCase()) ?? []))
+      }
+    }
   }
   const akoExpansion = expandNgspiceAkoModels(parsedModelLibraryEntries)
   for (const issue of akoExpansion.issues) diagnostics.push({ severity: 'error', message: issue.message, sourceId: `model-file:${issue.assetId}`, assetId: issue.assetId, assetLine: issue.sourceLine, line: issue.sourceLine })
