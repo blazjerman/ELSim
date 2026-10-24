@@ -578,6 +578,17 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         reportAmbiguousGlobalParameter(part, parameterName, `behavioral source ${part.ref} expression that references`)
       }
     }
+    if (part.kind === 'subcircuit' && !part.sheetId) {
+      for (const [parameter, expression] of Object.entries(part.modelParameters ?? {})) {
+        const usage = `instance parameter ${parameter} of imported subcircuit ${part.modelName ?? ''}`
+        for (const functionName of ambiguousFunctionCallsInText(expression)) {
+          reportAmbiguousFunctionCall(part, functionName, `${usage} expression that calls`)
+        }
+        for (const parameterName of ambiguousGlobalParametersInText(expression)) {
+          reportAmbiguousGlobalParameter(part, parameterName, `${usage} expression that references`)
+        }
+      }
+    }
     if (part.deviceModel) {
       reportAmbiguousDeviceModel(part, part.deviceModel)
       reportAmbiguousModelReferences(part, part.deviceModel)

@@ -236,6 +236,30 @@ test('a behavioral source cannot reference duplicate imported global parameters'
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'ambiguous-parameter-source' && /B1 uses behavioral source B1 expression that references ambiguous global \.PARAM gain \(first\.lib:1, second\.lib:1\)/i.test(diagnostic.message)), true)
 })
 
+test('an imported IC instance override cannot reference duplicate imported global parameters', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'ambiguous-override-ic', kind: 'subcircuit', ref: 'X1', value: 'PARAM_STAGE', modelName: 'PARAM_STAGE', modelPins: ['IN', 'OUT'], modelParameters: { GAIN: '{BASE}' }, x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'parameter-stage-library', filename: 'stage.lib', content: '.SUBCKT PARAM_STAGE IN OUT PARAMS: GAIN=1\nR1 IN OUT {GAIN}\n.ENDS PARAM_STAGE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'first-parameter-library', filename: 'first.lib', content: '.PARAM BASE=1\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-parameter-library', filename: 'second.lib', content: '.PARAM BASE=2\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'ambiguous-override-ic' && /X1 uses instance parameter GAIN of imported subcircuit PARAM_STAGE expression that references ambiguous global \.PARAM BASE \(first\.lib:1, second\.lib:1\)/i.test(diagnostic.message)), true)
+})
+
+test('an imported IC instance override cannot call duplicate imported global functions', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'ambiguous-function-override-ic', kind: 'subcircuit', ref: 'X1', value: 'FUNCTION_STAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], modelParameters: { GAIN: '{SCALE(2)}' }, x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'function-stage-library', filename: 'stage.lib', content: '.SUBCKT FUNCTION_STAGE IN OUT PARAMS: GAIN=1\nR1 IN OUT {GAIN}\n.ENDS FUNCTION_STAGE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'first-function-library', filename: 'first.lib', content: '.FUNC SCALE(x) {x}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-function-library', filename: 'second.lib', content: '.FUNC SCALE(x) {x*2}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'ambiguous-function-override-ic' && /X1 uses instance parameter GAIN of imported subcircuit FUNCTION_STAGE expression that calls ambiguous global \.FUNC SCALE \(first\.lib:1, second\.lib:1\)/i.test(diagnostic.message)), true)
+})
+
 test('a scoped subcircuit parameter shadows duplicate imported globals', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'scoped-parameter-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'PARAM_STAGE', modelPins: ['IN', 'OUT'], value: 'PARAM_STAGE', x: 800, y: 600, rotation: 0 })
