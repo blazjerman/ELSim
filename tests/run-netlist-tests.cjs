@@ -25,6 +25,7 @@ try {
     path.join(root, 'src/engine/fourier.ts'),
     path.join(root, 'src/engine/resultControl.ts'),
     path.join(root, 'src/engine/noiseSummary.ts'),
+    path.join(root, 'src/engine/sensitivity.ts'),
     path.join(root, 'src/engine/sweep.ts'),
     path.join(root, 'src/engine/measurements.ts'),
     path.join(root, 'src/engine/diagnostics.ts'),

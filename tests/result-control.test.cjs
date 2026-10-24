@@ -37,6 +37,9 @@ test('result control executes the selected AC and DC analyses instead of the def
   const dc = addResultControl('V1 in 0 DC 0\nR1 in 0 1k\n.dc V1 0 5 0.1\n.end')
   assert.match(dc, /\.control\nset filetype=binary\ndc V1 0 5 0\.1\nwrite \/result\.raw all/)
   assert.doesNotMatch(dc, /\nrun\n/)
+
+  const sensitivity = addResultControl('V1 in 0 DC 1 AC 1\nR1 in out 1k\nR2 out 0 1k\n.sens V(out) AC dec 10 1 1meg\n.end')
+  assert.match(sensitivity, /\.control\nset filetype=binary\nsens V\(out\) AC dec 10 1 1meg\nwrite \/result\.raw all/)
 })
 
 test('result control can request ngspice native Fourier output after transient solve', () => {

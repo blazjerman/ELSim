@@ -639,9 +639,10 @@ function AcCursorMarker({ result, frequencies, first, last, minFrequency, maxFre
   </>
 }
 
-function acTraceValue(trace: Trace, index: number, mode: 'magnitude' | 'phase' | 'noise'): number {
+function acTraceValue(trace: Trace, index: number, mode: 'magnitude' | 'phase' | 'noise' | 'sensitivity'): number {
   if (mode === 'noise') return trace.values[index]
   const real = trace.values[index], imaginary = trace.imaginaryValues?.[index] ?? 0
+  if (mode === 'sensitivity') return Math.hypot(real, imaginary)
   return mode === 'magnitude' ? 20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE) : Math.atan2(imaginary, real) * 180 / Math.PI
 }
 
@@ -657,31 +658,31 @@ function AcCursorReadout({ result, frequencies, first, last, shown, colors, trac
   shown: Trace[]
   colors: string[]
   traceIndexById: Map<string, number>
-  mode: 'magnitude' | 'phase' | 'noise'
+  mode: 'magnitude' | 'phase' | 'noise' | 'sensitivity'
   secondCursorIndex: number | null
 }) {
   const cursorValue = useAnalysisCursor(result)
   const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1)
   const hasA = cursorIndex !== null && cursorIndex >= first && cursorIndex <= last
   const hasB = secondCursorIndex !== null && secondCursorIndex >= first && secondCursorIndex <= last
-  const unit = mode === 'noise' ? shown[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'
+  const unit = mode === 'noise' || mode === 'sensitivity' ? shown[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'
   return <div className="cursor-readout" aria-live="polite" aria-atomic="true">{hasA && <><span className="sr-only">Frequency A {frequencies[cursorIndex].toPrecision(5)} hertz. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} A = {acTraceValue(trace, cursorIndex, mode).toPrecision(5)} {mode === 'noise' ? trace.unit : unit}</span>)}</>}{hasA && hasB && <><span className="cursor-delta-time">Δf = {formatEngineeringTick(frequencies[secondCursorIndex] - frequencies[cursorIndex], 'Hz')}</span>{shown.map((trace) => {
     const valueA = acTraceValue(trace, cursorIndex, mode), valueB = acTraceValue(trace, secondCursorIndex, mode)
     const delta = mode === 'phase' ? phaseDifference(valueB, valueA) : valueB - valueA
-    const traceUnit = mode === 'noise' ? trace.unit : unit
+    const traceUnit = mode === 'noise' || mode === 'sensitivity' ? trace.unit : unit
     const color = colors[(traceIndexById.get(trace.id) ?? 0) % colors.length]
     return <span key={`delta-${trace.id}`} style={{ color }}>{trace.label} B = {valueB.toPrecision(5)} {traceUnit} · Δ{trace.label} = {delta.toPrecision(5)} {traceUnit}</span>
   })}</>}</div>
 }
 
-function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColors, transferFunction = false }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; savedColors: Record<string, string>; transferFunction?: boolean }) {
+function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColors, transferFunction = false, sensitivity = false }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; savedColors: Record<string, string>; transferFunction?: boolean; sensitivity?: boolean }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id))
   const traceIndexById = useTraceIndexById(traces)
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorFor = useCallback((index: number) => colors[index % colors.length], [colors])
   return <div className="waveform-view op-view">
-    <div className="waveform-title"><strong>{transferFunction ? 'Small-signal transfer function' : 'DC operating point'}</strong><span>{transferFunction ? 'DC gain and input/output resistance' : `${traces.length} vectors · one solved bias point`}</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>{transferFunction ? 'Small-signal transfer function' : sensitivity ? 'DC sensitivity' : 'DC operating point'}</strong><span>{transferFunction ? 'DC gain and input/output resistance' : sensitivity ? `${traces.length} circuit-parameter sensitivities` : `${traces.length} vectors · one solved bias point`}</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="operating-point traces" colorFor={colorFor}/>
     {shown.length ? <div className="op-table-wrap"><table className="op-table"><thead><tr><th>Vector</th><th>Value</th><th>Unit</th></tr></thead><tbody>{shown.map((trace) => <tr key={trace.id}><td><span style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>●</span> {trace.label}</td><td>{trace.values[0].toPrecision(7)}</td><td>{trace.unit}</td></tr>)}</tbody></table></div> : <div className="op-empty">Select a voltage or current vector to inspect its DC value.</div>}
   </div>
@@ -689,6 +690,7 @@ function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColo
 
 function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors, secondCursorValue, onSecondCursorChange }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string>; secondCursorValue?: number; onSecondCursorChange: (value: number | null) => void }) {
   const isNoise = result.analysis === 'noise'
+  const isSensitivity = result.analysis === 'sens'
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const visibleNoiseUnits = useMemo(() => isNoise ? [...new Set(shown.map((trace) => trace.unit))] : [], [isNoise, shown])
@@ -701,7 +703,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   // The same component renders AC and noise results. Derive the visible mode
   // directly from the current result so switching analyses never paints one
   // frame with the previous mode's labels, ranges, or converted values.
-  const mode = isNoise ? 'noise' : acMode
+  const mode = isNoise ? 'noise' : isSensitivity ? acMode === 'phase' ? 'phase' : 'sensitivity' : acMode
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorFor = useCallback((index: number) => colors[index % colors.length], [colors])
   const plotSize = useResponsivePlotSize()
@@ -714,7 +716,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const valueFor = (trace: Trace, index: number) => {
     const real = trace.values[index]
     const imaginary = trace.imaginaryValues?.[index] ?? 0
-    return mode === 'noise' ? real : mode === 'magnitude' ? 20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE) : Math.atan2(imaginary, real) * 180 / Math.PI
+    return mode === 'noise' ? real : mode === 'sensitivity' ? Math.hypot(real, imaginary) : mode === 'magnitude' ? 20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE) : Math.atan2(imaginary, real) * 180 / Math.PI
   }
   const sampledTraceById = useMemo(() => {
     const sampled = new Map<string, { indices: number[]; dataRange: [number, number] | null; noiseRange: [number, number] | null }>()
@@ -819,23 +821,23 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       (_value, index) => bottom - (valueFor(trace, index) - range.min) / (range.max - range.min || 1) * (bottom - top))
     const accessibleName = mode === 'noise'
       ? `${trace.label}, noise density in ${trace.unit}`
-      : `${trace.label}, AC ${mode === 'magnitude' ? 'magnitude in decibels' : 'phase in degrees'}`
+      : mode === 'sensitivity' ? `${trace.label}, AC sensitivity magnitude in ${trace.unit}` : `${trace.label}, AC ${mode === 'magnitude' ? 'magnitude in decibels' : 'phase in degrees'}`
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], accessibleName }
   }), [traces, shown, first, last, minFrequency, maxFrequency, right, bottom, minValue, maxValue, mode, colors, traceIndexById, sampledIndicesById, noiseWindows.ranges])
   return <div className="waveform-view ac-view">
-    <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><AcCursorTime result={result} frequencies={frequencies}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={verticalZoom} valuePan={verticalPan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : isSensitivity ? 'AC sensitivity response' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><AcCursorTime result={result} frequencies={frequencies}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={verticalZoom} valuePan={verticalPan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <MeasurementCursorControls label={isNoise ? 'Noise measurement cursors' : 'AC measurement cursors'} active={activeCursor} hasSecond={secondCursorIndex !== null} onSelect={setActiveCursor} onAdd={() => { const existing = getAnalysisCursor(result); const current = existing ?? minFrequency; if (existing === null) setAnalysisCursor(result, current); const currentIndex = Math.max(first, Math.min(last, nearestAxisIndex(frequencies, current, 0, Math.max(0, frequencies.length - 1)))); const quarter = Math.max(1, Math.floor((last - first) / 4)); const nextIndex = currentIndex <= first + (last - first) / 2 ? Math.min(last, currentIndex + quarter) : Math.max(first, currentIndex - quarter); onSecondCursorChange(frequencies[nextIndex] ?? maxFrequency); setActiveCursor('B') }} onRemove={() => { onSecondCursorChange(null); setActiveCursor('A') }}/>
-    <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setAcMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setAcMode('phase')}>Phase (°)</button></>}</div>
+    <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' || mode === 'sensitivity' ? 'active' : ''} onClick={() => setAcMode('magnitude')}>{isSensitivity ? 'Magnitude (linear)' : 'Magnitude (dB)'}</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setAcMode('phase')}>Phase (°)</button></>}</div>
     {isNoise && result.noiseSummaries?.length ? <div className="noise-summary" aria-label="Integrated noise results">{result.noiseSummaries.map((summary) => <span key={summary.sweep?.index ?? 'single'}>{summary.sweep ? `${summary.sweep.label}: ` : ''}Output RMS {formatEngineeringTick(summary.outputRms, 'V')} · Input-referred RMS {formatEngineeringTick(summary.inputRms, summary.inputUnit)}</span>)}</div> : null}
     <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : `AC ${mode}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Cursor ${activeCursor} is selected. Use Left and Right arrows to move it, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handleAcCursorKeys} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={handleAcCursorClick}>
-      {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value, primaryNoiseUnit)} y2={yFor(value, primaryNoiseUnit)} className="plot-grid"/><text data-value-unit={isNoise ? primaryNoiseUnit : mode === 'magnitude' ? 'dB' : '°'} x={left - 6} y={yFor(value, primaryNoiseUnit) + 3} textAnchor="end" className="plot-tick">{isNoise ? formatEngineeringTick(value, primaryNoiseUnit) : `${value.toPrecision(3)} ${mode === 'magnitude' ? 'dB' : '°'}`}</text></g> })}
+      {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value, primaryNoiseUnit)} y2={yFor(value, primaryNoiseUnit)} className="plot-grid"/><text data-value-unit={isNoise ? primaryNoiseUnit : mode === 'sensitivity' ? traces[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'} x={left - 6} y={yFor(value, primaryNoiseUnit) + 3} textAnchor="end" className="plot-tick">{isNoise || mode === 'sensitivity' ? formatEngineeringTick(value, mode === 'sensitivity' ? traces[0]?.unit ?? '' : primaryNoiseUnit) : `${value.toPrecision(3)} ${mode === 'magnitude' ? 'dB' : '°'}`}</text></g> })}
       {isNoise && visibleNoiseUnits.filter((unit) => unit !== primaryNoiseUnit).flatMap((unit) => {
         const axisRange = noiseWindows.ranges.get(unit)
         if (!axisRange) return []
         const step = niceTickStep(axisRange.max - axisRange.min, 3)
         return ticksInRange(axisRange.min, axisRange.max, step).filter((value) => Math.abs(value) > step * 1e-8).map((value) => <g key={`noise-${unit}-${value}`} className="plot-value-tick-current"><line x1={right - 3} x2={right} y1={yFor(value, unit)} y2={yFor(value, unit)} className="plot-axis"/><text data-value-unit={unit} x={right + 4} y={yFor(value, unit) + 3} className="plot-tick">{formatEngineeringTick(value, unit)}</text></g>)
       })}
-      <g className="plot-zero-reference">{(isNoise ? visibleNoiseUnits : ['']).map((unit, index) => <g key={`zero-${unit}`}><line x1={left} x2={right} y1={yFor(0, unit)} y2={yFor(0, unit)}/><text data-value-unit={isNoise ? unit : mode === 'magnitude' ? 'dB' : '°'} x={index === 0 ? left - 6 : right + 4} y={yFor(0, unit) + 3} textAnchor={index === 0 ? 'end' : undefined}>{isNoise ? formatEngineeringTick(0, unit) : mode === 'magnitude' ? '0 dB' : '0 °'}</text></g>)}</g>
+      <g className="plot-zero-reference">{(isNoise ? visibleNoiseUnits : ['']).map((unit, index) => <g key={`zero-${unit}`}><line x1={left} x2={right} y1={yFor(0, unit)} y2={yFor(0, unit)}/><text data-value-unit={isNoise ? unit : mode === 'sensitivity' ? traces[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'} x={index === 0 ? left - 6 : right + 4} y={yFor(0, unit) + 3} textAnchor={index === 0 ? 'end' : undefined}>{isNoise || mode === 'sensitivity' ? formatEngineeringTick(0, mode === 'sensitivity' ? traces[0]?.unit ?? '' : unit) : mode === 'magnitude' ? '0 dB' : '0 °'}</text></g>)}</g>
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
       <AcCursorMarker result={result} frequencies={frequencies} first={first} last={last} minFrequency={minFrequency} maxFrequency={maxFrequency} left={left} right={right} top={top} bottom={bottom} secondCursorIndex={secondCursorIndex}/>
@@ -997,10 +999,12 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
 
 export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, valueRanges, onValueRangeChange, traceColors = {}, secondCursorValues, onSecondCursorValueChange, onRunNativeFourier }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; valueRanges?: PlotPanel['valueRanges']; onValueRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, PlotValueRange> | undefined) => void; traceColors?: Record<string, string>; secondCursorValues?: PlotPanel['secondCursorValues']; onSecondCursorValueChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', value: number | null) => void; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void }) {
   const cursorChange = (analysis: 'tran' | 'ac' | 'dc' | 'noise') => (value: number | null) => onSecondCursorValueChange(analysis, value)
-  const plot = result.analysis === 'op' || result.analysis === 'tf'
-    ? <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors} transferFunction={result.analysis === 'tf'}/>
+  const plot = result.analysis === 'op' || result.analysis === 'tf' || result.analysis === 'sens' && result.sensitivityMode === 'dc'
+    ? <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors} transferFunction={result.analysis === 'tf'} sensitivity={result.analysis === 'sens'}/>
     : result.analysis === 'ac'
       ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} valueRanges={valueRanges?.ac} onValueRangeChange={(ranges) => onValueRangeChange('ac', ranges)} onExport={onExport} savedColors={traceColors} secondCursorValue={secondCursorValues?.ac} onSecondCursorChange={cursorChange('ac')}/>
+      : result.analysis === 'sens' && result.sensitivityMode === 'ac'
+        ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} valueRanges={valueRanges?.ac} onValueRangeChange={(ranges) => onValueRangeChange('ac', ranges)} onExport={onExport} savedColors={traceColors} secondCursorValue={secondCursorValues?.ac} onSecondCursorChange={cursorChange('ac')}/>
       : result.analysis === 'noise'
         ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.noise} onRangeChange={(range) => onRangeChange('noise', range)} valueRanges={valueRanges?.noise} onValueRangeChange={(ranges) => onValueRangeChange('noise', ranges)} onExport={onExport} savedColors={traceColors} secondCursorValue={secondCursorValues?.noise} onSecondCursorChange={cursorChange('noise')}/>
         : result.analysis === 'dc'

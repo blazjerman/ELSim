@@ -14,7 +14,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const rows = netlist.trimEnd().split(/\r?\n/)
   const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
   if (endLine === -1) throw new Error('Generated netlist is missing its .end directive.')
-  const analysisCommand = rows.slice(0, endLine).find((line) => /^\s*\.(?:tran|op|ac|dc|noise|tf)\b/i.test(line))?.trim().replace(/^\./, '')
+  const analysisCommand = rows.slice(0, endLine).find((line) => /^\s*\.(?:tran|op|ac|dc|noise|tf|sens)\b/i.test(line))?.trim().replace(/^\./, '')
   if (!analysisCommand) throw new Error('Generated netlist is missing its analysis directive.')
   const analysisType = analysisCommand.split(/\s+/, 1)[0].toLowerCase()
   if (ngspiceFourier && (analysisType !== 'tran' || !Number.isFinite(ngspiceFourier.fundamentalFrequency) || ngspiceFourier.fundamentalFrequency <= 0 || !/^[vi]\([@A-Za-z0-9_.$!#\[\]-]+\)$/i.test(ngspiceFourier.traceId) || !/^(?:[vi]\([A-Za-z0-9_.$!#-]+\)|@[A-Za-z0-9_.$!#-]+\[(?:i|id|ic|ib|ie|ig|is|current)\])$/i.test(ngspiceFourier.vector))) {

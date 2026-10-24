@@ -8,7 +8,7 @@ import {
   spiceSheetScalar, spiceSheetTimeMagnitude, spiceSheetValue, spiceValueMagnitude,
 } from './spiceValues'
 
-export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'tfOutput' | 'tfSource' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase' | 'trnoise.gaussianRms' | 'trnoise.timeStep' | 'trnoise.flickerExponent' | 'trnoise.flickerAmplitude' | 'trnoise.rtsAmplitude' | 'trnoise.rtsCaptureTime' | 'trnoise.rtsEmissionTime'
+export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'tfOutput' | 'tfSource' | 'sensOutput' | 'sensMode' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase' | 'trnoise.gaussianRms' | 'trnoise.timeStep' | 'trnoise.flickerExponent' | 'trnoise.flickerAmplitude' | 'trnoise.rtsAmplitude' | 'trnoise.rtsCaptureTime' | 'trnoise.rtsEmissionTime'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project, connectivity?: Connectivity): AnalysisSettingError[] {
@@ -157,6 +157,30 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     if (!output || resolved.labelNets.get(output.id) === '0') add('tfOutput', 'Choose a labeled, non-ground output node for transfer-function analysis.')
     if (!independentSources.some((part) => part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())) add('tfSource', 'Choose an independent voltage or current input source.')
     if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('tfSource', 'Parameter stepping is not available for transfer-function analysis yet.')
+  } else if (project.simulation.analysis === 'sens') {
+    const settings = project.simulation.sensitivity ?? { outputNode: '', mode: 'dc' as const }
+    const resolved = connectivity ?? analyzeConnectivity(project)
+    const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    if (!output || resolved.labelNets.get(output.id) === '0') add('sensOutput', 'Choose a labeled, non-ground output node for sensitivity analysis.')
+    if (!['dc', 'ac'].includes(settings.mode)) add('sensMode', 'Choose DC or AC sensitivity analysis.')
+    if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('sensMode', 'Parameter stepping is not available for sensitivity analysis.')
+    if (settings.mode === 'ac') {
+      for (const part of independentSources) {
+        const unit = part.kind === 'source' ? 'source' : 'currentSource'
+        const magnitudeText = part.acMagnitude ?? (part.kind === 'source' ? project.simulation.sourceAcMagnitude ?? '1 V' : part.value)
+        const magnitude = spiceNumber(magnitudeText, unit)
+        const magnitudeValue = spiceMagnitude(magnitudeText, part.kind === 'source' ? 'voltage' : 'current')
+        if (magnitude === null || magnitudeValue === null || magnitudeValue < 0) add('partAcMagnitude', `${part.ref} AC magnitude must be a valid nonnegative ${part.kind === 'source' ? 'voltage' : 'current'} value.`, part.id)
+        const phase = spiceScalar(part.acPhase ?? '0', '')
+        if (phase === null || !Number.isFinite(Number(phase))) add('partAcPhase', `${part.ref} AC phase must be a finite numeric value in degrees.`, part.id)
+      }
+      const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
+      if (!['dec', 'oct', 'lin'].includes(sweep.scale)) add('acScale', 'Choose a supported frequency sweep scale.')
+      if (!Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000) add('acPoints', 'Enter from 1 to 10,000 frequency points.')
+      const start = spiceMagnitude(sweep.startFrequency, 'frequency'), stop = spiceMagnitude(sweep.stopFrequency, 'frequency')
+      if (start === null || start <= 0) add('acStartFrequency', 'Enter a positive start frequency, such as 10 Hz.')
+      if (stop === null || stop <= 0 || start !== null && stop <= start) add('acStopFrequency', 'Stop frequency must be greater than the start frequency.')
+    }
   } else if (project.simulation.analysis === 'noise') {
     const sweep = project.simulation.noiseSweep ?? { outputNode: '', inputSource: '', scale: 'dec' as const, points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
     const resolved = connectivity ?? analyzeConnectivity(project)

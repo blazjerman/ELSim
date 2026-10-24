@@ -15,6 +15,18 @@ const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
 const { dcSweepPointCount, MAX_DC_SWEEP_POINTS } = require(path.join(build, 'domain/dcSweep.js'))
 const { parseNoiseSummaries } = require(path.join(build, 'engine/noiseSummary.js'))
+const { labelSensitivityTraces } = require(path.join(build, 'engine/sensitivity.js'))
+
+test('ngspice sensitivity vectors retain numeric data and get derivative labels', () => {
+  const source = { id: 'v(r1)', label: 'V(r1)', unit: 'V', axisLabel: 'Frequency', axisUnit: 'Hz', axis: Float64Array.from([1, 10]), values: Float64Array.from([-0.2, -0.1]), imaginaryValues: Float64Array.from([0.03, 0]) }
+  const traces = labelSensitivityTraces([source, { ...source, id: 'v(r1:af)' }, { ...source, id: 'v(r2)' }], 'out')
+  assert.deepEqual(traces.map(({ id, label, unit, axis, values, imaginaryValues }) => ({ id, label, unit, axis: [...axis], values: [...values], imaginaryValues: [...(imaginaryValues ?? [])] })), [
+    { id: 'sens:r1', label: '∂V(out)/∂r1', unit: 'V per parameter unit', axis: [1, 10], values: [-0.2, -0.1], imaginaryValues: [0.03, 0] },
+    { id: 'sens:r1:af', label: '∂V(out)/∂r1:af', unit: 'V per parameter unit', axis: [1, 10], values: [-0.2, -0.1], imaginaryValues: [0.03, 0] },
+    { id: 'sens:r2', label: '∂V(out)/∂r2', unit: 'V per parameter unit', axis: [1, 10], values: [-0.2, -0.1], imaginaryValues: [0.03, 0] },
+  ])
+  assert.deepEqual(labelSensitivityTraces([{ ...source, id: 'frequency' }], 'out'), [])
+})
 
 test('integrated noise totals parse for voltage and current inputs and retain sweep labels', () => {
   const output = 'onoise_total = 9.099310e-08\ninoise_total = 1.819862e-07\nonoise_total = 1.2e-07\ninoise_total = 2.4e-07'
@@ -36,6 +48,28 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
   assert.doesNotMatch(artifact.text, /^\.temp /m)
+})
+
+test('DC and AC sensitivity settings generate ngspice native .sens analyses', () => {
+  const dcProject = createStarterProject()
+  dcProject.simulation.analysis = 'sens'
+  dcProject.simulation.sensitivity = { outputNode: 'vout', mode: 'dc' }
+  const dc = createNetlistArtifact(dcProject)
+  assert.match(dc.text, /^\.sens V\(vout\)$/mi)
+  assert.deepEqual(validateAnalysisSettings(dcProject), [])
+  assert.deepEqual(dc.diagnostics.filter(({ severity }) => severity === 'error'), [])
+
+  const acProject = createStarterProject()
+  acProject.simulation.analysis = 'sens'
+  acProject.simulation.sensitivity = { outputNode: 'vout', mode: 'ac' }
+  acProject.simulation.acSweep = { scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
+  const ac = createNetlistArtifact(acProject)
+  assert.match(ac.text, /^\.sens V\(vout\) AC dec 10 1 1meg$/mi)
+  assert.deepEqual(validateAnalysisSettings(acProject), [])
+  assert.deepEqual(ac.diagnostics.filter(({ severity }) => severity === 'error'), [])
+
+  acProject.simulation.sensitivity.outputNode = '0'
+  assert.equal(validateAnalysisSettings(acProject).find((error) => error.field === 'sensOutput')?.message, 'Choose a labeled, non-ground output node for sensitivity analysis.')
 })
 
 test('unsupported browser ngspice formal punctuation reports the exact imported source line', () => {

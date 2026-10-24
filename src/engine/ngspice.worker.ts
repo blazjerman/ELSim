@@ -3,6 +3,7 @@ import { parseRawTraces, rawTraceUnit, readRawFileAndRelease } from './raw'
 import { addResultControl } from './resultControl'
 import { parseNoiseSummaries } from './noiseSummary'
 import { parseNgspiceFourierOutputs } from './fourier'
+import { labelSensitivityTraces } from './sensitivity'
 import { parseImportedMeasurementOutput, parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
 import { isEngineRequest, transferableTraceBuffers, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
@@ -60,7 +61,7 @@ function makeTraces(rawData: string | Uint8Array): Trace[] {
 
 async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: Extract<EngineRequest, { type: 'run' }>['ngspiceFourier']): Promise<void> {
   const configuredAnalysis = metadata.settings.analysis
-  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' || configuredAnalysis === 'tf' ? configuredAnalysis : undefined
+  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' || configuredAnalysis === 'tf' || configuredAnalysis === 'sens' ? configuredAnalysis : undefined
   const stdout: string[] = []
   const stderr: string[] = []
   const profileStarted = profileWorker ? performance.now() : 0
@@ -91,7 +92,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
     module.FS.writeFile('/project.cir', runDeck)
-    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'tf' ? 'small-signal transfer-function' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'tf' ? 'small-signal transfer-function' : metadata.settings.analysis === 'sens' ? 'sensitivity' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
     const solverStarted = profileWorker ? performance.now() : 0
     const status = module.callMain(['-b', '/project.cir'])
     if (profileWorker) solverMs = performance.now() - solverStarted
@@ -119,7 +120,15 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     } catch { /* Labels fall back when older or external engine clients omit this setting. */ }
     const inputRef = typeof tfSettings?.inputSource === 'string' ? tfSettings.inputSource : 'input source'
     const inputUnit = /^I/i.test(inputRef) ? 'A' : 'V'
-    const traces = analysis === 'tf'
+    const traces = analysis === 'sens'
+      ? labelSensitivityTraces(rawTraces, (() => {
+        try {
+          const rawSettings = metadata.settings.simulation
+          const simulation = typeof rawSettings === 'string' ? JSON.parse(rawSettings) : undefined
+          return typeof simulation?.sensitivity?.outputNode === 'string' ? simulation.sensitivity.outputNode : 'output'
+        } catch { return 'output' }
+      })())
+      : analysis === 'tf'
       ? rawTraces.map((trace) => {
         const id = trace.id.toLowerCase()
         if (id.includes('transfer_function')) return { ...trace, label: 'DC transfer gain', unit: inputUnit === 'A' ? 'V/A' : 'V/V' }
@@ -150,7 +159,14 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       sourceMap: artifact.sourceMap,
       traces,
       diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics, ...importedMeasurementOutput.diagnostics],
-      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf',
+      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens',
+      ...(analysis === 'sens' ? { sensitivityMode: (() => {
+        try {
+          const rawSettings = metadata.settings.simulation
+          const simulation = typeof rawSettings === 'string' ? JSON.parse(rawSettings) : undefined
+          return simulation?.sensitivity?.mode === 'ac' ? 'ac' as const : 'dc' as const
+        } catch { return 'dc' as const }
+      })() } : {}),
       measurements: [
         ...measurementOutput.results.filter((measurement) => !ambiguousProjectMeasurementIds.has(measurement.id.toLowerCase())),
         ...importedMeasurementOutput.results,
