@@ -298,6 +298,16 @@ function parseDisplayedTimeSeconds(value: string): number {
   return Number(match[1]) * scale[match[2].toLowerCase()]
 }
 
+test('keyboard users can skip the header and toolbar to reach the schematic', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const skipLink = page.getByRole('link', { name: 'Skip to schematic workspace' })
+  await page.keyboard.press('Tab')
+  await expect(skipLink).toBeFocused()
+  await expect.poll(() => skipLink.evaluate((element) => Number.parseFloat(getComputedStyle(element).top))).toBeGreaterThanOrEqual(0)
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('main', { name: 'Schematic workspace' })).toBeFocused()
+})
+
 test('quick tour explains the current workspace and project save flow', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Open quick tour' }).click()
