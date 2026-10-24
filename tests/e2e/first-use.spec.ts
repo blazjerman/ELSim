@@ -421,14 +421,16 @@ test('keyboard shortcut reference matches editor controls and restores focus', {
   await expect(trigger).toBeFocused()
 })
 
-test('Ctrl+S saves the current project from the editor', { tag: '@ui-smoke' }, async ({ page }) => {
+test('Ctrl/Meta+S saves the current project from the editor', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
   await page.goto('/')
   await expect(page.locator('svg.schematic')).toBeVisible()
-  const downloadPromise = page.waitForEvent('download')
-  await page.keyboard.press('Control+s')
-  const download = await downloadPromise
-  expect(download.suggestedFilename()).toMatch(/\.elsim$/)
+  for (const modifier of ['Control', 'Meta']) {
+    const downloadPromise = page.waitForEvent('download')
+    await page.keyboard.press(`${modifier}+s`)
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toMatch(/\.elsim$/)
+  }
 })
 
 test('project inspector reports the current project format version', { tag: '@ui-smoke' }, async ({ page }) => {

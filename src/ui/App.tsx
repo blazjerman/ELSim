@@ -2207,7 +2207,7 @@ export default function App() {
       const modalOpen = engineSetupOpen || pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || pendingModelImportBatch !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !editingText) {
         event.preventDefault()
-        if (!modalOpen) saveProject()
+        if (!event.repeat && !modalOpen) saveProject()
         return
       }
       if (event.key === '/' && !modalOpen && !editingText) { event.preventDefault(); componentSearchRef.current?.focus(); return }
