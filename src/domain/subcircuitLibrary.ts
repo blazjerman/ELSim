@@ -677,10 +677,10 @@ function conditionalPathEnvironmentIndependent(block: { conditions: string[] }):
   // Across separate files, identical source text is not enough when names can
   // bind to different .PARAM values. Only numeric-only expressions are safe.
   return block.conditions.every((condition) => {
-    // SPICE numbers may carry a scale factor and a conventional unit suffix
-    // (for example 1k, 2.2meg, or 5mV). These remain literal constants; the
-    // letters must not make an otherwise parameter-free condition look scoped.
-    const withoutNumbers = condition.replace(/(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?/gi, '')
+    // SPICE numbers may carry a scale factor (including `mil`) followed by
+    // decorative unit text (for example 1k, 2.2meg, 5mV, or 5kOhm). These
+    // remain literal constants; their letters must not look like parameters.
+    const withoutNumbers = condition.replace(/(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*/gi, '')
     return /^[\s+\-*/^%<>=!&|(),{}]*$/.test(withoutNumbers)
   })
 }
