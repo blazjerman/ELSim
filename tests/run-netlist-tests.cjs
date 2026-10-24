@@ -55,6 +55,7 @@ try {
     path.join(root, 'src/domain/sceneEdit.ts'),
     path.join(root, 'src/domain/simulationPresets.ts'),
     path.join(root, 'src/domain/behavioralExpression.ts'),
+    path.join(root, 'src/domain/modelDialectDiagnostics.ts'),
     path.join(root, 'src/domain/projectArchive.ts'),
     path.join(root, 'src/domain/connectivity.ts'),
     path.join(root, 'src/domain/subcircuitLibrary.ts'),

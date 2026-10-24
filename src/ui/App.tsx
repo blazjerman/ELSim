@@ -16,8 +16,8 @@ import { createPartClipboard, resolvePartClipboard, type PartClipboard } from '.
 import { fitEditorView } from '../domain/editorView'
 import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
-import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelProvenanceForReplacement, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
-import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
+import { analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelProvenanceForReplacement, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
+import type { ModelDialectWarning, SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseSymbolAsset } from '../domain/symbolAsset'
 import { createDefaultElsimSymbol, defaultElsimPinSides, type ElsimPinSide } from '../domain/elsimSymbol'
@@ -393,6 +393,7 @@ export default function App() {
   const [autosaveStatus, setAutosaveStatus] = useState<'saving' | 'saved' | 'recovered' | 'error'>('saving')
   const [projectRecoveryReady, setProjectRecoveryReady] = useState(false)
   const [importWarnings, setImportWarnings] = useState<string[]>([])
+  const [modelDialectWarningState, setModelDialectWarningState] = useState<{ revision: string; warnings: (ModelDialectWarning & { filename: string; assetId: string })[] }>({ revision: '', warnings: [] })
   const [compatibilityDiagnostic, setCompatibilityDiagnostic] = useState<SimulationDiagnostic | null>(null)
   const [modelSourceReview, setModelSourceReview] = useState<{ assetId: string; line: number } | null>(null)
   const [compatibilityWarningLimit, setCompatibilityWarningLimit] = useState(20)
@@ -736,6 +737,18 @@ export default function App() {
     return () => cancelAnimationFrame(frame)
   }, [playbackRunning, playbackAvailable, transientAxis, playbackRate])
   const modelLibraryRevision = useMemo(() => JSON.stringify((project.modelAssets ?? []).map((asset) => [asset.id, asset.filename, asset.sha256, asset.selectedSections ?? []])), [project.modelAssets])
+  useEffect(() => {
+    const revision = modelLibraryRevision
+    const assets = project.modelAssets ?? []
+    if (!assets.length) { setModelDialectWarningState({ revision, warnings: [] }); return }
+    let active = true
+    void import('../domain/modelDialectDiagnostics').then(({ analyzeLtspiceModelDialect }) => {
+      if (active) setModelDialectWarningState({ revision, warnings: assets.flatMap((asset) => analyzeLtspiceModelDialect(asset.content).map((warning) => ({ ...warning, filename: asset.filename, assetId: asset.id }))) })
+    }).catch(() => {
+      if (active) setModelDialectWarningState({ revision, warnings: [] })
+    })
+    return () => { active = false }
+  }, [modelLibraryRevision])
   const connectivity = useMemo(() => analyzeConnectivity(project), [project.parts, project.wires, project.junctions, project.netLabels])
   // Waveform/window preferences replace the Project object without changing the
   // schematic scene. Keep the expensive SVG editor behind its own scene identity.
@@ -855,7 +868,7 @@ export default function App() {
   }, [importedDeviceModels, importedDeviceModelSearchText, importedDeviceModelQuery])
   const visibleImportedDeviceModels = filteredImportedDeviceModels.slice(0, visibleImportedDeviceModelCount)
   const modelDependencyAnalysis = modelLibraryAnalysis.dependencies
-  const modelDialectWarnings = useMemo(() => (project.modelAssets ?? []).flatMap((asset) => analyzeLtspiceModelDialect(asset.content).map((warning) => ({ ...warning, filename: asset.filename, assetId: asset.id }))), [modelLibraryRevision])
+  const modelDialectWarnings = modelDialectWarningState.revision === modelLibraryRevision ? modelDialectWarningState.warnings : []
   const schematicCompatibilityWarnings = useMemo(() => {
     const sources = [project.importedSchematicSource, ...(project.importedChildSchematicSources ?? [])].filter((source): source is NonNullable<typeof project.importedSchematicSource> => Boolean(source))
     if (!sources.length) return []

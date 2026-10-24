@@ -6,7 +6,8 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelProvenanceForReplacement, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelProvenanceForReplacement, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect } = require(path.join(build, 'domain/modelDialectDiagnostics.js'))
 const { expandNgspiceAkoModels } = require(path.join(build, 'domain/ngspiceAko.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
@@ -1417,6 +1418,26 @@ test('warns at source when an imported B-source uses int() unsupported by the pi
   assert.match(warning.impact, /Browser ngspice rejects int\(\)/)
   assert.match(warning.suggestion, /sgn\(x\)\*floor\(abs\(x\)\)/)
   assert.equal(source.includes('int(V(IN))'), true)
+})
+
+test('warns for unsupported B-source functions hidden in used imported .FUNC helpers', () => {
+  const source = [
+    '.SUBCKT helpers IN OUT',
+    '.FUNC square(x) {sqr(x)}',
+    '.FUNC truncate(x) {int(x)}',
+    '.FUNC chained(x) {square(x)}',
+    '.FUNC unused(x) {int(x)}',
+    'B1 OUT 0 V=chained(V(IN))',
+    'B2 OUT 0 V=truncate(V(IN))',
+    '.ENDS helpers',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [2, 'Imported .FUNC uses B-source sqr()'],
+    [3, 'Imported .FUNC uses B-source int()'],
+  ])
+  assert.match(warnings[0].suggestion, /sqr\(x\) with x\*x/)
+  assert.match(warnings[1].suggestion, /int\(x\) with sgn\(x\)\*floor\(abs\(x\)\)/)
 })
 
 test('flags LTspice idt() behavioral functions rejected by the pinned browser ngspice engine', () => {
