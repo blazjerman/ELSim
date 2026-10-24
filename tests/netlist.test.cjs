@@ -140,6 +140,27 @@ test('a placed IC cannot call an imported model with an ambiguous global functio
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
 })
 
+test('same-arity duplicate functions in one imported library are preflighted when used', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [{
+    id: 'duplicate-function-library',
+    filename: 'duplicate-functions.lib',
+    content: [
+      '.FUNC SCALE!(x$) {x$}',
+      '.FUNC SCALE!(y$) {y$*2}',
+      '.MODEL DLOCAL D(IS={SCALE!(1)*1e-14} N=1)',
+      '.SUBCKT FUNCTION_STAGE IN OUT',
+      'D1 IN OUT DLOCAL',
+      '.ENDS FUNCTION_STAGE',
+    ].join('\n') + '\n',
+    licenseStatus: 'unknown',
+    importedAt: new Date(0).toISOString(),
+  }]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE! \(duplicate-functions\.lib:1, duplicate-functions\.lib:2\)/i.test(diagnostic.message)), true)
+})
+
 test('a behavioral source cannot call an ambiguous imported global function', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'behavioral-output', kind: 'behavioral', ref: 'B1', value: 'SCALE!(V(vin))', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })

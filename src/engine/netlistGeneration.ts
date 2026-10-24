@@ -261,11 +261,25 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     globalDeviceModelsByName.set(key, models)
   }
   const globalFunctionDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
-  for (const { asset, parsed } of parsedModelLibraryEntries) for (const definition of parsed.functions) {
-    const key = definition.name.toLowerCase()
-    const definitions = globalFunctionDefinitions.get(key) ?? []
-    definitions.push({ filename: asset.filename, sourceLine: definition.sourceLine })
-    globalFunctionDefinitions.set(key, definitions)
+  for (const { asset, parsed } of parsedModelLibraryEntries) {
+    let conditionalDepth = 0
+    let subcircuitDepth = 0
+    for (const record of parsed.modelRecords) {
+      const text = record.text.trim()
+      if (!text || text.startsWith('*')) continue
+      const directive = text.split(/\s+/, 1)[0].toLowerCase()
+      if (directive === '.if') { conditionalDepth += 1; continue }
+      if (directive === '.endif') { conditionalDepth = Math.max(0, conditionalDepth - 1); continue }
+      if (directive === '.subckt') { subcircuitDepth += 1; continue }
+      if (directive === '.ends') { subcircuitDepth = Math.max(0, subcircuitDepth - 1); continue }
+      if (conditionalDepth || subcircuitDepth || directive !== '.func') continue
+      const name = text.match(/^\.func\s+([^\s(=]+)/i)?.[1]
+      if (!name) continue
+      const key = name.toLowerCase()
+      const definitions = globalFunctionDefinitions.get(key) ?? []
+      definitions.push({ filename: asset.filename, sourceLine: record.sourceLine })
+      globalFunctionDefinitions.set(key, definitions)
+    }
   }
   const ambiguousGlobalFunctionNames = [...globalFunctionDefinitions].filter(([, definitions]) => definitions.length > 1).map(([name]) => name)
   const ambiguousFunctionCallsInText = (text: string, shadowedFunctions: ReadonlySet<string> = new Set()) => ambiguousGlobalFunctionNames.filter((functionName) => {
