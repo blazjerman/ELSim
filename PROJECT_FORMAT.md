@@ -42,6 +42,8 @@ An inductor may set `mutualCouplings: [{ "partnerId": "...", "coefficient": "0.9
 
 `simulation.transientLowerIterationLimit` optionally sets ngspice's transient lower iteration limit (`ITL3`) to a positive integer from 1 through 1,000,000. Ngspice's manual gives a default of 4. It is emitted only for transient analysis; omission preserves the simulator default.
 
+`simulation.dcSourceSteppingSteps` optionally sets ngspice's `SRCSTEPS` (also known as `ITL6`) to an integer from 0 through 1,000,000. A positive value enables source stepping for the DC operating-point solve; `0` disables it. This convergence method ramps independent sources from zero toward their final values and can help some nonlinear circuits, at the cost of extra solve work. The setting is emitted for all analyses because ngspice may perform an operating-point solve before transient, AC, or noise analysis; omission leaves the solver default unchanged.
+
 `simulation.skipAcOperatingPoint` optionally enables ngspice's `NOOPAC` behavior before AC analysis. This can help linear circuits with ideal LC loops that fail during an unnecessary DC operating-point solve. Ngspice still performs an operating-point solve when it detects nonlinear devices. The option is off by default and is emitted only for AC analysis.
 
 `simulation.startSavingTime` is an optional transient time string. It maps to ngspice's `.tran` `tstart` argument: the solver still integrates from time zero, but waveform samples before this time are not retained. The value must be nonnegative and earlier than `stopTime`; omitting it or leaving it blank saves data from time zero.

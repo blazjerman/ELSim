@@ -1468,6 +1468,7 @@
         "minimumConductance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
         "dcIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "dcTransferIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "dcSourceSteppingSteps": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "transientLowerIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "transientIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
         "transientTotalIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },

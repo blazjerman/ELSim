@@ -1664,6 +1664,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: `analysis:${field}`, line: rows.length })
     } else if (applies) append(`.options ${option}=${Number(value)}`, `analysis:${field}`, 'generated')
   }
+  if (includeHierarchyProbes && project.simulation.dcSourceSteppingSteps !== undefined) {
+    const value = project.simulation.dcSourceSteppingSteps
+    if (!/^\d+$/.test(value.trim()) || !Number.isSafeInteger(Number(value)) || Number(value) < 0 || Number(value) > 1_000_000) {
+      const message = 'Ngspice DC source-stepping steps must be an integer from 0 to 1000000.'
+      append(`* ERROR: ${cleanComment(message)}`, 'analysis:dcSourceSteppingSteps', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:dcSourceSteppingSteps', line: rows.length })
+    } else append(`.options srcsteps=${Number(value)}`, 'analysis:dcSourceSteppingSteps', 'generated')
+  }
   if (includeHierarchyProbes && project.simulation.transientTotalIterationLimit !== undefined) {
     const value = project.simulation.transientTotalIterationLimit
     if (!/^\d+$/.test(value.trim()) || !Number.isSafeInteger(Number(value)) || Number(value) < 0 || Number(value) > 1_000_000) {

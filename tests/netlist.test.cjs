@@ -888,6 +888,27 @@ test('ngspice transient total iteration limit allows zero to disable the limit',
   }
 })
 
+test('ngspice DC source stepping is optional, validated, and source mapped', () => {
+  const project = createStarterProject()
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options srcsteps=/mi)
+  project.simulation.dcSourceSteppingSteps = '12'
+  let artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.options srcsteps=12$/mi)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:dcSourceSteppingSteps' && source.role === 'generated'))
+  project.simulation.analysis = 'ac'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.match(artifact.text, /^\.options srcsteps=12$/mi)
+  project.simulation.dcSourceSteppingSteps = '0'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.match(artifact.text, /^\.options srcsteps=0$/mi)
+  for (const value of ['-1', '1.5', '1000001']) {
+    project.simulation.dcSourceSteppingSteps = value
+    assert.throws(() => validateProject(project), /DC source-stepping steps must be an integer from 0 to 1000000/i)
+    assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:dcSourceSteppingSteps'))
+  }
+})
+
 test('transient truncation-error tolerance is validated and only emitted for transient analysis', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options trtol=/mi)
