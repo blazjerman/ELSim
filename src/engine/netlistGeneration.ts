@@ -579,6 +579,31 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         reportAmbiguousGlobalParameter(part, parameterName, `behavioral source ${part.ref} expression that references`)
       }
     }
+    if (part.kind === 'subcircuit' && part.sheetId) {
+      const childSheet = project.sheets.find((sheet) => sheet.id === part.sheetId)
+      if (childSheet) {
+        const childParameterNames = new Set((childSheet.parameters ?? []).map((parameter) => parameter.name.toLowerCase()))
+        for (const parameter of childSheet.parameters ?? []) {
+          const usage = `parameter default ${parameter.name} of reusable sheet ${childSheet.name}`
+          for (const functionName of ambiguousFunctionCallsInText(parameter.defaultValue)) {
+            reportAmbiguousFunctionCall(part, functionName, `${usage} that calls`)
+          }
+          for (const parameterName of ambiguousGlobalParametersInText(parameter.defaultValue, childParameterNames)) {
+            reportAmbiguousGlobalParameter(part, parameterName, `${usage} that references`)
+          }
+        }
+        const callerParameterNames = new Set(sheetParameters.map((parameter) => parameter.name.toLowerCase()))
+        for (const [parameter, expression] of Object.entries(part.sheetParameters ?? {})) {
+          const usage = `instance parameter ${parameter} of reusable sheet ${childSheet.name}`
+          for (const functionName of ambiguousFunctionCallsInText(expression)) {
+            reportAmbiguousFunctionCall(part, functionName, `${usage} expression that calls`)
+          }
+          for (const parameterName of ambiguousGlobalParametersInText(expression, callerParameterNames)) {
+            reportAmbiguousGlobalParameter(part, parameterName, `${usage} expression that references`)
+          }
+        }
+      }
+    }
     if (part.kind === 'subcircuit' && !part.sheetId) {
       for (const [parameter, expression] of Object.entries(part.modelParameters ?? {})) {
         const usage = `instance parameter ${parameter} of imported subcircuit ${part.modelName ?? ''}`

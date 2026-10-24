@@ -321,6 +321,44 @@ test('sheet block parameters provide defaults, per-instance overrides, and safe 
   assert.match(createNetlistArtifact(unsafeExpression).diagnostics.find((item) => item.severity === 'error')?.message ?? '', /invalid numeric value/)
 })
 
+test('reusable sheet parameter defaults and overrides preflight ambiguous imported functions', () => {
+  const project = createBlockProject()
+  const child = project.sheets[1]
+  child.parameters = [{ id: 'param-load', name: 'RLOAD', defaultValue: '{SCALE(1)}' }]
+  child.parts[0].value = '{RLOAD}'
+  project.parts[1].sheetParameters = { RLOAD: '{SCALE(2)}' }
+  project.sheets[0].parts = project.parts
+  project.modelAssets = [
+    { id: 'first-function', filename: 'first.lib', content: '.FUNC SCALE(x) {x}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-function', filename: 'second.lib', content: '.FUNC SCALE(x) {x*2}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  const conflicts = artifact.diagnostics.filter((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'root-block' && /ambiguous global \.FUNC SCALE/i.test(diagnostic.message))
+  assert.equal(conflicts.length, 2, JSON.stringify(artifact.diagnostics))
+  assert.equal(conflicts.some((diagnostic) => diagnostic.message.includes('parameter default RLOAD of reusable sheet Load')), true)
+  assert.equal(conflicts.some((diagnostic) => diagnostic.message.includes('instance parameter RLOAD of reusable sheet Load')), true)
+  assert.equal(conflicts.every((diagnostic) => diagnostic.message.includes('first.lib:1, second.lib:1')), true)
+})
+
+test('reusable sheet parameter defaults and overrides preflight ambiguous imported parameters', () => {
+  const project = createBlockProject()
+  const child = project.sheets[1]
+  child.parameters = [{ id: 'param-load', name: 'RLOAD', defaultValue: '{BASE}' }]
+  child.parts[0].value = '{RLOAD}'
+  project.parts[1].sheetParameters = { RLOAD: '{BASE}' }
+  project.sheets[0].parts = project.parts
+  project.modelAssets = [
+    { id: 'first-parameter', filename: 'first.lib', content: '.PARAM BASE=1\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-parameter', filename: 'second.lib', content: '.PARAM BASE=2\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  const conflicts = artifact.diagnostics.filter((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'root-block' && /ambiguous global \.PARAM BASE/i.test(diagnostic.message))
+  assert.equal(conflicts.length, 2)
+  assert.equal(conflicts.some((diagnostic) => diagnostic.message.includes('parameter default RLOAD of reusable sheet Load')), true)
+  assert.equal(conflicts.some((diagnostic) => diagnostic.message.includes('instance parameter RLOAD of reusable sheet Load')), true)
+  assert.equal(conflicts.every((diagnostic) => diagnostic.message.includes('first.lib:1, second.lib:1')), true)
+})
+
 test('sheet block parameter defaults and overrides can call imported project functions', () => {
   const project = createBlockProject()
   project.modelAssets = [{ id: 'functions', filename: 'functions.lib', content: '.FUNC DOUBLE(x) {2k*x}\n', sha256: 'f'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
