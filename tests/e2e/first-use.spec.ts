@@ -11848,7 +11848,24 @@ test('ngspice parser failure without a source line lists all plausible imported 
   await expect(diagnostic).toContainText('did not report a source line')
   await expect(diagnostic).toContainText('bad-diode.lib')
   await expect(diagnostic).toContainText('other-devices.lib')
-  await expect(diagnostic.getByRole('button', { name: 'Replace this library' })).toHaveCount(2)
+  const replaceCandidates = diagnostic.getByRole('button', { name: 'Replace this library' })
+  await expect(replaceCandidates).toHaveCount(2)
+  await expectVisibleKeyboardControlsNamed(page)
+  await replaceCandidates.first().evaluate((target) => {
+    const candidates = [...document.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]')]
+      .filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden' && !element.closest('[aria-hidden="true"]'))
+    const index = candidates.indexOf(target as HTMLElement)
+    if (index <= 0) throw new Error('Replacement action has no preceding keyboard stop')
+    candidates[index - 1].focus()
+  })
+  await page.keyboard.press('Tab')
+  await expect(replaceCandidates.first()).toBeFocused()
+  const focusStyle = await replaceCandidates.first().evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { outline: style.outlineStyle, width: Number.parseFloat(style.outlineWidth) }
+  })
+  expect(focusStyle.outline).toBe('solid')
+  expect(focusStyle.width).toBeGreaterThanOrEqual(2)
 })
 
 test('inductors expose mutual coupling, mark pin-one polarity, and emit a native K card', { tag: '@ui-smoke' }, async ({ page }) => {
