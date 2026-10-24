@@ -152,18 +152,22 @@ test('pasting a block with a missing copied definition returns an actionable err
 
 test('copying an imported IC carries its transitive model libraries and custom symbol', () => {
   const project = createStarterProject()
-  const topLibrary = '.SUBCKT USER_TOP IN OUT\nXCORE IN OUT USER_CORE\n.ENDS USER_TOP\n'
+  const topLibrary = '.SUBCKT USER_TOP IN OUT\nQ1 OUT IN 0 CHILD_NPN\nXCORE IN OUT USER_CORE\n.ENDS USER_TOP\n'
   const coreLibrary = '.SUBCKT USER_CORE IN OUT\nRCORE IN OUT 1k\n.ENDS USER_CORE\n'
+  const childModelLibrary = '.MODEL CHILD_NPN AKO:BASE_NPN NPN(BF=100)\n'
+  const baseModelLibrary = '.MODEL BASE_NPN NPN(IS=1e-14 BF=80)\n'
   const part = { id: 'x-user', kind: 'subcircuit', ref: 'XUSER', value: 'USER_TOP', modelName: 'USER_TOP', modelPins: ['IN', 'OUT'], componentDefinitionId: 'imported:test', symbolAssetId: 'symbol-user', x: 500, y: 360, rotation: 0 }
   project.parts = [part]
   project.sheets[0] = { ...project.sheets[0], parts: [part] }
   project.modelAssets = [
     { id: 'model-top', filename: 'user-top.lib', content: topLibrary, sha256: 'top-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
     { id: 'model-core', filename: 'user-core.lib', content: coreLibrary, sha256: 'core-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'model-child', filename: 'user-device.lib', content: childModelLibrary, sha256: 'child-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'model-base', filename: 'user-base.lib', content: baseModelLibrary, sha256: 'base-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
   ]
   project.symbolAssets = [{ id: 'symbol-user', filename: 'user-top.asy', content: 'Version 4\n', sha256: 'symbol-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
   const clipboard = createPartClipboard(project, ['x-user'])
-  assert.deepEqual(clipboard.modelAssets.map((asset) => asset.filename).sort(), ['user-core.lib', 'user-top.lib'])
+  assert.deepEqual(clipboard.modelAssets.map((asset) => asset.filename).sort(), ['user-base.lib', 'user-core.lib', 'user-device.lib', 'user-top.lib'])
   assert.deepEqual(clipboard.symbolAssets.map((asset) => asset.filename), ['user-top.asy'])
 
   const destination = createStarterProject()
@@ -172,7 +176,7 @@ test('copying an imported IC carries its transitive model libraries and custom s
   let nextId = 0
   const resolved = resolvePartClipboard(destination, clipboard, () => `generated-${++nextId}`)
   assert.equal('error' in resolved, false)
-  assert.deepEqual(resolved.modelAssets.map((asset) => asset.filename).sort(), ['user-core.lib', 'user-top.lib'])
+  assert.deepEqual(resolved.modelAssets.map((asset) => asset.filename).sort(), ['user-base.lib', 'user-core.lib', 'user-device.lib', 'user-top.lib'])
   assert.equal(resolved.modelAssets.find((asset) => asset.filename === 'user-top.lib').id, 'asset-generated-1')
   assert.equal(resolved.symbolAssets[0].id, 'asset-generated-2')
   assert.equal(resolved.parts[0].symbolAssetId, 'asset-generated-2')
