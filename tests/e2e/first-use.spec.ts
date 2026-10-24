@@ -13623,7 +13623,8 @@ test('different-arity imported .FUNC conflicts stop before ngspice runs', { tag:
   const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
   const rootLibrary = [
     '.include helpers.lib',
-    '.MODEL DLOCAL D(IS={SCALE!(1)*1e-14} N=1)',
+    '.PARAM ISAT={SCALE!(1)*1e-14}',
+    '.MODEL DLOCAL D(IS={ISAT} N=1)',
     '.SUBCKT FUNCTION_STAGE IN OUT',
     'VDRIVE IN 0 1',
     'D1 IN OUT DLOCAL',
