@@ -2,7 +2,7 @@
 
 Status: active implementation roadmap, 2026-10-10. The application foundation is being built in this repository.
 
-M2.4 continued model-card comments (2026-10-24): Inline comments on a physical `+` continuation line are removed before the line is joined, so they no longer hide later `.MODEL` fields. A regression checks the parsed values and confirms original source text, including the comment, stays unchanged. This follows the documented ngspice model-card continuation form. No WASM rebuild or Pages workflow ran.
+M2.4 continued model-card comments (2026-10-24): Inline comments on the initial or a physical `+` continuation line are removed before logical-line joining, so they no longer hide later `.MODEL` fields. Regressions check both comment positions and confirm original source text, including comments, stays unchanged. This follows the documented ngspice model-card continuation form. No WASM rebuild or Pages workflow ran.
 
 M2.4 punctuation-bearing native `.MODEL` parameters (2026-10-24): Model-card parsing now accepts ngspice identifier punctuation (`! # $ % [ ] _`) in assignment names and uses the shared comment scanner, so `$` at the end of a valid identifier is not mistaken for an end-of-line comment. Imported cards remain unchanged. The parser regression checks punctuation-bearing fields and source preservation; all 39 domain/protocol groups, TypeScript, and production build pass within the startup-transfer budget. Identifier grammar follows the [ngspice manual](https://ngspice.sourceforge.io/docs/ngspice-42-manual.pdf). No WASM rebuild or Pages workflow ran.
 

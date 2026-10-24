@@ -1015,6 +1015,17 @@ test('continues parsing .MODEL fields after an inline comment on a continuation 
   assert.equal(parsed.modelText, source, 'preserve the original commented source for ngspice')
 })
 
+test('continues parsing .MODEL fields after an inline comment on the initial line', () => {
+  const source = '.MODEL DCOMMENT D(IS=1n ; saturation current\n+ RS=2\n+ N=1.2)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.models[0].parameters, [
+    { name: 'IS', defaultValue: '1n' },
+    { name: 'RS', defaultValue: '2' },
+    { name: 'N', defaultValue: '1.2' },
+  ])
+  assert.equal(parsed.modelText, source, 'preserve the original commented source for ngspice')
+})
+
 test('keeps the last duplicate .MODEL parameter value, matching ngspice', () => {
   const source = '.MODEL DM D(IS=1n is=2n)'
   const parsed = parseSubcircuitLibrary(source)

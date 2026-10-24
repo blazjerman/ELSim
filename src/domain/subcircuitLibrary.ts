@@ -204,7 +204,7 @@ function logicalLines(source: string): LogicalLine[] {
     const physicalText = physical[index]
     const continuedText = withoutInlineComment(physicalText).trimEnd()
     const hasBackslashContinuation = hasNgspiceBackslashContinuation(continuedText)
-    const text = hasBackslashContinuation ? continuedText.slice(0, -2) : physicalText
+    const text = hasBackslashContinuation ? continuedText.slice(0, -2) : continuedText
     const plusContinuation = /^\s*\+/.test(text)
     if (plusContinuation || backslashContinuation) {
       const previous = result.at(-1)
