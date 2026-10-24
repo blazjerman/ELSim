@@ -688,18 +688,40 @@ function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColo
   </div>
 }
 
-function PoleZeroView({ traces, selectedIds, onToggle, onExport, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; savedColors: Record<string, string> }) {
+function PoleZeroView({ traces, selectedIds, onToggle, onExport, savedColors, savedView, onViewChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; savedColors: Record<string, string>; savedView?: PlotPanel['poleZeroView']; onViewChange: (view: PlotPanel['poleZeroView']) => void }) {
   const visibility = useTraceVisibility(selectedIds, onToggle)
   const shown = traces.filter((trace) => visibility.visibleIdSet.has(trace.id))
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorById = useMemo(() => new Map(traces.map((trace, index) => [trace.id, colors[index % colors.length]])), [traces, colors])
-  const [view, setView] = useState({ centerReal: 0, centerImaginary: 0, zoom: 1 })
+  const defaultView = { centerReal: 0, centerImaginary: 0, zoom: 1 }
+  const [view, setView] = useState(savedView ?? defaultView)
   const viewRef = useRef(view)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onViewChangeRef = useRef(onViewChange)
   const svgRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; initialView: typeof view; base: ReturnType<typeof complexPlaneScale>; width: number; height: number } | null>(null)
   const left = 56, right = 744, top = 18, bottom = 342
   const plane = complexPlaneScale(shown.map((trace) => trace.values[0] ?? 0), shown.map((trace) => trace.imaginaryValues?.[0] ?? 0), right - left, bottom - top)
+  onViewChangeRef.current = onViewChange
   viewRef.current = view
+  useEffect(() => {
+    const next = savedView ?? defaultView
+    viewRef.current = next
+    setView(next)
+  }, [savedView?.centerReal, savedView?.centerImaginary, savedView?.zoom])
+  useEffect(() => () => {
+    if (saveTimerRef.current !== null) {
+      clearTimeout(saveTimerRef.current)
+      onViewChangeRef.current(viewRef.current.zoom === 1 && viewRef.current.centerReal === 0 && viewRef.current.centerImaginary === 0 ? undefined : viewRef.current)
+    }
+  }, [])
+  const queueSave = (next: typeof view) => {
+    if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null
+      onViewChangeRef.current(next.zoom === 1 && next.centerReal === 0 && next.centerImaginary === 0 ? undefined : next)
+    }, 120)
+  }
   const currentXExtent = plane.xExtent / view.zoom, currentYExtent = plane.yExtent / view.zoom
   const xFor = (value: number) => left + (value - view.centerReal + currentXExtent) / (2 * currentXExtent) * (right - left)
   const yFor = (value: number) => bottom - (value - view.centerImaginary + currentYExtent) / (2 * currentYExtent) * (bottom - top)
@@ -710,11 +732,13 @@ function PoleZeroView({ traces, selectedIds, onToggle, onExport, savedColors }: 
     const next = zoomComplexPlaneAt(viewRef.current, factor, anchorX, anchorY, plane)
     viewRef.current = next
     setView(next)
+    queueSave(next)
   }
   const panBy = (deltaX: number, deltaY: number) => {
     const next = panComplexPlane(viewRef.current, deltaX, deltaY, plane)
     viewRef.current = next
     setView(next)
+    queueSave(next)
   }
   const handleWheel = (event: ReactWheelEvent<SVGSVGElement>) => {
     event.preventDefault()
@@ -742,6 +766,7 @@ function PoleZeroView({ traces, selectedIds, onToggle, onExport, savedColors }: 
     const next = panComplexPlane(drag.initialView, (event.clientX - drag.startX) / drag.width * 760 / (right - left), (event.clientY - drag.startY) / drag.height * 380 / (bottom - top), drag.base)
     viewRef.current = next
     setView(next)
+    queueSave(next)
   }
   const endPan = (event: PointerEvent<SVGSVGElement>) => {
     if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
@@ -750,6 +775,9 @@ function PoleZeroView({ traces, selectedIds, onToggle, onExport, savedColors }: 
     const next = { centerReal: 0, centerImaginary: 0, zoom: 1 }
     viewRef.current = next
     setView(next)
+    if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = null
+    onViewChangeRef.current(undefined)
   }
   return <div className="waveform-view pz-view">
     <div className="waveform-title"><strong>Pole-zero map</strong><span>{shown.length} roots shown · real and imaginary frequency in rad/s</span><div className="plot-navigation" role="group" aria-label="Complex plane navigation"><button aria-label="Zoom out" title="Zoom out" onClick={() => zoomAt(1.5)} disabled={!shown.length}>−</button><button aria-label="Reset plot view" title="Reset plot view" onClick={resetView} disabled={!shown.length}>Reset</button><button aria-label="Zoom in" title="Zoom in" onClick={() => zoomAt(0.67)} disabled={!shown.length}>+</button><span className="plot-navigation-separator" aria-hidden="true"/><button aria-label="Pan left" title="Pan left" onClick={() => panBy(-0.2, 0)} disabled={!shown.length}>←</button><button aria-label="Pan up" title="Pan up" onClick={() => panBy(0, -0.2)} disabled={!shown.length}>↑</button><button aria-label="Pan down" title="Pan down" onClick={() => panBy(0, 0.2)} disabled={!shown.length}>↓</button><button aria-label="Pan right" title="Pan right" onClick={() => panBy(0.2, 0)} disabled={!shown.length}>→</button></div><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
@@ -1073,10 +1101,10 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   </div>
 }
 
-export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, valueRanges, onValueRangeChange, traceColors = {}, secondCursorValues, onSecondCursorValueChange, onRunNativeFourier }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; valueRanges?: PlotPanel['valueRanges']; onValueRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, PlotValueRange> | undefined) => void; traceColors?: Record<string, string>; secondCursorValues?: PlotPanel['secondCursorValues']; onSecondCursorValueChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', value: number | null) => void; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void }) {
+export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, valueRanges, onValueRangeChange, traceColors = {}, secondCursorValues, onSecondCursorValueChange, onRunNativeFourier, poleZeroView, onPoleZeroViewChange }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; valueRanges?: PlotPanel['valueRanges']; onValueRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, PlotValueRange> | undefined) => void; traceColors?: Record<string, string>; secondCursorValues?: PlotPanel['secondCursorValues']; onSecondCursorValueChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', value: number | null) => void; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void; poleZeroView?: PlotPanel['poleZeroView']; onPoleZeroViewChange: (view: PlotPanel['poleZeroView']) => void }) {
   const cursorChange = (analysis: 'tran' | 'ac' | 'dc' | 'noise') => (value: number | null) => onSecondCursorValueChange(analysis, value)
   const plot = result.analysis === 'pz'
-    ? <PoleZeroView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors}/>
+    ? <PoleZeroView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors} savedView={poleZeroView} onViewChange={onPoleZeroViewChange}/>
     : result.analysis === 'op' || result.analysis === 'tf' || result.analysis === 'sens' && result.sensitivityMode === 'dc'
     ? <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors} transferFunction={result.analysis === 'tf'} sensitivity={result.analysis === 'sens'}/>
     : result.analysis === 'ac'

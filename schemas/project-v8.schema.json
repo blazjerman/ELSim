@@ -1262,7 +1262,20 @@
             "dc": { "type": "number" },
             "noise": { "type": "number" }
           }
+        },
+        "poleZeroView": {
+          "$ref": "#/$defs/plotComplexPlaneView"
         }
+      }
+    },
+    "plotComplexPlaneView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["centerReal", "centerImaginary", "zoom"],
+      "properties": {
+        "centerReal": { "type": "number", "minimum": -1e100, "maximum": 1e100 },
+        "centerImaginary": { "type": "number", "minimum": -1e100, "maximum": 1e100 },
+        "zoom": { "type": "number", "minimum": 0.05, "maximum": 100 }
       }
     },
     "componentVoltageProbe": {

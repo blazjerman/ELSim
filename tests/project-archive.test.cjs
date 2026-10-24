@@ -404,6 +404,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.plotSettings.properties.panels.maxItems, 8)
   assert.equal(schema.$defs.plotPanel.required.includes('selectedTraceIds'), true)
   assert.equal(schema.$defs.plotPanel.properties.valueRanges.$ref, '#/$defs/plotAnalysisValueRanges')
+  assert.equal(schema.$defs.plotPanel.properties.poleZeroView.$ref, '#/$defs/plotComplexPlaneView')
   assert.equal(schema.$defs.plotPanel.properties.secondCursorValues.additionalProperties, false)
   assert.equal(schema.$defs.plotPanel.properties.secondCursorValues.maxProperties, 4)
   assert.deepEqual(Object.keys(schema.$defs.plotPanel.properties.secondCursorValues.properties), ['tran', 'ac', 'dc', 'noise'])
@@ -540,8 +541,9 @@ test('plot preferences survive project validation and old projects receive defau
   project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } }, detachedWindow: { x: 42, y: 54, width: 720, height: 460 }, panels: [{ id: 'plot-a', bounds: { x: 100, y: 80, width: 600, height: 320 }, selectedTraceIds: ['v(vout)'], ranges: { tran: { start: 0.1, end: 0.8 } }, traceReferences: {
     'v(tline1#i1)': { kind: 'part-current', partId: 'line-1', sheetId: project.rootSheetId, scopeSheetId: project.rootSheetId, instancePath: [], port: 1 },
     'v(tline1#i2)': { kind: 'part-current', partId: 'line-1', sheetId: project.rootSheetId, scopeSheetId: project.rootSheetId, instancePath: [], port: 2 },
-  }, valueRanges: { tran: { V: { min: -5, max: 5 }, A: { min: -0.002, max: 0.002 } }, ac: { magnitude: { min: -40, max: 20 }, phase: { min: -180, max: 180 } } } }] }
+  }, valueRanges: { tran: { V: { min: -5, max: 5 }, A: { min: -0.002, max: 0.002 } }, ac: { magnitude: { min: -40, max: 20 }, phase: { min: -180, max: 180 } } }, poleZeroView: { centerReal: -125, centerImaginary: 18, zoom: 2.5 } }] }
   assert.deepEqual(validateProject(structuredClone(project)).plotSettings, project.plotSettings)
+  assert.deepEqual((await readProjectArchive(await createProjectArchive(project))).plotSettings, project.plotSettings)
   const oldProject = structuredClone(project)
   delete oldProject.plotSettings
   assert.deepEqual(validateProject(oldProject).plotSettings, { selectedTraceIds: [], ranges: {} })
@@ -554,6 +556,9 @@ test('plot preferences survive project validation and old projects receive defau
   const malformedPanel = structuredClone(project)
   malformedPanel.plotSettings.panels[0].ranges.tran = { start: 0.8, end: 0.2 }
   assert.throws(() => validateProject(malformedPanel), /Plot panel view range is malformed/)
+  const malformedPoleZeroView = structuredClone(project)
+  malformedPoleZeroView.plotSettings.panels[0].poleZeroView.zoom = 0
+  assert.throws(() => validateProject(malformedPoleZeroView), /Plot panel pole-zero view settings are malformed/)
   const malformedPort = structuredClone(project)
   malformedPort.plotSettings.panels[0].traceReferences['v(tline1#i2)'].port = 3
   assert.throws(() => validateProject(malformedPort), /Plot trace references are malformed/)
