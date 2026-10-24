@@ -6,6 +6,8 @@ import type { SpectrumWindow } from '../engine/fourier'
 import type { Trace } from '../engine/contract'
 import { formatTime } from './formatTime'
 
+type SpectrumDisplay = 'magnitude' | 'phase'
+
 function frequencyLabel(value: number): string {
   if (value >= 1e6) return `${Number((value / 1e6).toPrecision(3))} MHz`
   if (value >= 1e3) return `${Number((value / 1e3).toPrecision(3))} kHz`
@@ -22,6 +24,7 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
   const [start, setStart] = useState(initialRange.start)
   const [end, setEnd] = useState(initialRange.end)
   const [windowFunction, setWindowFunction] = useState<SpectrumWindow>('hann')
+  const [display, setDisplay] = useState<SpectrumDisplay>('magnitude')
   const [cursorFrequency, setCursorFrequency] = useState<number | null>(null)
   const trace = traces.find((candidate) => candidate.id === traceId) ?? traces[0]
   const calculation = useMemo(() => {
@@ -32,18 +35,18 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
   const spectrum = calculation.spectrum
   const plot = useMemo(() => {
     if (!spectrum) return null
-    const { frequencies, peakAmplitudes } = spectrum
+    const { frequencies, peakAmplitudes, phaseDegrees } = spectrum
     const bins = Array.from({ length: frequencies.length - 1 }, (_, index) => index + 1)
     if (!bins.length) return null
     const firstFrequency = frequencies[1], lastFrequency = frequencies.at(-1) ?? 0
     if (!(firstFrequency > 0) || !(lastFrequency > firstFrequency)) return null
-    const decibels = bins.map((bin) => 20 * Math.log10(Math.max(peakAmplitudes[bin], 1e-15)))
-    const maximum = Math.max(...decibels)
-    const minimum = Math.max(-180, maximum - 80)
+    const values = bins.map((bin) => display === 'magnitude' ? 20 * Math.log10(Math.max(peakAmplitudes[bin], 1e-15)) : phaseDegrees[bin])
+    const maximum = display === 'magnitude' ? Math.max(...values) : 180
+    const minimum = display === 'magnitude' ? Math.max(-180, maximum - 80) : -180
     const top = 20, bottom = 300, left = 78, right = 760
     const x = (frequency: number) => left + Math.log(frequency / firstFrequency) / Math.log(lastFrequency / firstFrequency) * (right - left)
     const y = (value: number) => bottom - (value - minimum) / Math.max(1, maximum - minimum) * (bottom - top)
-    const points = bins.map((bin, index) => `${x(frequencies[bin]).toFixed(2)},${y(decibels[index]).toFixed(2)}`).join(' ')
+    const points = bins.map((bin, index) => `${x(frequencies[bin]).toFixed(2)},${y(values[index]).toFixed(2)}`).join(' ')
     const peak = interpolateSpectrumPeak(spectrum)
     if (!peak) return null
     const frequencyTicks: number[] = []
@@ -51,11 +54,13 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
     const lastDecade = Math.floor(Math.log10(lastFrequency))
     for (let decade = firstDecade; decade <= lastDecade; decade += 1) frequencyTicks.push(10 ** decade)
     if (frequencyTicks.length < 2) frequencyTicks.push(firstFrequency, lastFrequency)
-    const amplitudeTicks: number[] = []
-    const firstTick = Math.ceil(minimum / 20) * 20
-    for (let value = firstTick; value <= maximum; value += 20) amplitudeTicks.push(value)
-    return { bins, firstFrequency, lastFrequency, minimum, maximum, left, right, top, bottom, x, y, points, peak, frequencyTicks, amplitudeTicks }
-  }, [spectrum])
+    const valueTicks = display === 'magnitude' ? [] as number[] : [-180, -120, -60, 0, 60, 120, 180]
+    if (display === 'magnitude') {
+      const firstTick = Math.ceil(minimum / 20) * 20
+      for (let value = firstTick; value <= maximum; value += 20) valueTicks.push(value)
+    }
+    return { bins, firstFrequency, lastFrequency, minimum, maximum, left, right, top, bottom, x, y, points, values, peak, frequencyTicks, valueTicks }
+  }, [spectrum, display])
   const cursorBin = useMemo(() => {
     if (!spectrum) return 0
     if (cursorFrequency === null) return interpolateSpectrumPeak(spectrum)?.bin ?? 1
@@ -96,22 +101,23 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
       <p id="spectrum-description">Inspect the frequency content of a solved transient trace. ELSim resamples ngspice’s adaptive time points uniformly, removes the DC offset, then applies the selected window. Windowing trades peak width for lower spectral leakage.</p>
       <label className="field-label">Transient trace<select aria-label="Transient trace for FFT" value={trace?.id ?? ''} onChange={(event) => setTraceId(event.target.value)}>{traces.map((item) => <option key={item.id} value={item.id}>{item.label} ({item.unit})</option>)}</select></label>
       <label className="field-label">Window function<select aria-label="FFT window function" value={windowFunction} onChange={(event) => setWindowFunction(event.target.value as SpectrumWindow)}><option value="rectangular">Rectangular · sharp main lobe, more leakage</option><option value="hann">Hann · balanced general-purpose default</option><option value="hamming">Hamming · lower nearby sidelobes</option><option value="blackman">Blackman · lower distant leakage, wider peak</option></select></label>
+      <label className="field-label">Spectrum display<select aria-label="FFT display mode" value={display} onChange={(event) => setDisplay(event.target.value as SpectrumDisplay)}><option value="magnitude">Magnitude (dB)</option><option value="phase">Phase (degrees)</option></select></label>
       {trace && <div className="spectrum-range"><label className="field-label">Start time (s)<input aria-label="FFT start time in seconds" type="number" step="any" value={start} min={trace.axis[0]} max={end} onChange={(event) => setStart(Number(event.target.value))}/></label><label className="field-label">End time (s)<input aria-label="FFT end time in seconds" type="number" step="any" value={end} min={start} max={trace.axis.at(-1)} onChange={(event) => setEnd(Number(event.target.value))}/></label><button className="plot-export" onClick={() => { setStart(trace.axis[0]); setEnd(trace.axis.at(-1) ?? initialRange.end) }}>Whole run</button><button className="plot-export" onClick={() => { setStart(initialRange.start); setEnd(initialRange.end) }}>Visible plot range</button></div>}
       {calculation.error && <p className="field-error" role="alert">{calculation.error}</p>}
       {spectrum && plot && trace && <>
         <div className="spectrum-summary"><strong>Peak: {frequencyLabel(plot.peak.frequency)}</strong><span>{plot.peak.peakAmplitude.toPrecision(4)} {trace.unit} peak (interpolated)</span><span>{spectrum.sampleCount.toLocaleString()} samples · {frequencyLabel(spectrum.sampleRate / spectrum.sampleCount)} resolution · Nyquist {frequencyLabel(spectrum.frequencies.at(-1) ?? 0)}</span><span>{spectrum.window} window · {formatTime(start, trace.axis.at(-1) ?? end)} to {formatTime(end, trace.axis.at(-1) ?? end)}</span></div>
-        <div className="spectrum-cursor-readout" aria-live="polite"><strong>{frequencyLabel(spectrum.frequencies[cursorBin])}</strong><span>{spectrum.peakAmplitudes[cursorBin].toPrecision(5)} {trace.unit} peak · {amplitudeLabel(20 * Math.log10(Math.max(spectrum.peakAmplitudes[cursorBin], 1e-15)))}</span></div>
-        <svg className="spectrum-chart" viewBox="0 0 800 344" role="group" aria-label={`FFT of ${trace.label}, peak at ${frequencyLabel(plot.peak.frequency)}. Use left and right arrow keys to inspect frequency bins.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onPointerMove={moveFrequencyCursor} onKeyDown={moveFrequencyCursorByKey}>
-          {plot.amplitudeTicks.map((value) => <g key={`amp-${value}`}><line x1={plot.left} x2={plot.right} y1={plot.y(value)} y2={plot.y(value)} className="plot-grid"/><text x={plot.left - 8} y={plot.y(value) + 4} textAnchor="end" className="plot-tick">{amplitudeLabel(value)}</text></g>)}
+        <div className="spectrum-cursor-readout" aria-live="polite"><strong>{frequencyLabel(spectrum.frequencies[cursorBin])}</strong><span>{display === 'magnitude' ? `${spectrum.peakAmplitudes[cursorBin].toPrecision(5)} ${trace.unit} peak · ${amplitudeLabel(20 * Math.log10(Math.max(spectrum.peakAmplitudes[cursorBin], 1e-15)))}` : `${spectrum.phaseDegrees[cursorBin].toFixed(2)}° phase relative to window start`}</span></div>
+        <svg className="spectrum-chart" viewBox="0 0 800 344" role="group" aria-label={`${display === 'magnitude' ? 'Magnitude' : 'Phase'} FFT of ${trace.label}, peak at ${frequencyLabel(plot.peak.frequency)}. Use left and right arrow keys to inspect frequency bins.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onPointerMove={moveFrequencyCursor} onKeyDown={moveFrequencyCursorByKey}>
+          {plot.valueTicks.map((value) => <g key={`amp-${value}`}><line x1={plot.left} x2={plot.right} y1={plot.y(value)} y2={plot.y(value)} className="plot-grid"/><text x={plot.left - 8} y={plot.y(value) + 4} textAnchor="end" className="plot-tick">{display === 'magnitude' ? amplitudeLabel(value) : `${value}°`}</text></g>)}
           {plot.frequencyTicks.map((value) => <g key={`freq-${value}`}><line x1={plot.x(value)} x2={plot.x(value)} y1={plot.top} y2={plot.bottom} className="plot-grid"/><text x={plot.x(value)} y={plot.bottom + 20} textAnchor="middle" className="plot-tick">{frequencyLabel(value)}</text></g>)}
           <line x1={plot.left} x2={plot.right} y1={plot.bottom} y2={plot.bottom} className="plot-axis"/>
           <polyline points={plot.points} fill="none" stroke="#91e0ae" strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>
           <line x1={plot.x(spectrum.frequencies[cursorBin])} x2={plot.x(spectrum.frequencies[cursorBin])} y1={plot.top} y2={plot.bottom} className="spectrum-cursor-line"/>
-          <circle cx={plot.x(spectrum.frequencies[cursorBin])} cy={plot.y(20 * Math.log10(Math.max(spectrum.peakAmplitudes[cursorBin], 1e-15)))} r="3.5" fill="#91e0ae" stroke="#101512" strokeWidth="1"/>
-          <circle cx={plot.x(plot.peak.frequency)} cy={plot.y(20 * Math.log10(Math.max(plot.peak.peakAmplitude, 1e-15)))} r="4" fill="#f2d17e"/>
-          <text x={(plot.left + plot.right) / 2} y="340" textAnchor="middle" className="plot-tick">Frequency (Hz, logarithmic)</text>
+          <circle cx={plot.x(spectrum.frequencies[cursorBin])} cy={plot.y(plot.values[cursorBin - 1])} r="3.5" fill="#91e0ae" stroke="#101512" strokeWidth="1"/>
+          {display === 'magnitude' && <circle cx={plot.x(plot.peak.frequency)} cy={plot.y(20 * Math.log10(Math.max(plot.peak.peakAmplitude, 1e-15)))} r="4" fill="#f2d17e"/>}
+          <text x={(plot.left + plot.right) / 2} y="340" textAnchor="middle" className="plot-tick">{display === 'magnitude' ? `Magnitude (dB${trace.unit}, logarithmic frequency)` : 'Phase (degrees, wrapped; relative to window start)'}</text>
         </svg>
-        <small className="field-hint">Magnitude is peak amplitude relative to 1 {trace.unit} (dB{trace.unit}). The finite time window limits frequency resolution; this display is a derived FFT, not ngspice’s `.four` harmonic table.</small>
+        <small className="field-hint">{display === 'magnitude' ? `Magnitude is peak amplitude relative to 1 ${trace.unit} (dB${trace.unit}).` : 'Phase is wrapped from −180° to +180° and referenced to the selected time window start; it is not ngspice AC phase.'} The finite time window limits frequency resolution; this display is a derived FFT, not ngspice’s `.four` harmonic table.</small>
       </>}
       <div className="modal-footer"><span>{spectrum ? 'Single-sided spectrum' : 'FFT unavailable'}</span><button className="primary-small" onClick={onClose}>Done</button></div>
     </section>

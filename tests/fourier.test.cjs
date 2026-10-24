@@ -30,6 +30,20 @@ test('transient FFT reports tone frequency and peak amplitude while removing DC 
   assert.equal(spectrum.window, 'hann')
 })
 
+test('transient FFT reports phase relative to the selected interval start', () => {
+  const count = 8193
+  const axis = new Float64Array(count), values = new Float64Array(count)
+  const phase = Math.PI / 6
+  for (let index = 0; index < count; index += 1) {
+    axis[index] = 2 * index / (count - 1)
+    values[index] = 1.7 * Math.cos(2 * Math.PI * 50 * axis[index] + phase)
+  }
+  const spectrum = calculateTransientSpectrum({ axis, values }, 16384, undefined, 'rectangular')
+  const bin = 100
+  assert.equal(spectrum.frequencies[bin], 50)
+  assert.ok(Math.abs(spectrum.phaseDegrees[bin] - 30) < 0.05, `expected about 30 degrees, got ${spectrum.phaseDegrees[bin]}`)
+})
+
 test('transient FFT resamples adaptive time points onto a uniform grid', () => {
   const count = 4097
   const axis = new Float64Array(count), values = new Float64Array(count)

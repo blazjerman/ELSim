@@ -3,6 +3,7 @@ export type SpectrumWindow = 'rectangular' | 'hann' | 'hamming' | 'blackman'
 export type TransientSpectrum = {
   frequencies: Float64Array
   peakAmplitudes: Float64Array
+  phaseDegrees: Float64Array
   sampleCount: number
   sampleRate: number
   window: SpectrumWindow
@@ -120,13 +121,15 @@ export function calculateTransientSpectrum(trace: TransientVector, maxSamples = 
   const binCount = sampleCount / 2 + 1
   const frequencies = new Float64Array(binCount)
   const peakAmplitudes = new Float64Array(binCount)
+  const phaseDegrees = new Float64Array(binCount)
   const sampleRate = sampleCount / duration
   for (let bin = 0; bin < binCount; bin += 1) {
     frequencies[bin] = bin * sampleRate / sampleCount
     const scale = bin === 0 || bin === sampleCount / 2 ? 1 : 2
     peakAmplitudes[bin] = Math.hypot(real[bin], imaginary[bin]) * scale / windowSum
+    phaseDegrees[bin] = Math.atan2(imaginary[bin], real[bin]) * 180 / Math.PI
   }
-  return { frequencies, peakAmplitudes, sampleCount, sampleRate, window }
+  return { frequencies, peakAmplitudes, phaseDegrees, sampleCount, sampleRate, window }
 }
 
 /** Estimate a peak between FFT bins using a quadratic fit to neighboring dB magnitudes. */
