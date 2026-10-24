@@ -6489,6 +6489,7 @@ test('imported device model inspector shows and searches unparsed source assignm
       '.ENDIF',
       '.MODEL DONLY D(N={vendor_shape(4)})',
       '.MODEL DONLYAKO AKO:DBASE D()',
+      '.MODEL RONLY R(N={vendor_shape(5)})',
     ].join('\n')),
   })
   await page.getByLabel('Device model for D1').selectOption('DUSER')
@@ -6542,6 +6543,12 @@ test('imported device model inspector shows and searches unparsed source assignm
   await expect(inheritedSourceOnlyDetails).toBeVisible()
   await inheritedSourceOnlyDetails.click()
   await expect(page.getByLabel('Unparsed model assignments')).toContainText('N = {vendor_shape(2)}')
+  await page.locator('.circuit-part[aria-label^="R1,"]').click()
+  await page.getByLabel('Device model for R1').selectOption('RONLY')
+  const passiveSourceOnlyDetails = page.getByText('RONLY · 0 model parameters · 1 unparsed', { exact: true })
+  await expect(passiveSourceOnlyDetails).toBeVisible()
+  await passiveSourceOnlyDetails.click()
+  await expect(page.getByLabel('Unparsed model assignments')).toContainText('N = {vendor_shape(5)}')
 })
 
 test('resistor AC value is editable, saved, and generated as an AC-only override @ui-smoke', async ({ page }) => {
