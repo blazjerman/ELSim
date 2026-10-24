@@ -1871,6 +1871,19 @@ export function analyzeModelDependencies(assets: ModelLibraryInput[]): ModelDepe
 /** Return the imported libraries required by schematic instances, including transitive dependencies. */
 export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: { kind: string; modelName?: string; deviceModel?: string }[]): Set<string> {
   const required = new Set<string>(), pending: string[] = [], pendingAssets: string[] = [], pendingModels: ModelBaseTarget[] = []
+  const includesByAsset = new Map<string, ResolvedModelInclude[]>()
+  for (const include of analysis.resolvedIncludes) {
+    const entries = includesByAsset.get(include.assetId) ?? []
+    entries.push(include)
+    includesByAsset.set(include.assetId, entries)
+  }
+  const dependenciesByOwner = new Map<string, ResolvedModelDependency[]>()
+  for (const dependency of analysis.resolved) {
+    const owner = dependency.owner.toLowerCase()
+    const entries = dependenciesByOwner.get(owner) ?? []
+    entries.push(dependency)
+    dependenciesByOwner.set(owner, entries)
+  }
   const addAsset = (assetId: string | undefined) => {
     if (!assetId || required.has(assetId)) return
     required.add(assetId)
@@ -1895,7 +1908,7 @@ export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: 
   while (pending.length || pendingAssets.length || pendingModels.length) {
     const assetId = pendingAssets.pop()
     if (assetId) {
-      for (const include of analysis.resolvedIncludes) if (include.assetId === assetId) addAsset(include.targetAssetId)
+      for (const include of includesByAsset.get(assetId) ?? []) addAsset(include.targetAssetId)
       continue
     }
     const model = pendingModels.pop()
@@ -1912,7 +1925,7 @@ export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: 
     const owner = pending.pop()!
     if (visited.has(owner)) continue
     visited.add(owner)
-    for (const dependency of analysis.resolved) if (dependency.owner.toLowerCase() === owner) {
+    for (const dependency of dependenciesByOwner.get(owner) ?? []) {
       addAsset(dependency.targetAssetId)
       if (dependency.kind === 'subcircuit') pending.push(dependency.modelName.toLowerCase())
       else pendingModels.push({ assetId: dependency.targetAssetId, modelName: dependency.modelName })

@@ -289,7 +289,7 @@ try {
 
   const build = createRequire(import.meta.url)
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
-  const { analyzeModelLibraries } = build(path.join(output, 'domain/subcircuitLibrary.js'))
+  const { analyzeModelLibraries, requiredModelAssetIds } = build(path.join(output, 'domain/subcircuitLibrary.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
   const { componentPins, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireConnectionDotCache, createWireViewportIndex, projectPinLocations, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
   const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
@@ -413,6 +413,24 @@ try {
     sectionCount: sectionNames.length,
     resolvedIncludes: sectionReferenceAnalysis.value.dependencies.resolvedIncludes.length,
     analysis: { medianMs: sectionReferenceAnalysis.medianMs, p95Ms: sectionReferenceAnalysis.p95Ms },
+  }
+  const requiredAssetChainLength = 3000
+  const requiredAssetAnalysis = {
+    subcircuitAssets: new Map(Array.from({ length: requiredAssetChainLength }, (_, index) => [`cell_${index}`, `asset-${index}`])),
+    deviceModelAssets: new Map(),
+    deviceModelBinAssets: new Map(),
+    modelBaseAssets: new Map(),
+    resolvedIncludes: Array.from({ length: requiredAssetChainLength - 1 }, (_, index) => ({ assetId: `asset-${index}`, targetAssetId: `asset-${index + 1}` })),
+    resolved: Array.from({ length: requiredAssetChainLength - 1 }, (_, index) => ({ owner: `CELL_${index}`, modelName: `CELL_${index + 1}`, targetAssetId: `asset-${index + 1}`, kind: 'subcircuit' })),
+  }
+  const requiredAssetMeasurement = measure(() => requiredModelAssetIds(requiredAssetAnalysis, [{ kind: 'subcircuit', modelName: 'CELL_0' }]))
+  if (requiredAssetMeasurement.value.size !== requiredAssetChainLength) throw new Error('Required-model-asset benchmark did not traverse the complete dependency chain.')
+  const requiredAssetTraversalResults = {
+    assets: requiredAssetChainLength,
+    includes: requiredAssetAnalysis.resolvedIncludes.length,
+    subcircuitDependencies: requiredAssetAnalysis.resolved.length,
+    requiredAssets: requiredAssetMeasurement.value.size,
+    traversal: { medianMs: requiredAssetMeasurement.medianMs, p95Ms: requiredAssetMeasurement.p95Ms },
   }
   const repeatedDeviceCount = 2000
   const repeatedDeviceLibrary = {
@@ -748,7 +766,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 14,
+    benchmarkVersion: 15,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
@@ -758,6 +776,7 @@ try {
     importedLibraryAnalysisResults,
     importedParameterConflictResults,
     importedSectionReferenceResults,
+    requiredAssetTraversalResults,
     repeatedDeviceDependencyResults,
     importedDeviceResults,
     plotResults,

@@ -394,6 +394,30 @@ test('combined model-library analysis shares parsed cards with dependency resolu
   assert.deepEqual(analyzeModelDependencies(assets), result.dependencies)
 })
 
+test('required model assets follow a deep include and subcircuit dependency chain', () => {
+  const count = 400
+  const subcircuitAssets = new Map()
+  const resolvedIncludes = []
+  const resolved = []
+  for (let index = 0; index < count; index += 1) {
+    const owner = `CELL_${index}`
+    subcircuitAssets.set(owner.toLowerCase(), `asset-${index}`)
+    if (index + 1 < count) {
+      resolvedIncludes.push({ assetId: `asset-${index}`, targetAssetId: `asset-${index + 1}` })
+      resolved.push({ owner, modelName: `CELL_${index + 1}`, targetAssetId: `asset-${index + 1}`, kind: 'subcircuit' })
+    }
+  }
+  const analysis = {
+    subcircuitAssets,
+    deviceModelAssets: new Map(),
+    deviceModelBinAssets: new Map(),
+    modelBaseAssets: new Map(),
+    resolvedIncludes,
+    resolved,
+  }
+  assert.equal(requiredModelAssetIds(analysis, [{ kind: 'subcircuit', modelName: 'CELL_0' }]).size, count)
+})
+
 test('resolves native ngspice passive and transmission-line model references', () => {
   const devices = { id: 'devices', filename: 'devices.lib', content: [
     '.SUBCKT NETWORK IN OUT',
