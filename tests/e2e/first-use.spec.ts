@@ -14209,6 +14209,36 @@ test('conditional model parameter controls disclose defaults that vary by branch
   await expect(modelParameter).toContainText('IS · default 1e-14')
 })
 
+test('AKO model inspector shows conditional defaults inherited from each matching base branch', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createDiodePolarityExampleProject()
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.locator('.circuit-part[data-part-id="diode-polarity-d1"]').click()
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'conditional-ako.lib', mimeType: 'text/plain', buffer: Buffer.from([
+      '.PARAM branch=0',
+      '.IF (branch == 0)',
+      '.MODEL BASECOND D(IS=1n N=2)',
+      '.MODEL CHILD AKO:BASECOND D(IS=2n)',
+      '.ELSE',
+      '.MODEL BASECOND D(IS=1n N=5)',
+      '.MODEL CHILD AKO:BASECOND D(IS=3n)',
+      '.ENDIF',
+    ].join('\n')),
+  })
+  await page.getByLabel('Device model for D1').selectOption('CHILD')
+  const modelDetails = page.getByText('CHILD · AKO:BASECOND · 2 model parameters', { exact: true })
+  await expect(modelDetails).toBeVisible()
+  await modelDetails.click()
+  const inheritedDefaults = page.getByLabel('N conditional defaults')
+  await expect(inheritedDefaults).toContainText('Conditional default at line 4: 2')
+  await expect(inheritedDefaults).toContainText('Conditional default at line 7: 5')
+  await page.getByRole('searchbox', { name: 'Search parameters for CHILD' }).fill('5')
+  await expect(inheritedDefaults).toContainText('Conditional default at line 7: 5')
+})
+
 test('imported .MODEL defaults that call .FUNC helpers stay in the generated netlist', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

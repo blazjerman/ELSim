@@ -21,16 +21,21 @@ function modelEntries<T extends ModelLibraryInput>(asset: T, model: SpiceModelDe
   ]
 }
 
-function mergeConditionalParameters(parameterSets: SubcircuitParameter[][]): SubcircuitParameter[] {
+function mergeConditionalParameters(parameterSets: SubcircuitParameter[][], sourceLines: number[]): SubcircuitParameter[] {
   const first = parameterSets[0] ?? []
   const byName = parameterSets.map((parameters) => new Map(parameters.map((parameter) => [parameter.name.toLowerCase(), parameter])))
   return first.flatMap((parameter) => {
     const variants = byName.map((parameters) => parameters.get(parameter.name.toLowerCase()))
     if (variants.some((variant) => !variant)) return []
     const defaults = variants.map((variant) => variant!.defaultValue.trim().toLowerCase())
+    const defaultsDiffer = defaults.some((value) => value !== defaults[0])
+    const conditionalDefaultValues = defaultsDiffer
+      ? variants.flatMap((variant, index) => variant ? [{ sourceLine: sourceLines[index], defaultValue: variant.defaultValue }] : [])
+      : parameter.conditionalDefaultValues
     return [{
       ...parameter,
-      defaultVariesByCondition: variants.some((variant) => variant!.defaultVariesByCondition) || defaults.some((value) => value !== defaults[0]) || undefined,
+      defaultVariesByCondition: variants.some((variant) => variant!.defaultVariesByCondition) || defaultsDiffer || undefined,
+      ...(conditionalDefaultValues ? { conditionalDefaultValues } : {}),
     }]
   })
 }
@@ -166,7 +171,7 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
     if (variants.length < 2) continue
     const resolved = variants.map((variant) => resolve(variant))
     if (resolved.some((parameters) => !parameters)) continue
-    parametersByModel.set(`${asset.id}:${model.startLine}`, mergeConditionalParameters(resolved as SubcircuitParameter[][]))
+    parametersByModel.set(`${asset.id}:${model.startLine}`, mergeConditionalParameters(resolved as SubcircuitParameter[][], variants.map(({ model: variant }) => variant.startLine)))
   }
   return { cards, parameters: parametersByModel, channels: channelsByCard, issues }
 }

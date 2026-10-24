@@ -1166,6 +1166,10 @@ test('expands each conditional AKO child against the base in the matching branch
   assert.equal(result.cards.get('conditional-branches:3'), '.model CHILD D(IS=2n N=1)')
   assert.equal(result.cards.get('conditional-branches:6'), '.model CHILD D(IS=3n N=2)')
   assert.deepEqual(result.parameters.get('conditional-branches:3').map(({ name, defaultVariesByCondition }) => [name, defaultVariesByCondition]), [['IS', true], ['N', true]])
+  assert.deepEqual(result.parameters.get('conditional-branches:3').find(({ name }) => name === 'N').conditionalDefaultValues, [
+    { sourceLine: 3, defaultValue: '1' },
+    { sourceLine: 6, defaultValue: '2' },
+  ])
 })
 
 test('matches conditional AKO bases across imported libraries by normalized numeric branch conditions', () => {
