@@ -9,18 +9,55 @@ if (!['dev', 'build'].includes(mode)) {
 }
 
 const problems = []
-const rust = spawnSync('rustc', ['--version'], { encoding: 'utf8' })
-const rustVersion = rust.status === 0 ? rust.stdout.match(/rustc (\d+)\.(\d+)\.(\d+)/) : null
-if (!rustVersion) {
-  problems.push('Rust is missing. Install Rust 1.90 or newer using rustup: https://rustup.rs/')
-} else if (Number(rustVersion[1]) < 1 || (Number(rustVersion[1]) === 1 && Number(rustVersion[2]) < 90)) {
-  problems.push(`Rust ${rustVersion[1]}.${rustVersion[2]} is too old; this desktop build needs Rust 1.90 or newer. Update with: rustup update stable`)
+function checkToolchain(command, label) {
+  const result = spawnSync(command, ['--version'], { encoding: 'utf8' })
+  const match = result.status === 0 ? result.stdout.match(new RegExp(`${label} (\\d+)\\.(\\d+)\\.(\\d+)`)) : null
+  if (!match) {
+    problems.push(`${label === 'rustc' ? 'Rust' : 'Cargo'} is missing. Install Rust 1.90 or newer using rustup: https://rustup.rs/`)
+    return
+  }
+  const [, major, minor, patch] = match.map(Number)
+  if (major < 1 || (major === 1 && minor < 90)) {
+    problems.push(`${label} ${major}.${minor}.${patch} is too old; this desktop build needs Rust and Cargo 1.90 or newer. Update with: rustup update stable`)
+  }
 }
+checkToolchain('rustc', 'rustc')
+checkToolchain('cargo', 'cargo')
 
 if (process.platform === 'linux') {
-  const webkit = spawnSync('pkg-config', ['--exists', 'webkit2gtk-4.1'])
-  if (webkit.status !== 0) {
-    problems.push('Linux WebKitGTK 4.1 development files are missing. Install the Tauri Linux prerequisites: https://v2.tauri.app/start/prerequisites/#linux')
+  const linuxCommands = [
+    ['cc', 'build-essential'],
+    ['make', 'build-essential'],
+    ['curl', 'curl'],
+    ['wget', 'wget'],
+    ['file', 'file'],
+    ['pkg-config', 'pkg-config'],
+  ]
+  const missingLinuxCommands = linuxCommands.filter(([command]) => spawnSync(command, ['--version'], { encoding: 'utf8' }).status !== 0)
+  const linuxPackages = [
+    ['webkit2gtk-4.1', 'libwebkit2gtk-4.1-dev'],
+    ['xdo', 'libxdo-dev'],
+    ['openssl', 'libssl-dev'],
+    ['ayatana-appindicator3-0.1', 'libayatana-appindicator3-dev'],
+    ['librsvg-2.0', 'librsvg2-dev'],
+  ]
+  const missingLinuxPackages = linuxPackages.filter(([pkgConfigName]) => {
+    const result = spawnSync('pkg-config', ['--exists', pkgConfigName])
+    return result.status !== 0
+  })
+  if (missingLinuxCommands.length || missingLinuxPackages.length) {
+    const packages = [
+      'build-essential', 'curl', 'wget', 'file', 'pkg-config', 'libxdo-dev', 'libssl-dev',
+      'libwebkit2gtk-4.1-dev', 'libayatana-appindicator3-dev', 'librsvg2-dev',
+    ]
+    if (missingLinuxCommands.length) {
+      problems.push(`Linux build commands are missing: ${missingLinuxCommands.map(([command]) => command).join(', ')}.`)
+    }
+    if (missingLinuxPackages.length) {
+      problems.push(`Linux development libraries are missing: ${missingLinuxPackages.map(([pkgConfigName]) => pkgConfigName).join(', ')}.`)
+    }
+    problems.push(`On Debian/Ubuntu, install Tauri prerequisites with: sudo apt-get update && sudo apt-get install ${packages.join(' ')}`)
+    problems.push('For other distributions, follow https://v2.tauri.app/start/prerequisites/#linux')
   }
 }
 

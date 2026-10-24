@@ -31,7 +31,14 @@ Tauri uses the operating system WebView, while Electron packages its application
 
 ### Current prototype commands
 
-Run `npm ci` to install the project-pinned Tauri 2 CLI and plugins, then use `npm run desktop:dev` for the live Vite UI inside the desktop webview or `npm run desktop:build` to build the desktop application binary from production web assets. The app uses native Open/Save dialogs on Tauri and keeps the browser file-input/download fallback elsewhere. A preflight checks Rust and Linux WebKitGTK versions before starting and checks the locally built engine before packaging. The production shell build uses `build:offline`, so it requires the developer-built, ignored `public/engine/ngspice.mjs` and `.wasm` files. Tauri's Linux build requires the distribution's WebKitGTK 4.1 and related development packages; Windows and macOS require their platform toolchains. Platform-specific bundle icons are generated from the existing ELSim PWA icon and are configured, but installer bundling is still disabled until the prototype passes desktop runtime checks. Browser builds and GitHub Pages remain independent.
+Run `npm ci` to install the project-pinned Tauri 2 CLI and plugins, then use `npm run desktop:dev` for the live Vite UI inside the desktop webview or `npm run desktop:build` to build the desktop application binary from production web assets. The app uses native Open/Save dialogs on Tauri and keeps the browser file-input/download fallback elsewhere. A preflight checks both Rust and Cargo versions, Linux build commands and native development libraries, and (for packaging) the locally built engine. The production shell build uses `build:offline`, so it requires the developer-built, ignored `public/engine/ngspice.mjs` and `.wasm` files. On Debian or Ubuntu, Tauri's documented Linux dependencies can be installed with:
+
+```sh
+sudo apt-get update
+sudo apt-get install build-essential curl wget file pkg-config libxdo-dev libssl-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+Other distributions should follow [Tauri's Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux). Windows and macOS require their platform toolchains. Platform-specific bundle icons are generated from the existing ELSim PWA icon and are configured, but installer bundling is still disabled until the prototype passes desktop runtime checks. Browser builds and GitHub Pages remain independent.
 
 - [ ] Verify desktop dev and production binaries on Linux with the required WebKitGTK packages installed.
 - [ ] Verify the same shell on Windows and macOS.
@@ -40,7 +47,7 @@ Run `npm ci` to install the project-pinned Tauri 2 CLI and plugins, then use `np
 - [x] Generate original platform icons from the existing ELSim PWA icon and configure them for desktop bundling.
 - [ ] Enable target installers only after these checks.
 
-Local verification on 2026-10-25: The Tauri and capability JSON parse, Cargo lock metadata and `cargo fmt --check` pass. Desktop Linux/Windows/macOS icons are generated and present. The offline frontend and local `/ELSim/` base-path checks pass. Firefox verifies that browser open/save behavior remains unchanged. `cargo check` cannot compile on the current host: Rust/Cargo 1.84 are below the locked Tauri/plugin Rust 1.90 requirement, and the dependency graph includes an edition-2024 crate; Linux WebKitGTK 4.1 is also not installed. Native permission-schema validation, dialog runtime behavior, and desktop binaries/installers are not yet verified.
+Local verification on 2026-10-25: The Tauri and capability JSON parse, Cargo lock metadata and `cargo fmt --check` pass. Desktop Linux/Windows/macOS icons are generated and present. The offline frontend and local `/ELSim/` base-path checks pass. Firefox verifies that browser open/save behavior remains unchanged. `cargo check` cannot compile on the current host: Rust/Cargo 1.84 are below the locked Tauri/plugin Rust 1.90 requirement, and the dependency graph includes an edition-2024 crate; Linux WebKitGTK 4.1 is also not installed. The desktop preflight now checks Rust and Cargo separately and reports missing Linux pkg-config development libraries with the Debian/Ubuntu install command. Native permission-schema validation, dialog runtime behavior, and desktop binaries/installers are not yet verified.
 
 - Build and launch the unchanged app shell in Tauri on Windows, macOS, and Linux from clean checkouts. Record OS, toolchain, WebView version, installer size, and startup time.
 - Verify project open/save, user model/symbol import, worker initialization, RC transient, AC, DC sweep, cancellation, waveform zoom/pan, and large-trace interaction on each target.
