@@ -3544,6 +3544,28 @@ test('bracketed imported IC parameters sweep through browser ngspice', { tag: '@
   expect(new Set(plottedCases).size).toBe(3)
 })
 
+test('waveform destination focuses the enabled action when the window limit is reached', { tag: '@ngspice' }, async ({ page }) => {
+  const project = createStarterProject()
+  project.plotSettings.panels = Array.from({ length: 8 }, (_, index) => ({
+    id: `focus-limit-${index + 1}`,
+    bounds: { x: 1080, y: 90 + index * 12, width: 280, height: 180 },
+    selectedTraceIds: [],
+    ranges: {},
+  }))
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.locator('.circuit-part[aria-label^="R1,"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /Plot voltage across/ }).click()
+  const chooser = page.getByRole('dialog', { name: /V\(R1\)/ })
+  const newWindow = chooser.getByRole('button', { name: /New waveform window/ })
+  const addCurrent = chooser.getByRole('button', { name: /Add to current window/ })
+  await expect(newWindow).toBeDisabled()
+  await expect(addCurrent).toBeEnabled()
+  await expect(addCurrent).toBeFocused()
+})
+
 test('coupled-line example opens from Advanced examples and solves crosstalk', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
