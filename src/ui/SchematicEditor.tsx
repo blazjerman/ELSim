@@ -168,6 +168,7 @@ type ComponentSymbolAnimation = {
   potentiometerPosition: number
   potentiometerWiperY: number
   lampGlow: number
+  resistorPowerGlow: number
   ledBrightness: number
   channelCurrentGlow: number
   currentGlow: number
@@ -180,6 +181,7 @@ const EMPTY_COMPONENT_SYMBOL_ANIMATION: ComponentSymbolAnimation = {
   potentiometerPosition: 0.5,
   potentiometerWiperY: 0,
   lampGlow: 0,
+  resistorPowerGlow: 0,
   ledBrightness: 0,
   channelCurrentGlow: 0,
   currentGlow: 0,
@@ -194,6 +196,7 @@ function isDynamicComponentSymbolPrimitive(primitive: ComponentSymbolPrimitive):
     || name === 'logic-output-lead'
     || name.includes('potentiometer-wiper')
     || name.startsWith('lamp-glow-')
+    || name === 'resistor-power-glow'
     || name === 'lamp-filament'
     || name === 'led-glow'
     || name === 'led-light-rays'
@@ -222,8 +225,9 @@ const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView(
   if (primitive.kind === 'rect') return <rect x={primitive.x} y={primitive.y} width={primitive.width} height={primitive.height} rx={primitive.rx ?? 0} {...common}/>
   if (primitive.kind === 'circle') {
     const lampGlow = primitive.className === 'lamp-glow-fill'
+    const resistorPowerGlow = primitive.className === 'resistor-power-glow'
     const ledGlow = primitive.className === 'led-glow'
-    return <circle className={primitive.className} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={lampGlow ? '#ffd36d' : ledGlow ? '#ff766d' : primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={lampGlow || ledGlow ? 'none' : common.stroke} strokeWidth={common.strokeWidth} opacity={lampGlow ? sample.lampGlow * .82 : ledGlow ? Math.min(.3, sample.ledBrightness * .3) : undefined} pointerEvents={lampGlow || primitive.className === 'lamp-glow-outline' || ledGlow ? 'none' : undefined} style={primitive.className === 'lamp-glow-outline' ? { filter: `drop-shadow(0 0 ${sample.lampGlow * 15}px #ffd36d)` } : undefined}/>
+    return <circle className={primitive.className} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={lampGlow ? '#ffd36d' : resistorPowerGlow ? '#ff9b55' : ledGlow ? '#ff766d' : primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={lampGlow || resistorPowerGlow || ledGlow ? 'none' : common.stroke} strokeWidth={common.strokeWidth} opacity={lampGlow ? sample.lampGlow * .82 : resistorPowerGlow ? sample.resistorPowerGlow * .34 : ledGlow ? Math.min(.3, sample.ledBrightness * .3) : undefined} pointerEvents={lampGlow || resistorPowerGlow || primitive.className === 'lamp-glow-outline' || ledGlow ? 'none' : undefined} style={primitive.className === 'lamp-glow-outline' ? { filter: `drop-shadow(0 0 ${sample.lampGlow * 15}px #ffd36d)` } : resistorPowerGlow ? { filter: `drop-shadow(0 0 ${sample.resistorPowerGlow * 8}px #ff9b55)` } : undefined}/>
   }
   if (primitive.kind === 'text') return <text className={primitive.className} x={primitive.x} y={primitive.y} data-pin={primitive.pin} data-polarity={isCurrentPolarityPrimitive(primitive) ? primitive.text : undefined} fill={common.stroke} stroke="none" pointerEvents="none">{primitive.text}{isCurrentPolarityPrimitive(primitive) && primitive.pin !== undefined && <title>{`Pin ${primitive.pin}: conventional current ${primitive.text === '+' ? 'flows out' : 'flows in'}`}</title>}</text>
   const transistorCurrent = primitive.className === 'transistor-current-indicator'
@@ -280,7 +284,9 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const logicState = logicOutput === undefined ? undefined : logicOutput >= (logicLow + logicHigh) / 2 ? 'high' : 'low'
   const logicGateShape = part.kind === 'logicGate' ? (part.logicOperation === 'and' || part.logicOperation === 'nand' ? 'and' : part.logicOperation === 'xor' || part.logicOperation === 'xnor' ? 'xor' : 'or') : undefined
   const logicOutputStroke = logicState === 'high' ? '#83e6ad' : '#78847c'
-  const lampGlow = Math.min(0.9, Math.max(0, Math.abs((voltage ?? 0) * (current ?? 0)) / (part.animationNominalPower ?? 10)))
+  const dissipatedPower = Math.abs((voltage ?? 0) * (current ?? 0))
+  const lampGlow = part.kind === 'lamp' ? Math.min(0.9, dissipatedPower / (part.animationNominalPower ?? 10)) : 0
+  const resistorPowerGlow = part.kind === 'resistor' ? Math.min(1, Math.sqrt(dissipatedPower / (part.animationNominalPower ?? 0.25))) : 0
   const capacitorVoltage = part.kind === 'capacitor' && voltage !== undefined ? voltage - (current ?? 0) * seriesResistance : undefined
   const capacitorCharge = part.kind === 'capacitor' && voltage !== undefined
     ? componentValueMagnitude * capacitorVoltage!
@@ -302,18 +308,18 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'currentSwitch' ? switchClosed ? 'on' : 'off' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : (part.kind === 'capacitor' || part.kind === 'inductor') && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS.has(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
   const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
-  const lampPowerGeometry = lampGlow > 0 ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
+  const powerGlowGeometry = (lampGlow > 0 || resistorPowerGlow > 0) ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const inductorFieldGeometry = currentGlow > 0 ? componentDefinition.symbolAnimations?.['field.current']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const transformerPrimaryFieldGeometry = part.kind === 'transformer' && currentGlow > 0 ? componentDefinition.symbolAnimations?.['field.primaryCurrent']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const transformerSecondaryFieldGeometry = part.kind === 'transformer' && secondaryCurrentGlow > 0 ? componentDefinition.symbolAnimations?.['field.secondaryCurrent']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const ledBrightness = Math.min(1, Math.max(0, (current ?? 0) - .0002) / .01)
   const ledBrightnessGeometry = componentDefinition.symbolAnimations?.['brightness.current']?.[ledBrightness > 0 ? 'active' : 'inactive'] ?? EMPTY_SYMBOL_GEOMETRY
-  const symbolGeometry = useMemo(() => [...((symbolVariantKey ? componentDefinition.symbolVariants?.[symbolVariantKey] : undefined) ?? componentDefinition.symbolGeometry ?? EMPTY_SYMBOL_GEOMETRY), ...(mutuallyCoupled && part.kind === 'inductor' ? MUTUAL_INDUCTOR_DOT_GEOMETRY : EMPTY_SYMBOL_GEOMETRY), ...capacitorChargeGeometry, ...potentiometerWiperGeometry, ...lampPowerGeometry, ...inductorFieldGeometry, ...transformerPrimaryFieldGeometry, ...transformerSecondaryFieldGeometry, ...ledBrightnessGeometry], [componentDefinition, symbolVariantKey, mutuallyCoupled, part.kind, capacitorChargeGeometry, potentiometerWiperGeometry, lampPowerGeometry, inductorFieldGeometry, transformerPrimaryFieldGeometry, transformerSecondaryFieldGeometry, ledBrightnessGeometry])
+  const symbolGeometry = useMemo(() => [...((symbolVariantKey ? componentDefinition.symbolVariants?.[symbolVariantKey] : undefined) ?? componentDefinition.symbolGeometry ?? EMPTY_SYMBOL_GEOMETRY), ...(mutuallyCoupled && part.kind === 'inductor' ? MUTUAL_INDUCTOR_DOT_GEOMETRY : EMPTY_SYMBOL_GEOMETRY), ...capacitorChargeGeometry, ...potentiometerWiperGeometry, ...powerGlowGeometry, ...inductorFieldGeometry, ...transformerPrimaryFieldGeometry, ...transformerSecondaryFieldGeometry, ...ledBrightnessGeometry], [componentDefinition, symbolVariantKey, mutuallyCoupled, part.kind, capacitorChargeGeometry, potentiometerWiperGeometry, powerGlowGeometry, inductorFieldGeometry, transformerPrimaryFieldGeometry, transformerSecondaryFieldGeometry, ledBrightnessGeometry])
   const hasDynamicSymbolGeometry = useMemo(() => symbolGeometry.some(isDynamicComponentSymbolPrimitive), [symbolGeometry])
   const symbolAnimation = useMemo<ComponentSymbolAnimation | undefined>(() => hasDynamicSymbolGeometry ? ({
     capacitorChargeLevel, capacitorVoltage, voltage, logicOutput, logicState, logicOutputStroke,
-    potentiometerPosition, potentiometerWiperY, lampGlow, ledBrightness, channelCurrentGlow, currentGlow, secondaryCurrentGlow,
-  }) : undefined, [hasDynamicSymbolGeometry, capacitorChargeLevel, capacitorVoltage, voltage, logicOutput, logicState, logicOutputStroke, potentiometerPosition, potentiometerWiperY, lampGlow, ledBrightness, channelCurrentGlow, currentGlow, secondaryCurrentGlow])
+    potentiometerPosition, potentiometerWiperY, lampGlow, resistorPowerGlow, ledBrightness, channelCurrentGlow, currentGlow, secondaryCurrentGlow,
+  }) : undefined, [hasDynamicSymbolGeometry, capacitorChargeLevel, capacitorVoltage, voltage, logicOutput, logicState, logicOutputStroke, potentiometerPosition, potentiometerWiperY, lampGlow, resistorPowerGlow, ledBrightness, channelCurrentGlow, currentGlow, secondaryCurrentGlow])
   const layout = part.sheetPortLayout ?? EMPTY_SHEET_PORT_LAYOUT
   const { leftPins, rightPins, topPins, bottomPins, automaticLeft, automaticRight } = useMemo(() => layout.reduce((counts, port, index) => {
     if (port.side === 'left') counts.leftPins++
@@ -396,7 +402,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     if (tool === 'probe') { if (part.kind !== 'ground') onProbe(part.id); return }
     if (tool === 'select') { onSelect(part.id); if (isInteractiveSwitch) onSwitchToggle(part.id) }
   }} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); const additive = event.shiftKey || event.ctrlKey || event.metaKey; onSelect(part.id, additive); if (isInteractiveSwitch && !additive) onSwitchToggle(part.id) } }}>
-    {(voltage !== undefined || current !== undefined || logicOutput !== undefined) && <title>{`${part.ref}: ${logicOutput === undefined ? '' : `output ${logicState} (${logicOutput.toPrecision(4)} V); `}${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'zener' ? 'reverse breakdown follows the selected Zener model; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `plate charge animation follows solved charge; ${Number.isFinite(capacitorCharge) ? `Q = C × V = ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined || logicOutput !== undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${currentDescription}`}`}</title>}
+    {(voltage !== undefined || current !== undefined || logicOutput !== undefined) && <title>{`${part.ref}: ${logicOutput === undefined ? '' : `output ${logicState} (${logicOutput.toPrecision(4)} V); `}${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; no thermal behavior is simulated; ` : part.kind === 'resistor' ? `illustrative glow follows solved electrical power (${dissipatedPower.toPrecision(4)} W); reference ${part.animationNominalPower ?? 0.25} W; no thermal behavior is simulated; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'zener' ? 'reverse breakdown follows the selected Zener model; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `plate charge animation follows solved charge; ${Number.isFinite(capacitorCharge) ? `Q = C × V = ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined || logicOutput !== undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${currentDescription}`}`}</title>}
     <rect x={hitBounds.x} y={hitBounds.y} width={hitBounds.width} height={hitBounds.height} rx="9" className="part-hit" />
     {detailed || symbol ? <><g transform={part.flipX ? 'scale(-1 1)' : undefined}>
     <ComponentSymbolGeometry geometry={symbolGeometry} stroke={common.stroke} animation={symbolAnimation}/>

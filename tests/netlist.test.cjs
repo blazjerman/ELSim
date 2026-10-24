@@ -1906,6 +1906,19 @@ test('lamp uses resistor electrical behavior and keeps its animation setting in 
   assert.throws(() => validateProject(valid), /nominal power/i)
 })
 
+test('resistor power-glow reference is optional and must be positive', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  assert.equal(resistor.animationNominalPower, undefined)
+  resistor.animationNominalPower = 0.25
+  assert.equal(validateProject(JSON.parse(JSON.stringify(project))).parts.find((part) => part.id === resistor.id).animationNominalPower, 0.25)
+  resistor.animationNominalPower = 0
+  assert.throws(() => validateProject(project), /animation nominal power/i)
+  resistor.animationNominalPower = 1
+  project.parts.find((part) => part.kind === 'source').animationNominalPower = 1
+  assert.throws(() => validateProject(project), /animation nominal power/i)
+})
+
 test('DC operating point emits steady DC source values and no transient directive', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'op'

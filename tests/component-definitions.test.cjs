@@ -172,6 +172,9 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     assert.equal(componentDefinitionFor(kind).symbolAnimations?.currentDirection, undefined, `${kind} has no redundant component current arrows`)
   }
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
+  assert.ok(componentDefinitionFor('resistor').animationChannels.includes('brightness.power'))
+  assert.equal(componentPropertyDefault('resistor', 'animationNominalPower'), '0.25')
+  assert.deepEqual(componentDefinitionFor('resistor').symbolAnimations['brightness.power'].active.map(({ className, kind }) => [className, kind]), [['resistor-power-glow', 'circle']])
   assert.deepEqual(componentDefinitionFor('lamp').symbolGeometry.map(({ kind }) => kind), ['line', 'circle', 'line', 'path'])
   assert.ok(componentDefinitionFor('lamp').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className === 'lamp-filament'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolAnimations['brightness.power'].active.filter((primitive) => primitive.className?.startsWith('lamp-glow-')).map(({ className, kind }) => [className, kind]), [['lamp-glow-fill', 'circle'], ['lamp-glow-outline', 'circle']])

@@ -448,7 +448,7 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 100000,
-          "description": "Nominal electrical power in watts used only to scale lamp brightness."
+          "description": "Nominal electrical power in watts used only to scale the illustrative lamp brightness or resistor power glow."
         },
         "symbolAssetId": {
           "type": "string",
