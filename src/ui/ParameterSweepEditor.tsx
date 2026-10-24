@@ -16,7 +16,7 @@ const sourceParameterLabels: Record<string, string> = {
   'trnoise.gaussianRms': 'Gaussian RMS', 'trnoise.timeStep': 'Noise sample interval', 'trnoise.flickerExponent': 'Flicker exponent', 'trnoise.flickerAmplitude': '1/f noise amplitude', 'trnoise.rtsAmplitude': 'RTS noise amplitude', 'trnoise.rtsCaptureTime': 'RTS capture time', 'trnoise.rtsEmissionTime': 'RTS emission time',
 }
 
-export default function ParameterSweepEditor({ parts, sweeps, models, modelAssets, subcircuits, sheets, parameters: globalParameters, analysis, dcSweepSource, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; assetId?: string; startLine?: number; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; modelAssets: NonNullable<Project['modelAssets']>; subcircuits: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; sheets: Project['sheets']; parameters: { name: string; defaultValue: string }[]; analysis: Project['simulation']['analysis']; dcSweepSource?: string; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
+export default function ParameterSweepEditor({ parts, sweeps, models, modelAssets, subcircuits, sheets, parameters: globalParameters, analysis, dcSweepSource, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; assetId?: string; startLine?: number; binCount?: number; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; modelAssets: NonNullable<Project['modelAssets']>; subcircuits: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; sheets: Project['sheets']; parameters: { name: string; defaultValue: string }[]; analysis: Project['simulation']['analysis']; dcSweepSource?: string; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
   const [listDrafts, setListDrafts] = useState<Record<number, string>>({})
   const [listErrors, setListErrors] = useState<Record<number, string>>({})
   const [componentSearches, setComponentSearches] = useState<Record<number, string>>({})
@@ -25,6 +25,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, modelAsset
     const parsed = modelAssets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) }))
     const inherited = expandNgspiceAkoModels(parsed).parameters
     return models.map((model) => {
+      if (model.binCount && model.binCount > 1) return model
       const parameters = model.assetId && model.startLine !== undefined ? inherited.get(`${model.assetId}:${model.startLine}`) : undefined
       return parameters ? { ...model, parameters } : model
     })

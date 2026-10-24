@@ -2549,7 +2549,7 @@ test('standalone MOSFET can select an imported BSIM3 bin family by its base name
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'nch-bins.lib', mimeType: 'text/plain', buffer: Buffer.from([
-      '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7',
+      '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7 U0=500',
       '.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5',
     ].join('\n')),
   })
@@ -2595,6 +2595,7 @@ test('standalone MOSFET can select an imported BSIM3 bin family by its base name
   await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('M1')
   const familySweepParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
   await expect(familySweepParameter.locator('option[value="VTH0"]')).toContainText('default 0.7')
+  await expect(familySweepParameter.locator('option[value="U0"]')).toHaveCount(0)
 })
 
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
