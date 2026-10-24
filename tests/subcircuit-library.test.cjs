@@ -1410,6 +1410,15 @@ test('warns at source when an imported B-source uses sqr() unsupported by the pi
   assert.equal(source.includes('sqr(V(IN) - 2)'), true)
 })
 
+test('warns at source when an imported B-source uses int() unsupported by the pinned runtime', () => {
+  const source = '.SUBCKT truncation IN OUT\nB1 OUT 0 V=int(V(IN))\n.ENDS truncation'
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'B-source int()'])
+  assert.match(warning.impact, /Browser ngspice rejects int\(\)/)
+  assert.match(warning.suggestion, /sgn\(x\)\*floor\(abs\(x\)\)/)
+  assert.equal(source.includes('int(V(IN))'), true)
+})
+
 test('flags LTspice idt() behavioral functions rejected by the pinned browser ngspice engine', () => {
   const source = '.SUBCKT integrator IN OUT\nB1 OUT 0 V=idt(V(IN))\n.ENDS integrator'
   const [warning] = analyzeLtspiceModelDialect(source)

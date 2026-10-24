@@ -4136,18 +4136,21 @@ test('native behavioral sqr() compatibility alias simulates through the browser 
   await expect(page.locator('.netlist-modal pre')).toContainText('(V(vin) / 3) * (V(vin) / 3)')
 })
 
-test('imported model B-source sqr() warning links to its original source line', { tag: '@ui-smoke' }, async ({ page }) => {
+test('imported model B-source sqr() and int() warnings link to their source lines', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'squared-model.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.SUBCKT SQUARED IN OUT\nB1 OUT 0 V=sqr(V(IN) - 2)\n.ENDS SQUARED\n'),
+    buffer: Buffer.from('.SUBCKT SQUARED IN OUT\nB1 OUT 0 V=sqr(V(IN) - 2)\nB2 OUT 0 V=int(V(IN))\n.ENDS SQUARED\n'),
   })
   const warning = page.getByRole('status', { name: 'Imported model compatibility warnings' })
   await expect(warning).toContainText('Imported B-source sqr()')
   await expect(warning).toContainText('squared-model.lib:2')
   await expect(warning).toContainText('Replace sqr(x) with x*x')
+  await expect(warning).toContainText('B-source int()')
+  await expect(warning).toContainText('squared-model.lib:3')
+  await expect(warning).toContainText('Use sgn(x)*floor(abs(x))')
 })
 
 test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {
