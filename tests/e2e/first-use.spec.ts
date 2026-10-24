@@ -15012,6 +15012,18 @@ test('diode intermodulation example opens with guidance and solves in Firefox', 
   await expect(plot.locator('.plot-tick[data-value-unit="V"]').first()).toContainText('V')
   await expect(page.getByRole('group', { name: /Selected ac result vectors/ }).getByRole('button', { name: /Disable IM \(2f1−f2\) · V\(vout\)/i })).toBeVisible()
 
+  const curveYCoordinates = async (name: RegExp) => (await plot.getByRole('img', { name }).getAttribute('points'))!.split(/\s+/).map((point) => point.split(',')[1])
+  const voltageCurveBeforeToggle = await curveYCoordinates(/V\(vout\), intermodulation product magnitude in V/i)
+  const currentCurveBeforeToggle = await curveYCoordinates(/I\(D1\), intermodulation product magnitude in A/i)
+  const vectors = page.getByRole('group', { name: /Selected ac result vectors/ })
+  await vectors.getByRole('button', { name: /Disable IM \(2f1−f2\) · I\(d1\)/i }).click()
+  await expect(plot.locator('.plot-tick[data-value-unit="A"]')).toHaveCount(0)
+  expect(await curveYCoordinates(/V\(vout\), intermodulation product magnitude in V/i)).toEqual(voltageCurveBeforeToggle)
+  await vectors.getByRole('button', { name: /Enable IM \(2f1−f2\) · I\(d1\)/i }).click()
+  await expect(plot.locator('.plot-tick[data-value-unit="A"]').first()).toBeVisible()
+  expect(await curveYCoordinates(/V\(vout\), intermodulation product magnitude in V/i)).toEqual(voltageCurveBeforeToggle)
+  expect(await curveYCoordinates(/I\(D1\), intermodulation product magnitude in A/i)).toEqual(currentCurveBeforeToggle)
+
   const plotWindow = page.locator('.plot-window').last()
   const panelId = await plotWindow.getAttribute('data-plot-panel-id')
   const readSavedUnitRanges = () => page.evaluate((id) => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.find((panel: { id: string }) => panel.id === id)?.valueRanges?.ac ?? null, panelId)
