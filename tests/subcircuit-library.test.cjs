@@ -1509,6 +1509,22 @@ test('diagnoses reached imported helpers with table, integrator, step, and Boole
   assert.match(helperWarnings[4].suggestion, /do not replace ~ with ngspice ! blindly/i)
 })
 
+test('diagnoses unsupported imported B-source functions hidden inside reachable helpers', () => {
+  const source = [
+    '.FUNC random_value(x) {flat(x)}',
+    '.FUNC unused_distribution(x) {gauss(x)}',
+    '.SUBCKT random_block IN OUT',
+    'B1 OUT 0 V=random_value(V(IN))',
+    '.ENDS random_block',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'Imported .FUNC uses an unavailable or incompatible B-source function'],
+  ])
+  assert.match(warnings[0].impact, /incompatible signature/)
+  assert.match(warnings[0].suggestion, /tested ngspice-compatible expression/)
+})
+
 test('limits compatibility diagnostics and cross-library helpers to selected .LIB sections', () => {
   const source = '.LIB used\n.SUBCKT used_model IN OUT\nB1 OUT 0 V=active_helper(V(IN))\n.ENDS used_model\n.ENDL used\n.LIB unused\n.SUBCKT unused_model IN OUT\nB2 OUT 0 V=int(V(IN))\n.ENDS unused_model\n.ENDL unused'
   const warnings = analyzeLtspiceModelDialect(source, {

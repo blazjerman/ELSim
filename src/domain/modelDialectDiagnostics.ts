@@ -86,6 +86,7 @@ const helperCompatibilityRules = [
   { pattern: /\bif\s*\(/i, feature: 'Imported .FUNC uses LTspice if()', impact: 'The pinned browser ngspice engine reports “no such function” for LTspice if() in an imported behavioral expression.', suggestion: 'Rewrite if(condition, yes, no) as the ngspice ternary condition ? yes : no. ELSim preserves imported model source unchanged.' },
   { pattern: /\btable\s*\(/i, feature: 'Imported .FUNC uses LTspice table()', impact: 'The pinned browser ngspice engine reports “no such function” for LTspice table() in an imported behavioral expression.', suggestion: 'Rewrite the lookup as an ngspice-compatible PWL expression or equivalent subcircuit. ELSim preserves imported model source unchanged.' },
   { pattern: /\b(?:idt|idtmod|sdt)\s*\(/i, feature: 'Imported .FUNC uses LTspice behavioral integration', impact: 'The pinned browser ngspice engine does not implement LTspice idt()/idtmod()/sdt() as behavioral expression functions; idt() fails with “no such function”.', suggestion: 'Replace the behavioral integrator with an explicit capacitor-based circuit or a tested ngspice-compatible subcircuit.' },
+  { pattern: /\b(absdelay|arccos|arcsin|arctan|atan2|buf|cbrt|delay|flat|gauss|hypot|inv|mc|mod|noise|pwrs|random|rand|round|select|smallsig|square|white|xor)\s*\(/i, feature: 'Imported .FUNC uses an unavailable or incompatible B-source function', impact: 'The pinned browser ngspice engine rejects this imported behavioral function or uses an incompatible signature. Statistical functions in particular can differ in both argument order and distribution.', suggestion: 'Check the function’s intended behavior and replace it with a tested ngspice-compatible expression or equivalent subcircuit. ELSim preserves imported model source unchanged.' },
   { pattern: /\bu\s*\(/i, feature: 'Imported .FUNC uses LTspice u() step function', impact: 'LTspice u(x) returns 0 when x is zero, while ngspice u(0) returns 0.5. The helper’s result can differ at the zero boundary.', suggestion: 'If the zero boundary matters, replace u(x) with (x > 0) ? 1 : 0 after checking the model author’s intent.' },
   { pattern: /\^/, feature: 'Imported .FUNC uses LTspice boolean ^', impact: 'LTspice uses ^ for Boolean XOR in B-source expressions, while ngspice interprets it as exponentiation.', suggestion: 'Use pow(a,b) for exponentiation or rewrite intended Boolean XOR explicitly for the target simulator.' },
   { pattern: /~/, feature: 'Imported .FUNC uses LTspice ~ inversion', impact: 'LTspice accepts ~ as Boolean inversion, but the pinned browser ngspice engine rejects this syntax in behavioral expressions.', suggestion: 'Rewrite using an explicit comparison that preserves LTspice Boolean threshold semantics; do not replace ~ with ngspice ! blindly.' },
@@ -208,9 +209,13 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
         const visitedKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${candidate.name.toLowerCase()}`
         if (visited.has(visitedKey)) continue
         visited.add(visitedKey)
-        pending.push(...behavioralFunctionCalls(candidate.body).map((called) => ({ name: called, scope: candidate.scope })))
+        const calledFunctions = behavioralFunctionCalls(candidate.body)
+        pending.push(...calledFunctions.map((called) => ({ name: called, scope: candidate.scope })))
         for (const rule of helperCompatibilityRules) {
-          if (!rule.pattern.test(candidate.body)) continue
+          const match = rule.pattern.exec(candidate.body)
+          if (!match) continue
+          const calledName = match[1]?.toLowerCase()
+          if (rule.feature === 'Imported .FUNC uses an unavailable or incompatible B-source function' && calledName && (helpersByScope.get(candidate.scope)?.has(calledName) || globalHelpers.has(calledName))) continue
           const warningKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${rule.feature}`
           if (helperWarnings.has(warningKey)) continue
           helperWarnings.set(warningKey, { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature: rule.feature, excerpt: candidate.excerpt, impact: rule.impact, suggestion: rule.suggestion })

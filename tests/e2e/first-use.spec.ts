@@ -4142,7 +4142,7 @@ test('imported model B-source and helper compatibility warnings link to their so
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'shared-functions.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.LIB active\n.FUNC square_helper(x) {sqr(x)}\n.FUNC truncate_helper(x) {int(x)}\n.FUNC clamp_helper(x) {limit(x, 0, 1)}\n.FUNC select_helper(x) {if(x > 0, 1, 0)}\n.ENDL active\n.LIB inactive\n.FUNC unused_helper(x) {sqr(x)}\n.ENDL inactive\n'),
+    buffer: Buffer.from('.LIB active\n.FUNC square_helper(x) {sqr(x)}\n.FUNC truncate_helper(x) {int(x)}\n.FUNC clamp_helper(x) {limit(x, 0, 1)}\n.FUNC select_helper(x) {if(x > 0, 1, 0)}\n.FUNC distribution_helper(x) {flat(x)}\n.ENDL active\n.LIB inactive\n.FUNC unused_helper(x) {sqr(x)}\n.ENDL inactive\n'),
   })
   const sections = page.getByRole('dialog', { name: 'Choose model sections' })
   await expect(sections).toBeVisible()
@@ -4152,7 +4152,7 @@ test('imported model B-source and helper compatibility warnings link to their so
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'squared-model.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.SUBCKT SQUARED IN OUT\nB1 OUT 0 V=sqr(V(IN) - 2)\nB2 OUT 0 V=int(V(IN))\nB3 OUT 0 V=square_helper(V(IN))\nB4 OUT 0 V=truncate_helper(V(IN))\nB5 OUT 0 V=clamp_helper(V(IN))\nB6 OUT 0 V=select_helper(V(IN))\n.ENDS SQUARED\n'),
+    buffer: Buffer.from('.SUBCKT SQUARED IN OUT\nB1 OUT 0 V=sqr(V(IN) - 2)\nB2 OUT 0 V=int(V(IN))\nB3 OUT 0 V=square_helper(V(IN))\nB4 OUT 0 V=truncate_helper(V(IN))\nB5 OUT 0 V=clamp_helper(V(IN))\nB6 OUT 0 V=select_helper(V(IN))\nB7 OUT 0 V=distribution_helper(V(IN))\n.ENDS SQUARED\n'),
   })
   const warning = page.getByRole('status', { name: 'Imported model compatibility warnings' })
   await expect(warning).toContainText('Imported B-source sqr()')
@@ -4169,7 +4169,9 @@ test('imported model B-source and helper compatibility warnings link to their so
   await expect(warning).toContainText('shared-functions.lib:4')
   await expect(warning).toContainText('Imported .FUNC uses LTspice if()')
   await expect(warning).toContainText('shared-functions.lib:5')
-  await expect(warning).not.toContainText('shared-functions.lib:8')
+  await expect(warning).toContainText('Imported .FUNC uses an unavailable or incompatible B-source function')
+  await expect(warning).toContainText('shared-functions.lib:6')
+  await expect(warning).not.toContainText('shared-functions.lib:9')
 })
 
 test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {
