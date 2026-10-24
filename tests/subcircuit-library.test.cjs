@@ -1755,6 +1755,21 @@ test('recognizes punctuation allowed in native ngspice .PARAM identifiers', () =
   ])
 })
 
+test('rejects reserved ngspice .PARAM identifiers with their source line', () => {
+  for (const name of ['sqrt', 'defined', 'or', 'temper']) {
+    assert.throws(
+      () => parseSubcircuitLibrary(`* imported model\n.param ${name}=1`),
+      /Line 2: \.PARAM name .* is reserved by ngspice/,
+      name,
+    )
+  }
+  assert.throws(
+    () => parseSubcircuitLibrary('.SUBCKT LOCAL IN OUT\n.PARAM TIME=1\n.ENDS LOCAL'),
+    /Line 2: \.PARAM name TIME is reserved by ngspice/,
+  )
+  assert.doesNotThrow(() => parseSubcircuitLibrary('.param my_sqrt=1 custom%=2'))
+})
+
 test('rejects ngspice directives that are not supported in conditional blocks', () => {
   for (const directive of ['.FUNC SCALE(x) {x}', '.MEAS TRAN RESULT MAX V(out)', '.GLOBAL 0', '.OPTIONS reltol=.01']) {
     assert.throws(() => parseSubcircuitLibrary(`.IF (MODE == 1)\n${directive}\n.ENDIF`), /Line 2: .* is not supported inside an ngspice \.IF block/, directive)

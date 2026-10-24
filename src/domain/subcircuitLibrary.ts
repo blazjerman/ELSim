@@ -735,6 +735,11 @@ function topLevelParameterNames(text: string): string[] {
   return names
 }
 
+const reservedNgspiceParameterNames = new Set([
+  ...Object.keys(builtinFunctionArities),
+  'not', 'and', 'or', 'div', 'mod', 'defined', 'sqr', 'time', 'temper', 'hertz',
+])
+
 function dependencyOnLine(text: string, owner: string, sourceLine: number): ModelDependency | null {
   const tokens = spiceFields(text)
   const reference = tokens[0] ?? ''
@@ -1086,6 +1091,12 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const lines = inspected.sections.length
     ? inspected.lines.filter(({ section }) => section === null || section !== null && selectedNames.has(section.toLowerCase())).map(({ line }) => line)
     : inspected.lines.map(({ line }) => line)
+
+  for (const line of lines) {
+    if (!/^\s*\.param\b/i.test(line.text)) continue
+    const reservedName = topLevelParameterNames(line.text).find((name) => reservedNgspiceParameterNames.has(name.toLowerCase()))
+    if (reservedName) throw new Error(`Line ${line.start}: .PARAM name ${reservedName} is reserved by ngspice and cannot be used as a parameter.`)
+  }
 
   const functions = parseLibraryFunctions(lines)
   const functionArities = new Map(availableFunctions)
