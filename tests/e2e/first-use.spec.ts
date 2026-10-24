@@ -9983,6 +9983,23 @@ test('experimental TRNOISE voltage source simulates through browser ngspice', { 
   await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 DC 0 TRNOISE\(20m 1m 1\.1 1m 5m 2m 3m\)/)
 })
 
+test('transient-noise example teaches and runs the built-in noisy source', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Advanced' }).click()
+  await dialog.locator('article[data-example-id="transient-noise"]').getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Transient noise waveform')
+  await expect(page.getByLabel('Guided example')).toContainText('random noise does not repeat a fixed cycle')
+  await expect(page.getByLabel('Analysis type')).toHaveValue('tran')
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(7)
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/V1 VIN 0 DC 0 TRNOISE\(20m 10u 0 0 0 1m 1m\)/)
+})
+
 test('PWL waveform example opens with editable points and solves the RC response', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

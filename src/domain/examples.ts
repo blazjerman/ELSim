@@ -1723,6 +1723,40 @@ export function createSineWaveExampleProject(): Project {
   return project
 }
 
+/** A beginner transient-noise example showing random voltage about a DC level. */
+export function createTransientNoiseExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = {
+    id: 'transient-noise-v1', kind: 'source', ref: 'V1', value: '0 V', sourceMode: 'trnoise',
+    trnoise: { gaussianRms: '20 mV', timeStep: '10 µs', flickerExponent: '0', flickerAmplitude: '0 V', rtsAmplitude: '0 V', rtsCaptureTime: '1 ms', rtsEmissionTime: '1 ms' },
+    x: 300, y: 360, rotation: 0,
+  }
+  const resistor: Part = { id: 'transient-noise-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 500, y: 310, rotation: 0 }
+  const sourcePins = componentPins(source)
+  project.name = 'Transient noise waveform'
+  project.parts = [source, resistor]
+  project.wires = [
+    { id: 'transient-noise-source-rise', points: [[300, 310], [300, 260]] },
+    { id: 'transient-noise-source-top', points: [[300, 260], [450, 260]] },
+    { id: 'transient-noise-resistor-feed', points: [[450, 260], [450, 310]] },
+    { id: 'transient-noise-resistor-return', points: [[550, 310], [600, 310]] },
+    { id: 'transient-noise-return-drop', points: [[600, 310], [600, 440]] },
+    { id: 'transient-noise-ground-return', points: [[600, 440], [300, 440]] },
+    { id: 'transient-noise-source-ground', points: [[300, 410], [300, 440]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    { id: 'transient-noise-vin', name: 'VIN', x: sourcePins[0].x, y: sourcePins[0].y, visible: true },
+    { id: 'transient-noise-ground', name: '0', x: sourcePins[1].x, y: sourcePins[1].y, visible: true },
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '5 ms', maxStep: '10 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(R1)'], ranges: {} }
+  project.view = { zoom: 0.95, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A pulse-driven voltage-controlled amplifier with an explicit load. */
 /** A parallel LC tank with a damped AC response peak near its calculated resonance. */
 export function createRlcResonanceExampleProject(): Project {
