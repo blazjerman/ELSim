@@ -370,7 +370,8 @@ export function withoutInlineComment(line: string): string {
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index]
     if (quote) {
-      if (char === quote) quote = ''
+      if (char === '\\' && index + 1 < line.length) index += 1
+      else if (char === quote) quote = ''
     } else if (char === '"' || char === "'") quote = char
     else {
       // ngspice end-of-line comments use `$`, `;`, or `//` after whitespace.
