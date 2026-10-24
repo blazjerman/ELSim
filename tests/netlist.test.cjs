@@ -8,7 +8,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createSineWaveExampleProject, createTransientNoiseExampleProject, createTransientNoiseSweepExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createCommonSourceExampleProject, createCmosInverterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSwitchExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createEducationalOpampExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSuperpositionExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTheveninNortonExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createTransmissionLineExampleProject, createUrcLineExampleProject, createCoupledLineCrosstalkExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createSineWaveExampleProject, createTransientNoiseExampleProject, createTransientNoiseSweepExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createCommonSourceExampleProject, createCmosInverterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSwitchExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createEducationalOpampExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createTransferFunctionExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSuperpositionExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTheveninNortonExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createTransmissionLineExampleProject, createUrcLineExampleProject, createCoupledLineCrosstalkExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNativeUrcLineExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
@@ -1929,6 +1929,21 @@ test('loaded voltage-divider example models RLOAD in parallel with the lower leg
   assert.match(artifact.text, /^RLOAD VOUT 0 1k$/m)
   assert.equal(project.wires.length, 10)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)', 'I(RLOAD)'])
+})
+
+test('transfer-function lesson runs the loaded divider with a labeled output and source', () => {
+  const project = validateProject(createTransferFunctionExampleProject())
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'Small-signal transfer function')
+  assert.equal(project.simulation.analysis, 'tf')
+  assert.deepEqual(project.simulation.transferFunction, { outputNode: 'VOUT', inputSource: 'V1' })
+  assert.match(artifact.text, /^V1 VIN 0 DC 10$/m)
+  assert.match(artifact.text, /^R1 VIN VOUT 1k$/m)
+  assert.match(artifact.text, /^R2 VOUT 0 1k$/m)
+  assert.match(artifact.text, /^RLOAD VOUT 0 1k$/m)
+  assert.match(artifact.text, /^\.tf V\(VOUT\) V1$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, [])
 })
 
 test('superposition lesson creates two independent source branches that sum at VOUT', () => {

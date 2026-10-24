@@ -12,6 +12,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'transient-noise', title: 'Transient noise waveform', description: 'See random voltage fluctuations around a DC level and learn how noise amplitude and sample interval affect a transient.' },
   { id: 'transient-noise-sweep', title: 'Compare transient-noise levels', description: 'Run three Gaussian RMS settings and compare the spread of the resulting random voltage and resistor-current waveforms.' },
   { id: 'rlc-resonance', title: 'Parallel RLC resonance', description: 'Sweep an LC tank and find its resonant peak; change L or C to move it.' },
+  { id: 'transfer-function', title: 'Small-signal transfer function', description: 'Measure a loaded divider’s DC gain, input resistance, and output resistance with ngspice’s .tf analysis.' },
   { id: 'lc-energy', title: 'LC energy exchange', description: 'Start with a charged capacitor and watch stored electric energy move into inductor current and back.' },
   { id: 'rc', title: 'RC step response', description: 'Watch a capacitor charge through a resistor and explore the time constant.' },
   { id: 'pwl', title: 'PWL waveform response', description: 'Drive an RC circuit with a custom three-level source and see how the capacitor follows each change.' },
@@ -77,7 +78,7 @@ const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, readonly ExampleId[]
   diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'sine-wave', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'current-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
-  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'transient-noise', 'transient-noise-sweep', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'common-source', 'cmos-inverter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier', 'transmission-line', 'urc-line', 'urc-line-native', 'coupled-crosstalk'],
+  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'transient-noise', 'transient-noise-sweep', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'common-source', 'cmos-inverter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'transfer-function', 'bridge-rectifier', 'transmission-line', 'urc-line', 'urc-line-native', 'coupled-crosstalk'],
 }
 const startOrder = new Map(exampleTopicIds.start.map((id, index) => [id, index]))
 

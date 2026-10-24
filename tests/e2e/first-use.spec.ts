@@ -2751,6 +2751,25 @@ test('transfer-function analysis runs in browser ngspice and reports gain and im
   await expect(plot.locator('.op-table')).toContainText('Input impedance at V1')
 })
 
+test('transfer-function example teaches and solves the loaded-divider measurement', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Advanced', exact: true }).click()
+  const example = dialog.locator('[data-example-id="transfer-function"]')
+  await expect(example).toContainText('DC gain, input resistance, and output resistance')
+  await example.getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.getByText('Measure gain and resistance with .tf')).toBeVisible()
+  await expect(page.getByLabel('Analysis type')).toHaveValue('tf')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const table = page.locator('.plot-window').filter({ hasText: 'Small-signal transfer function' }).locator('.op-table')
+  await expect(table.locator('tr').filter({ hasText: 'DC transfer gain' })).toContainText('0.333333')
+  await expect(table.locator('tr').filter({ hasText: 'Input impedance at V1' })).toContainText('1500')
+  await expect(table.locator('tr').filter({ hasText: 'Output impedance' })).toContainText('333.333')
+})
+
 test('transfer-function results open a new window when saved waveform windows have unrelated traces', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()

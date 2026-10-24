@@ -1094,6 +1094,16 @@ export function createLoadedVoltageDividerExampleProject(): Project {
   return project
 }
 
+/** A small-signal analysis lesson measuring a loaded divider's gain and resistance. */
+export function createTransferFunctionExampleProject(): Project {
+  const project = createLoadedVoltageDividerExampleProject()
+  project.name = 'Small-signal transfer function'
+  project.simulation = { ...project.simulation, analysis: 'tf', transferFunction: { outputNode: 'VOUT', inputSource: 'V1' } }
+  project.plotSettings = { selectedTraceIds: [], ranges: {} }
+  project.sheets = project.sheets.map((sheet) => ({ ...sheet, name: project.name }))
+  return project
+}
+
 /** Two independent sources drive a resistive node to demonstrate linear superposition. */
 export function createSuperpositionExampleProject(): Project {
   const project = createStarterProject()
