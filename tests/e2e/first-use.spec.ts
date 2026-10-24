@@ -11719,6 +11719,7 @@ test('voltage source inspector edits DC, pulse, and validated PWL transient beha
 
 test('passive temperature coefficients are editable as advanced properties and appear in the netlist', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.locator('.circuit-part[data-part-id="p-r1"]').click()
   await page.getByText('Temperature coefficients (advanced)').click()
   await page.getByLabel('TC1 temperature coefficient for R1').fill('0.01')
