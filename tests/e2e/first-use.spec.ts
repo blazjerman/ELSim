@@ -4104,7 +4104,8 @@ test('duplicate imported .FUNC names show both source lines and allow review', {
 
   const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
   const conflict = conflicts.locator(':scope > ul > li').filter({ hasText: '.FUNC gain' })
-  await expect(conflict).toContainText('function bodies may differ')
+  await expect(conflict).toContainText('ngspice does not overload global .FUNC names')
+  await expect(conflict).toContainText('Rename one definition')
   await expect(conflict).toContainText('functions-a.lib:1')
   await expect(conflict).toContainText('functions-b.lib:1')
   await conflict.getByRole('button', { name: 'Review definition' }).nth(1).click()
