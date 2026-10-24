@@ -251,7 +251,7 @@ function isTransientMeasurement(value: unknown): boolean {
 function isParameterSweepRun(value: unknown): boolean {
   if (!isRecord(value) || typeof value.label !== 'string' || !Array.isArray(value.values)
     || value.values.length < 1 || value.values.length > 3) return false
-  const components = new Set<string>()
+  const targets = new Set<string>()
   return value.values.every((entry) => {
     if (!isRecord(entry) || typeof entry.component !== 'string' || !entry.component.trim()
       || typeof entry.value !== 'string' || !Number.isFinite(Number(entry.value))) return false
@@ -269,9 +269,11 @@ function isParameterSweepRun(value: unknown): boolean {
     if (entry.waveformAmplitude !== undefined && (typeof entry.waveformAmplitude !== 'boolean' || (entry.waveformAmplitude && (hasModelTarget || hasGlobalParameter)))) return false
     if (hasGlobalParameter && hasModelTarget) return false
     if ([entry.pulseHigh, entry.pwlScale, entry.waveformAmplitude, entry.sourceParameter !== undefined].filter(Boolean).length > 1) return false
-    const key = entry.component.toLowerCase()
-    if (components.has(key)) return false
-    components.add(key)
+    const target = hasGlobalParameter
+      ? `global:${String(entry.globalParameter).toLowerCase()}`
+      : `${entry.component.toLowerCase()}:${hasModelTarget ? hasInstanceParameter ? 'instance' : 'model' : entry.sourceParameter !== undefined ? 'source' : 'value'}:${String(entry.parameter ?? entry.sourceParameter ?? '').toLowerCase()}`
+    if (targets.has(target)) return false
+    targets.add(target)
     return true
   })
 }

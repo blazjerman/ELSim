@@ -70,6 +70,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     const engineBaseUrl = new URL(import.meta.env.BASE_URL, worker.location.origin)
     const moduleLoadStarted = profileWorker ? performance.now() : 0
     const loaded = await import(/* @vite-ignore */ new URL('engine/ngspice.mjs', engineBaseUrl).href) as { default: NgspiceFactory }
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.1, message: 'Initializing ngspice WebAssembly' } satisfies EngineResponse)
     const restoreWasmTracking = profileWorker ? trackWasmMemoryDuringInitialization((memory) => { wasmMemory = memory }) : undefined
     let module: NgspiceModule
     try {
@@ -82,6 +83,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     } finally {
       restoreWasmTracking?.()
     }
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.15, message: 'Preparing simulation' } satisfies EngineResponse)
     if (profileWorker) moduleLoadMs = performance.now() - moduleLoadStarted
     const runDeck = addResultControl(artifact.text, parameterSweep, measurements)
     if (needsLtspiceFullDeckTranslation(runDeck)) {

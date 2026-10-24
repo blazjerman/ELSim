@@ -2506,7 +2506,7 @@ export default function App() {
     catch (error) { setRunState('error'); setNotice(error instanceof Error ? error.message : 'Could not prepare parameter sweep.'); return }
     setPlaybackRunning(false)
     setRunState('loading')
-    setNotice('Loading ngspice WebAssembly')
+    setNotice('Preparing simulation')
     const measurements = snapshot.simulation.transientMeasurements ?? []
     const requestId = crypto.randomUUID()
     const runId = crypto.randomUUID()
@@ -2799,6 +2799,7 @@ export default function App() {
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${artifact.text}\n${JSON.stringify(parameterSweep)}`))
       if (activeWorkerRef.current !== worker) return
       const netlistHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+      setNotice('Loading ngspice WebAssembly')
       worker.postMessage({
         type: 'run', requestId, artifact,
         metadata: {
@@ -2850,12 +2851,14 @@ export default function App() {
     if (project.simulation.analysis === 'dc' && configured.length > 0) { setNotice('A two-source DC sweep supports one secondary source. Remove the current secondary sweep before choosing another.'); return }
     if (configured.reduce((total, sweep) => total * sweep.points, 1) * 2 > 10) { setNotice('Reduce the number of values before adding another parameter. A sweep can run at most 10 cases.'); return }
     const eligibleParts = eligibleParameterSweepParts({ parts: project.parts, analysis: project.simulation.analysis, dcSweepSource: project.simulation.dcSweep?.source, models: importedDeviceModels, subcircuits: importedModels, sheets: project.sheets })
-    const parts = unusedSweepTargets(eligibleParts, configured)
-    const hasNumericInstanceParameter = (part: Part) => subcircuitSweepParameters(part, importedModels, project.sheets).length > 0
+    const parts = unusedSweepTargets(eligibleParts, configured, importedDeviceModels, importedModels, project.sheets)
+    const availableInstanceParameters = (part: Part) => subcircuitSweepParameters(part, importedModels, project.sheets).filter((parameter) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase() && sweep.instanceParameter && sweep.parameter?.toLowerCase() === parameter.name.toLowerCase()))
+    const availableModelParameters = (part: Part) => importedModelSweepParameters(part, importedDeviceModels).filter((parameter) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase() && !sweep.instanceParameter && sweep.parameter?.toLowerCase() === parameter.name.toLowerCase()))
+    const hasSweepableInstanceParameter = (part: Part) => availableInstanceParameters(part).length > 0
     const parameters = project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []
     const availableParameter = parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null && !configured.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase()))
-    const part = parts.find(hasNumericInstanceParameter)
-      ?? parts.find((candidate) => importedModelSweepParameters(candidate, importedDeviceModels).length > 0)
+    const part = parts.find(hasSweepableInstanceParameter)
+      ?? parts.find((candidate) => availableModelParameters(candidate).length > 0)
       ?? parts[0]
     if ((!part && !availableParameter) || configured.length >= (project.simulation.analysis === 'dc' ? 1 : 3)) { setNotice(project.simulation.analysis === 'dc' ? 'A two-source DC sweep needs another scalar DC voltage or current source.' : 'Parameter stepping supports up to three distinct project parameters, R/C/L values, sources, imported device models, ICs, or reusable blocks.'); return }
     if (!part && availableParameter) {
@@ -2865,8 +2868,8 @@ export default function App() {
       return
     }
     if (!part) return
-    if (hasNumericInstanceParameter(part) && part.kind === 'subcircuit') {
-      const parameter = subcircuitSweepParameters(part, importedModels, project.sheets)[0]
+    if (hasSweepableInstanceParameter(part) && part.kind === 'subcircuit') {
+      const parameter = availableInstanceParameters(part)[0]
       if (parameter) {
         const initial = sweepParameterValue(part, parameter)
         const magnitude = componentMagnitude(initial, 'resistor')
@@ -2875,7 +2878,7 @@ export default function App() {
         return
       }
     }
-    const modelParameter = importedModelSweepParameters(part, importedDeviceModels)[0]
+    const modelParameter = availableModelParameters(part)[0]
     if (modelParameter) {
       const magnitude = componentMagnitude(modelParameter.defaultValue, 'resistor')
       const sweep: ParameterSweep = { component: part.ref, parameter: modelParameter.name, start: magnitude === null ? '' : modelParameter.defaultValue, stop: magnitude === null ? '' : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}`, points: 3 }

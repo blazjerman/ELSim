@@ -34,6 +34,8 @@ test('the sweep editor and Add action share eligible source, model, IC, and reus
   const model = { name: 'USER_D', parameters: [{ name: 'IS', defaultValue: '1e-14' }, { name: 'TNOM', defaultValue: 'temperature' }, { name: 'N', defaultValue: 'BASE*2', defaultIsExpression: true }] }
   assert.deepEqual(importedModelSweepParameters(diode, [model]).map((parameter) => parameter.name), ['IS', 'N'])
   assert.ok(eligibleParameterSweepParts({ parts: [diode], analysis: 'tran', models: [model], subcircuits, sheets: project.sheets }).some((part) => part.id === 'd1'))
+  assert.deepEqual(unusedSweepTargets([diode], [{ component: 'D1', parameter: 'IS', start: '1', stop: '2', points: 2 }], [model], subcircuits, project.sheets).map((part) => part.ref), ['D1'])
+  assert.deepEqual(unusedSweepTargets([diode], [{ component: 'D1', parameter: 'IS', start: '1', stop: '2', points: 2 }, { component: 'D1', parameter: 'N', start: '1', stop: '2', points: 2 }], [model], subcircuits, project.sheets), [])
 
   const expressionProject = createHierarchicalExampleProject()
   const divider = expressionProject.sheets.find((sheet) => sheet.id === 'sheet-divider')
@@ -340,6 +342,19 @@ test('imported device model parameters are validated and emitted with altermod',
   assert.match(runs[0].label, /Q1\.BF=80/)
   const control = addResultControl(createNetlistArtifact(validated).text, runs)
   assert.match(control, /altermod USER_NPN BF=8\.00000000e\+1\nrun/)
+  const combined = structuredClone(project)
+  combined.simulation.parameterSweeps = [
+    { component: 'Q1', parameter: 'BF', start: '80', stop: '160', points: 2 },
+    { component: 'Q1', parameter: 'VAF', start: '40', stop: '120', points: 2 },
+  ]
+  const combinedValidated = validateProject(combined)
+  const combinedRuns = prepareParameterSweep(combinedValidated)
+  assert.equal(combinedRuns.length, 4)
+  assert.deepEqual(combinedRuns[0].values.map(({ parameter }) => parameter), ['BF', 'VAF'])
+  assert.match(addResultControl(createNetlistArtifact(combinedValidated).text, combinedRuns), /altermod USER_NPN BF=8\.00000000e\+1\naltermod USER_NPN VAF=4\.00000000e\+1\nrun/)
+  const duplicateTarget = structuredClone(combined)
+  duplicateTarget.simulation.parameterSweeps[1].parameter = 'BF'
+  assert.throws(() => validateProject(duplicateTarget), /Parameter stepping settings are malformed/)
   const discrete = structuredClone(project)
   discrete.simulation.parameterSweeps = [{ component: 'Q1', parameter: 'BF', start: '10', stop: '200', listValues: ['10', '50', '200'], points: 3 }]
   const discreteRuns = prepareParameterSweep(validateProject(discrete))

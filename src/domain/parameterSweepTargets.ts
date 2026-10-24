@@ -53,7 +53,16 @@ export function eligibleParameterSweepParts({ parts, analysis, dcSweepSource, mo
     || subcircuitSweepParameters(part, subcircuits, sheets).length > 0)
 }
 
-export function unusedSweepTargets(parts: Part[], sweeps: ParameterSweep[]): Part[] {
-  const used = new Set(sweeps.filter((sweep) => !sweep.globalParameter).map((sweep) => sweep.component.toLowerCase()))
-  return parts.filter((part) => !used.has(part.ref.toLowerCase()))
+export function unusedSweepTargets(parts: Part[], sweeps: ParameterSweep[], models: SweepDefinition[] = [], subcircuits: SweepDefinition[] = [], sheets: Project['sheets'] = []): Part[] {
+  return parts.filter((part) => {
+    const configured = sweeps.filter((sweep) => !sweep.globalParameter && sweep.component.toLowerCase() === part.ref.toLowerCase())
+    if (!configured.length) return true
+    const instanceParameter = configured[0].instanceParameter === true
+    if (configured.some((sweep) => !sweep.parameter || sweep.sourceParameter || (sweep.instanceParameter === true) !== instanceParameter)) return false
+    const available = instanceParameter
+      ? subcircuitSweepParameters(part, subcircuits, sheets)
+      : importedModelSweepParameters(part, models)
+    const usedParameters = new Set(configured.map((sweep) => sweep.parameter!.toLowerCase()))
+    return available.some((parameter) => !usedParameters.has(parameter.name.toLowerCase()))
+  })
 }
