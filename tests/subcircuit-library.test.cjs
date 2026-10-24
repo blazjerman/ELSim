@@ -932,6 +932,22 @@ test('expands native AKO model chains across imported libraries without changing
   assert.equal(child.content, '.MODEL CHILD AKO:BASE D(IS=2n)\n.MODEL GRANDCHILD AKO:CHILD D(N=2)\n')
 })
 
+test('VDMOS AKO children inherit or explicitly override base channel polarity', () => {
+  const content = [
+    '.MODEL PBASE VDMOS Pchan VTO=-2 KP=1',
+    '.MODEL PINHERITED AKO:PBASE VDMOS KP=3',
+    '.MODEL NCHILD AKO:PBASE VDMOS Nchan KP=5',
+  ].join('\n')
+  const asset = { id: 'vdmos-ako', filename: 'vdmos.lib', content }
+  const result = expandNgspiceAkoModels([{ asset, parsed: parseSubcircuitLibrary(content) }])
+
+  assert.deepEqual(result.issues, [])
+  assert.equal(result.channels.get('vdmos-ako:2'), 'p')
+  assert.equal(result.channels.get('vdmos-ako:3'), 'n')
+  assert.equal(result.cards.get('vdmos-ako:2'), '.model PINHERITED VDMOS Pchan VTO=-2 KP=3')
+  assert.equal(result.cards.get('vdmos-ako:3'), '.model NCHILD VDMOS VTO=-2 KP=5')
+})
+
 test('expands deeply chained native AKO models without recursion limits', () => {
   const depth = 12_000
   const lines = []

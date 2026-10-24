@@ -4,7 +4,7 @@ export type SubcircuitParameter = { name: string; defaultValue: string; defaultV
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; scope?: string; conditional?: boolean; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; scope?: string; conditional?: boolean; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -542,8 +542,9 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
   if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
   const rawParameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/\$[^\r\n]*$/, '').trim()
   const parameterSource = rawParameterSource.replace(/^\s*\(/, '').replace(/\)\s*$/, '')
+  const vdmosChannelFlags = type.toLowerCase() === 'vdmos' ? [...parameterSource.matchAll(/\b(pchan|nchan)\b/gi)] : []
   const vdmosChannel = type.toLowerCase() === 'vdmos'
-    ? /\bpchan\b/i.test(parameterSource) ? 'p' as const : 'n' as const
+    ? vdmosChannelFlags[0]?.[1].toLowerCase() === 'pchan' ? 'p' as const : 'n' as const
     : undefined
   const parameters: SubcircuitParameter[] = []
   const parameterIndex = new Map<string, number>()
@@ -563,8 +564,10 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
   }
   const rawAssignmentNames = [...parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=/g)].map((match) => match[1].toLowerCase())
   const uniqueAssignments = new Set(rawAssignmentNames).size
-  const safeAkoPayload = rawParameterSource.replace(/[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g, '').replace(/[\s(),+]/g, '') === ''
-  const definition: SpiceModelDefinition = { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(akoHeader ? { akoBaseName: akoHeader[2] } : {}), ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
+  let residualPayload = rawParameterSource.replace(/[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g, '')
+  if (type.toLowerCase() === 'vdmos') residualPayload = residualPayload.replace(/\b(?:pchan|nchan)\b/gi, '')
+  const safeAkoPayload = vdmosChannelFlags.length <= 1 && residualPayload.replace(/[\s(),+]/g, '') === ''
+  const definition: SpiceModelDefinition = { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), ...(vdmosChannelFlags.length ? { channelExplicit: true } : {}), parameters, ...(akoHeader ? { akoBaseName: akoHeader[2] } : {}), ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
   Object.defineProperty(definition, 'expansionPayloadSafe', { value: uniqueAssignments === parameters.length && safeAkoPayload })
   if (akoHeader) Object.defineProperty(definition, 'akoSafeToExpand', { value: uniqueAssignments === parameters.length && safeAkoPayload })
   return definition

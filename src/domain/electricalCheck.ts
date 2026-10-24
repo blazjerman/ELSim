@@ -6,6 +6,7 @@ import { componentMagnitude, spiceDimensionMagnitude } from './componentValue'
 import { analyzeModelDependencies, coupledLineConductorCount, inspectCoupledLineMatrices, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionFor, compatibleDeviceModelType, deviceModelTypeMatches } from './componentDefinitions'
+import { expandNgspiceAkoModels } from './ngspiceAko'
 
 export type ElectricalIssue = {
   id: string
@@ -142,15 +143,19 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
 
   const importedDeviceModels = new Map<string, ImportedDeviceModel>()
   const importedDeviceModelCards = []
+  const parsedModelAssets = []
   for (const asset of project.modelAssets ?? []) {
     try {
-      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope || ['r', 'res', 'c', 'l'].includes(model.type.toLowerCase())) {
-        importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel: model.channel, parameters: model.parameters })
-        if (!model.scope) importedDeviceModelCards.push(model)
-      }
+      parsedModelAssets.push({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) })
     } catch {
       // Invalid library syntax has its own importer diagnostic.
     }
+  }
+  const effectiveChannels = expandNgspiceAkoModels(parsedModelAssets).channels
+  for (const { asset, parsed } of parsedModelAssets) for (const model of parsed.models) if (!model.scope || ['r', 'res', 'c', 'l'].includes(model.type.toLowerCase())) {
+    const channel = effectiveChannels.get(`${asset.id}:${model.startLine}`) ?? model.channel
+    importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel, parameters: model.parameters })
+    if (!model.scope) importedDeviceModelCards.push({ ...model, channel })
   }
   for (const family of ngspiceBsim3BinFamilies(importedDeviceModelCards)) {
     if (!importedDeviceModels.has(family.name)) {

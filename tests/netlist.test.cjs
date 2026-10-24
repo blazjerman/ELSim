@@ -2579,9 +2579,9 @@ test('diode, LED, and Zener initial voltages emit diode IC values and enable tra
   assert.throws(() => validateProject(project), /unique labeled nodes, capacitor or diode voltages/i)
 })
 
-test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {
+test('native VDMOS devices inherit AKO polarity and netlist in D-G-S order', () => {
   const project = createStarterProject()
-  project.modelAssets = [{ id: 'vdmos-models', filename: 'power-mosfets.lib', content: '.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PPOWER VDMOS Pchan VTO=-2', sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.modelAssets = [{ id: 'vdmos-models', filename: 'power-mosfets.lib', content: '.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PBASE VDMOS Pchan VTO=-2 KP=1\n.MODEL PPOWER AKO:PBASE VDMOS', sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push(
     { id: 'n-power', kind: 'nvdmos', ref: 'M1', value: '', deviceModel: 'NPOWER', instanceMultiplier: '2', x: 700, y: 300, rotation: 0 },
     { id: 'p-power', kind: 'pvdmos', ref: 'M2', value: '', deviceModel: 'PPOWER', instanceMultiplier: '3', x: 850, y: 300, rotation: 0 },
@@ -2598,6 +2598,7 @@ test('native VDMOS devices require matching imported models and netlist in D-G-S
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^M1 nd ng ns NPOWER M=2$/m)
   assert.match(artifact.text, /^M2 pd pg ps PPOWER M=3$/m)
+  assert.match(artifact.text, /^\.model PPOWER VDMOS Pchan VTO=-2 KP=1$/m)
   project.parts.find((part) => part.ref === 'M1').deviceModel = 'PPOWER'
   assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /requires an imported N-channel VDMOS model.*not a P-channel VDMOS model/i)
 })

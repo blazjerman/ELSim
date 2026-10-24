@@ -250,8 +250,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const akoExpansion = expandNgspiceAkoModels(parsedModelLibraryEntries)
   for (const issue of akoExpansion.issues) diagnostics.push({ severity: 'error', message: issue.message, sourceId: `model-file:${issue.assetId}`, assetId: issue.assetId, assetLine: issue.sourceLine, line: issue.sourceLine })
   for (const entry of parsedModelLibraryEntries) for (const model of entry.parsed.models) {
-    const parameters = akoExpansion.parameters.get(`${entry.asset.id}:${model.startLine}`)
+    const key = `${entry.asset.id}:${model.startLine}`
+    const parameters = akoExpansion.parameters.get(key)
     if (parameters) model.parameters = parameters
+    const channel = akoExpansion.channels.get(key)
+    if (channel) model.channel = channel
   }
   const modelFunctionResolver = createModelFunctionResolver(parsedModelLibraryEntries)
   const projectModelFunctions = modelFunctionsForProject(parsedModelLibraryEntries)

@@ -3594,16 +3594,16 @@ test('an imported eight-conductor CPL model simulates through a reusable user su
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
 })
 
-test('native VDMOS power MOSFET imports, selects, and runs its ngspice model', { tag: '@ngspice' }, async ({ page }) => {
+test('native VDMOS power MOSFET inherits P-channel polarity and runs its ngspice model', { tag: '@ngspice' }, async ({ page }) => {
   const project = createStarterProject()
-  const modelContent = '.model NPOWER VDMOS Nchan VTO=2 KP=1\n'
+  const modelContent = '.model PBASE VDMOS Pchan VTO=-2 KP=1\n.model PPOWER AKO:PBASE VDMOS\n'
   const parts = [
     { id: 'v-power', kind: 'source' as const, ref: 'V1', value: '12 V', sourceMode: 'dc' as const, x: 100, y: 300, rotation: 0 as const },
-    { id: 'v-gate', kind: 'source' as const, ref: 'V2', value: '5 V', sourceMode: 'dc' as const, x: 100, y: 500, rotation: 0 as const },
+    { id: 'v-gate', kind: 'source' as const, ref: 'V2', value: '0 V', sourceMode: 'dc' as const, x: 100, y: 500, rotation: 0 as const },
     { id: 'r-load', kind: 'resistor' as const, ref: 'R1', value: '1 kΩ', x: 300, y: 400, rotation: 0 as const },
-    { id: 'm-power', kind: 'nvdmos' as const, ref: 'M1', value: '', x: 500, y: 400, rotation: 0 as const },
+    { id: 'm-power', kind: 'pvdmos' as const, ref: 'M1', value: '', x: 500, y: 400, rotation: 0 as const },
   ]
-  const nodeNames = [['vdd', '0'], ['gate', '0'], ['vdd', 'drain'], ['drain', 'gate', '0']]
+  const nodeNames = [['vdd', '0'], ['gate', '0'], ['drain', '0'], ['drain', 'gate', 'vdd']]
   const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
     id: `${part.id}-net-${pinIndex}`,
     name: nodeNames[partIndex][pinIndex],
@@ -3625,15 +3625,15 @@ test('native VDMOS power MOSFET imports, selects, and runs its ngspice model', {
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'power-mosfet.lib', mimeType: 'text/plain', buffer: Buffer.from(modelContent),
   })
-  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from power-mosfet\.lib/)).toBeVisible()
+  await expect(page.getByText(/Imported 0 subcircuits and 2 device models from power-mosfet\.lib/)).toBeVisible()
   await page.locator('.circuit-part[data-part-id="m-power"]').click()
-  await page.getByLabel('Device model for M1').selectOption('NPOWER')
+  await page.getByLabel('Device model for M1').selectOption('PPOWER')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
-  await expect(netlist).toContainText('M1 drain gate 0 NPOWER')
-  await expect(netlist).toContainText('.model NPOWER VDMOS Nchan VTO=2 KP=1')
+  await expect(netlist).toContainText('M1 drain gate vdd PPOWER')
+  await expect(netlist).toContainText('.model PPOWER VDMOS Pchan VTO=-2 KP=1')
 })
 
 test('placing a reusable hierarchical block keeps it visible in the current viewport', async ({ page }) => {

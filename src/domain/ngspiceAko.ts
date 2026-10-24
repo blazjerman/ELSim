@@ -3,6 +3,7 @@ import type { ModelLibraryInput, ParsedSubcircuitLibrary, SpiceModelDefinition, 
 export type NgspiceAkoExpansion = {
   cards: Map<string, string>
   parameters: Map<string, SubcircuitParameter[]>
+  channels: Map<string, 'n' | 'p'>
   issues: { modelName: string; sourceLine: number; message: string; assetId: string }[]
 }
 
@@ -15,9 +16,11 @@ function canonicalType(type: string): string {
 export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[]): NgspiceAkoExpansion {
   const cards = new Map<string, string>()
   const parametersByModel = new Map<string, SubcircuitParameter[]>()
+  const effectiveChannelsByModel = new Map<string, 'n' | 'p'>()
+  const channelsByCard = new Map<string, 'n' | 'p'>()
   const issues: NgspiceAkoExpansion['issues'] = []
   const all = assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => model.akoBaseName).map((model) => ({ asset, model })))
-  if (!all.length) return { cards, parameters: parametersByModel, issues }
+  if (!all.length) return { cards, parameters: parametersByModel, channels: channelsByCard, issues }
   const byName = new Map<string, { asset: T; model: SpiceModelDefinition }[]>()
   for (const { asset, parsed } of assets) for (const model of parsed.models) if (!model.scope) {
     const matches = byName.get(model.name.toLowerCase()) ?? []
@@ -25,9 +28,9 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
     byName.set(model.name.toLowerCase(), matches)
   }
   const cache = new Map<string, SubcircuitParameter[]>()
+  const keyFor = (asset: T, model: SpiceModelDefinition) => `${asset.id}:${model.name.toLowerCase()}`
   const report = (asset: T, model: SpiceModelDefinition, message: string) => issues.push({ assetId: asset.id, modelName: model.name, sourceLine: model.startLine, message })
   const resolve = (asset: T, model: SpiceModelDefinition): SubcircuitParameter[] | null => {
-    const keyFor = (candidateAsset: T, candidate: SpiceModelDefinition) => `${candidateAsset.id}:${candidate.name.toLowerCase()}`
     const cached = cache.get(keyFor(asset, model))
     if (cached) return cached
 
@@ -38,12 +41,13 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
     let currentAsset = asset
     let currentModel = model
     let inherited: SubcircuitParameter[]
+    let inheritedChannel: 'n' | 'p' | undefined
     while (true) {
       const key = keyFor(currentAsset, currentModel)
       const resolved = cache.get(key)
-      if (resolved) { inherited = resolved; break }
+      if (resolved) { inherited = resolved; inheritedChannel = effectiveChannelsByModel.get(key) ?? currentModel.channel; break }
       const baseName = currentModel.akoBaseName
-      if (!baseName) { inherited = currentModel.parameters; break }
+      if (!baseName) { inherited = currentModel.parameters; inheritedChannel = currentModel.channel; break }
       if (currentModel.scope || currentModel.conditionalDefinition) { report(currentAsset, currentModel, `AKO model ${currentModel.name} is scoped or conditional and cannot be expanded safely.`); return null }
       if (!currentModel.akoSafeToExpand) { report(currentAsset, currentModel, `AKO model ${currentModel.name} contains parameters or flags outside the supported assignment-only expansion form.`); return null }
       if (visiting.has(key)) { report(currentAsset, currentModel, `AKO inheritance cycle detected while resolving ${currentModel.name}.`); return null }
@@ -55,7 +59,7 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
       const base = bases[0]
       if (base.model.scope || base.model.conditionalDefinition) { report(currentAsset, currentModel, `AKO base model ${baseName} is scoped or conditional and cannot be expanded safely.`); return null }
       if (!base.model.expansionPayloadSafe) { report(currentAsset, currentModel, `AKO base model ${baseName} uses parameters outside the supported assignment-only expansion form.`); return null }
-      if (canonicalType(base.model.type) !== canonicalType(currentModel.type) || base.model.channel !== currentModel.channel) { report(currentAsset, currentModel, `AKO base model ${baseName} has device type ${base.model.type}, but ${currentModel.name} declares ${currentModel.type}.`); return null }
+      if (canonicalType(base.model.type) !== canonicalType(currentModel.type)) { report(currentAsset, currentModel, `AKO base model ${baseName} has device type ${base.model.type}, but ${currentModel.name} declares ${currentModel.type}.`); return null }
       currentAsset = base.asset
       currentModel = base.model
     }
@@ -70,6 +74,10 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
         else merged[position] = { ...parameter }
       }
       cache.set(key, merged)
+      if (child.type.toLowerCase() === 'vdmos') {
+        inheritedChannel = child.channelExplicit ? child.channel ?? 'n' : inheritedChannel ?? child.channel ?? 'n'
+        effectiveChannelsByModel.set(key, inheritedChannel)
+      }
       inherited = merged
     }
     return inherited
@@ -79,8 +87,13 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
     if (!parameters) continue
     const values = parameters.map(({ name, defaultValue, defaultIsExpression }) => `${name}=${defaultIsExpression ? `{${defaultValue}}` : defaultValue}`)
     const key = `${asset.id}:${model.startLine}`
-    cards.set(key, `.model ${model.name} ${model.type}(${values.join(' ')})`)
+    const effectiveChannel = effectiveChannelsByModel.get(keyFor(asset, model))
+    if (effectiveChannel) channelsByCard.set(key, effectiveChannel)
+    const cardType = model.type.toLowerCase() === 'vdmos'
+      ? `VDMOS${effectiveChannel === 'p' ? ' Pchan' : ''}${values.length ? ` ${values.join(' ')}` : ''}`
+      : `${model.type}(${values.join(' ')})`
+    cards.set(key, `.model ${model.name} ${cardType}`)
     parametersByModel.set(key, parameters)
   }
-  return { cards, parameters: parametersByModel, issues }
+  return { cards, parameters: parametersByModel, channels: channelsByCard, issues }
 }
