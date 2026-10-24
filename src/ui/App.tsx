@@ -334,7 +334,7 @@ export default function App() {
   const restoreDialogTriggerFocus = (trigger: typeof examplesTriggerRef) => {
     window.requestAnimationFrame(() => trigger.current?.focus())
   }
-  const closeSaveWarning = () => { setSaveWarningOpen(false); restoreDialogTriggerFocus(saveProjectTriggerRef) }
+  const closeSaveWarning = () => { setSaveWarningOpen(false); setSaveWarningAs(false); restoreDialogTriggerFocus(saveProjectTriggerRef) }
   const continueProjectRecovery = () => {
     setCorruptLocalProjectCopies([])
     window.requestAnimationFrame(() => workspaceMainRef.current?.focus())
@@ -416,6 +416,7 @@ export default function App() {
   const [ltspiceExportBusy, setLtspiceExportBusy] = useState(false)
   const [unknownRightsConfirmed, setUnknownRightsConfirmed] = useState(false)
   const [saveWarningOpen, setSaveWarningOpen] = useState(false)
+  const [saveWarningAs, setSaveWarningAs] = useState(false)
   const [notice, setNotice] = useState('')
   const [autosaveStatus, setAutosaveStatus] = useState<'saving' | 'saved' | 'recovered' | 'error'>('saving')
   const [projectRecoveryReady, setProjectRecoveryReady] = useState(false)
@@ -1596,13 +1597,13 @@ export default function App() {
     setProjectState(next)
   }
 
-  const downloadProjectArchive = async () => {
+  const downloadProjectArchive = async (saveAs = false) => {
     try {
       const { createProjectArchive } = await import('../domain/projectArchive')
       const bytes = await createProjectArchive(projectRef.current)
       const filename = projectArchiveFilename(projectRef.current.name)
       const { saveDesktopProject } = await import('./desktopProjectFiles')
-      const desktopSave = await saveDesktopProject(bytes, filename, desktopProjectPathRef.current)
+      const desktopSave = await saveDesktopProject(bytes, filename, saveAs ? null : desktopProjectPathRef.current)
       if (desktopSave.status === 'saved') {
         desktopProjectPathRef.current = desktopSave.path
         setNotice(`Saved ${filename}`)
@@ -1642,8 +1643,12 @@ export default function App() {
     ...(projectRef.current.importedChildSchematicSources ?? []).map((source) => ({ filename: source.filename, type: 'original child schematic source', sourceUrl: source.sourceUrl, licenseReference: source.licenseReference, rightsNotes: source.rightsNotes })),
   ]
   const saveProject = () => {
-    if (exportProvenanceFiles().length) { setSaveWarningOpen(true); return }
+    if (exportProvenanceFiles().length) { setSaveWarningAs(false); setSaveWarningOpen(true); return }
     downloadProjectArchive()
+  }
+  const saveProjectAs = () => {
+    if (exportProvenanceFiles().length) { setSaveWarningAs(true); setSaveWarningOpen(true); return }
+    downloadProjectArchive(true)
   }
   const applyProjectBytes = async (bytes: Uint8Array, desktopPath: string | null = null) => {
     assertProjectFileWithinLimit(bytes.byteLength)
@@ -2224,7 +2229,10 @@ export default function App() {
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
-        if (!event.repeat && !modalOpen) saveProject()
+        if (!event.repeat && !modalOpen) {
+          if (event.shiftKey) saveProjectAs()
+          else saveProject()
+        }
         return
       }
       if (event.key === '/' && !modalOpen && !editingText) { event.preventDefault(); componentSearchRef.current?.focus(); return }
@@ -2320,7 +2328,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, corruptLocalProjectCopies.length, modelAssetsVerified, engineAssetAvailable, simulationResult, sheetInstancePath, engineSetupOpen, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingWaveformTrace, pendingModelImport, pendingModelImportBatch, ltspiceExport, ltspiceExportBusy, pendingComponentKind, hasHoveredSchematicObject, openProject, saveProject])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, corruptLocalProjectCopies.length, modelAssetsVerified, engineAssetAvailable, simulationResult, sheetInstancePath, engineSetupOpen, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingWaveformTrace, pendingModelImport, pendingModelImportBatch, ltspiceExport, ltspiceExportBusy, pendingComponentKind, hasHoveredSchematicObject, openProject, saveProject, saveProjectAs])
   const openGeneratedNetlist = () => {
     netlistReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setNetlistText(null)
@@ -3272,7 +3280,7 @@ export default function App() {
     </header>
 
     <div className="main-toolbar">
-      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={openProject}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc, matching child .asc/.asy files, referenced PWL data, and optional .lib/.sub model files"><FolderOpen size={15}/> Import LTspice</button><button ref={saveProjectTriggerRef} onClick={saveProject}><Save size={15}/> Save</button><button ref={ltspiceExportTriggerRef} onClick={prepareLtspiceExport} disabled={ltspiceExportBusy}><Download size={15}/> Export LTspice</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
+      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={openProject}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc, matching child .asc/.asy files, referenced PWL data, and optional .lib/.sub model files"><FolderOpen size={15}/> Import LTspice</button><button ref={saveProjectTriggerRef} onClick={saveProject}><Save size={15}/> Save</button><button onClick={saveProjectAs} title="Save a copy under a new filename (Ctrl/⌘+Shift+S)"><Save size={15}/> Save As</button><button ref={ltspiceExportTriggerRef} onClick={prepareLtspiceExport} disabled={ltspiceExportBusy}><Download size={15}/> Export LTspice</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple onChange={importLtspiceSchematic}/></div>
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
@@ -3568,7 +3576,7 @@ export default function App() {
       batch={pendingModelImportBatch} setBatch={setPendingModelImportBatch} single={pendingModelImport} setSingle={setPendingModelImport}
       onClose={closePendingModelImport} onImportBatch={commitModelLibraryImports} onImportSingle={commitModelLibraryImport}
     /></Suspense>}
-    {saveWarningOpen && <div className="tour-backdrop" onClick={closeSaveWarning}><section className="tour-dialog examples-dialog" role="alertdialog" aria-modal="true" aria-labelledby="export-warning-title" aria-describedby="export-warning-description" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">PORTABLE PROJECT EXPORT</span><h2 id="export-warning-title">Review imported files</h2></div><button className="subtle-icon" aria-label="Cancel project export" onClick={closeSaveWarning}><X size={17}/></button></div><p id="export-warning-description" className="tour-copy">This project file will include user-imported source files whose redistribution rights are unknown. Saving a copy for your own use does not grant permission to share or publish those files. Check with each file’s author or supplier before redistributing the archive.</p><ul className="export-warning-files">{exportProvenanceFiles().map((asset, index) => <li key={`${asset.type}:${asset.filename}:${index}`}><strong>{asset.filename}</strong><span>{asset.type} · redistribution rights unknown</span>{asset.sourceUrl && <span>Recorded source: {asset.sourceUrl}</span>}{asset.licenseReference && <span>User-entered license reference: {asset.licenseReference}</span>}{asset.rightsNotes && <span>{asset.rightsNotes}</span>}</li>)}</ul><div className="modal-footer"><button className="tour-secondary" autoFocus onClick={closeSaveWarning}>Cancel</button><button className="primary-small" onClick={() => { closeSaveWarning(); downloadProjectArchive() }}>Save project file</button></div></section></div>}
+    {saveWarningOpen && <div className="tour-backdrop" onClick={closeSaveWarning}><section className="tour-dialog examples-dialog" role="alertdialog" aria-modal="true" aria-labelledby="export-warning-title" aria-describedby="export-warning-description" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">PORTABLE PROJECT EXPORT</span><h2 id="export-warning-title">Review imported files</h2></div><button className="subtle-icon" aria-label="Cancel project export" onClick={closeSaveWarning}><X size={17}/></button></div><p id="export-warning-description" className="tour-copy">This project file will include user-imported source files whose redistribution rights are unknown. Saving a copy for your own use does not grant permission to share or publish those files. Check with each file’s author or supplier before redistributing the archive.</p><ul className="export-warning-files">{exportProvenanceFiles().map((asset, index) => <li key={`${asset.type}:${asset.filename}:${index}`}><strong>{asset.filename}</strong><span>{asset.type} · redistribution rights unknown</span>{asset.sourceUrl && <span>Recorded source: {asset.sourceUrl}</span>}{asset.licenseReference && <span>User-entered license reference: {asset.licenseReference}</span>}{asset.rightsNotes && <span>{asset.rightsNotes}</span>}</li>)}</ul><div className="modal-footer"><button className="tour-secondary" autoFocus onClick={closeSaveWarning}>Cancel</button><button className="primary-small" onClick={() => { const saveAs = saveWarningAs; closeSaveWarning(); downloadProjectArchive(saveAs) }}>Save project file</button></div></section></div>}
     {sheetSettingsOpen && <Suspense fallback={<div className="tour-backdrop" role="presentation"><div className="tour-dialog" role="status">Loading sheet settings…</div></div>}><SheetSettingsDialog
       activeSheet={activeSheet} sheetCount={project.sheets.length} activeSheetDeleteReason={activeSheetDeleteReason} activeSheetHasInstances={activeSheetHasInstances}
       availableSheetPortNodeNames={availableSheetPortNodeNames} sheetNameDraft={sheetNameDraft} setSheetNameDraft={setSheetNameDraft} sheetNameError={sheetNameError} setSheetNameError={setSheetNameError} saveSheetName={saveSheetName}

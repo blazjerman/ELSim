@@ -411,6 +411,7 @@ test('keyboard shortcut reference matches editor controls and restores focus', {
   await expect(dialog.getByText('Draw a wire by dragging')).toBeVisible()
   await expect(dialog.getByText('Ctrl/⌘ + O', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Ctrl/⌘ + S', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('Ctrl/⌘ + Shift + S', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Ctrl/⌘ + Enter')).toBeVisible()
   await expect(dialog.getByText('Resistor', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Polarized capacitor', { exact: true })).toBeVisible()
@@ -430,6 +431,22 @@ test('Ctrl/Meta+S saves the current project from the editor', { tag: '@ui-smoke'
     await page.getByRole('textbox', { name: 'Find a component' }).focus()
     const downloadPromise = page.waitForEvent('download')
     await page.keyboard.press(`${modifier}+s`)
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toMatch(/\.elsim$/)
+  }
+})
+
+test('Ctrl/Meta+Shift+S saves a project copy', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  const buttonDownloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Save As', exact: true }).click()
+  expect((await buttonDownloadPromise).suggestedFilename()).toMatch(/\.elsim$/)
+  for (const modifier of ['Control', 'Meta']) {
+    await page.getByRole('textbox', { name: 'Find a component' }).focus()
+    const downloadPromise = page.waitForEvent('download')
+    await page.keyboard.press(`${modifier}+Shift+s`)
     const download = await downloadPromise
     expect(download.suggestedFilename()).toMatch(/\.elsim$/)
   }
