@@ -11,6 +11,7 @@ const sourceParameterLabels: Record<string, string> = {
   'exp.initial': 'Initial level', 'exp.pulsed': 'Pulsed level', 'exp.riseDelay': 'Rise delay', 'exp.riseTau': 'Rise time constant', 'exp.fallDelay': 'Fall delay', 'exp.fallTau': 'Fall time constant',
   'sffm.offset': 'Offset', 'sffm.amplitude': 'Amplitude', 'sffm.carrierFrequency': 'Carrier frequency', 'sffm.modulationIndex': 'Modulation index', 'sffm.signalFrequency': 'Signal frequency',
   'am.offset': 'Overall offset', 'am.modulationOffset': 'Modulation offset', 'am.modulationAmplitude': 'Modulation amplitude', 'am.modulationFrequency': 'Modulating frequency', 'am.carrierFrequency': 'Carrier frequency', 'am.delay': 'Delay', 'am.modulationPhase': 'Modulation phase', 'am.carrierPhase': 'Carrier phase',
+  'trnoise.gaussianRms': 'Gaussian RMS', 'trnoise.timeStep': 'Noise sample interval', 'trnoise.flickerExponent': 'Flicker exponent', 'trnoise.flickerAmplitude': '1/f noise amplitude', 'trnoise.rtsAmplitude': 'RTS noise amplitude', 'trnoise.rtsCaptureTime': 'RTS capture time', 'trnoise.rtsEmissionTime': 'RTS emission time',
 }
 
 export default function ParameterSweepEditor({ parts, sweeps, models, subcircuits, sheets, parameters: globalParameters, analysis, dcSweepSource, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; subcircuits: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }[] }[]; sheets: Project['sheets']; parameters: { name: string; defaultValue: string }[]; analysis: Project['simulation']['analysis']; dcSweepSource?: string; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
@@ -25,10 +26,10 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
     if (sweep.parameter && !sweep.instanceParameter) return spiceModelParameterMagnitude(value)
     if (sweep.sourceParameter) {
       const field = sweep.sourceParameter.split('.').at(-1)
-      const unitless = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field ?? '')
+      const unitless = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau', 'timeStep', 'rtsCaptureTime', 'rtsEmissionTime'].includes(field ?? '')
         ? value.trim().replace(/(?:hz|s)$/i, '')
         : ['phase', 'modulationPhase', 'carrierPhase'].includes(field ?? '') ? value.trim().replace(/°$/i, '') : value
-      const amplitude = ['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude'].includes(field ?? '') || field?.startsWith('point.')
+      const amplitude = ['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude', 'gaussianRms', 'flickerAmplitude', 'rtsAmplitude'].includes(field ?? '') || field?.startsWith('point.')
       return amplitude && part ? componentMagnitude(unitless, part.kind) : componentMagnitude(unitless, 'resistor')
     }
     return componentMagnitude(value, part?.kind ?? 'resistor')
@@ -44,21 +45,23 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
     if (mode === 'sine') return ({ offset: part.sine?.offset ?? fallback, amplitude: part.sine?.amplitude ?? part.value, frequency: part.sine?.frequency ?? '1 kHz', delay: part.sine?.delay ?? '0', damping: part.sine?.damping ?? '0', phase: part.sine?.phase ?? '0' } as Record<string, string>)[field] ?? fallback
     if (mode === 'exp') return ({ initial: part.exp?.initial ?? fallback, pulsed: part.exp?.pulsed ?? part.value, riseDelay: part.exp?.riseDelay ?? '0', riseTau: part.exp?.riseTau ?? '1u', fallDelay: part.exp?.fallDelay ?? '1m', fallTau: part.exp?.fallTau ?? '1u' } as Record<string, string>)[field] ?? fallback
     if (mode === 'sffm') return ({ offset: part.sffm?.offset ?? fallback, amplitude: part.sffm?.amplitude ?? part.value, carrierFrequency: part.sffm?.carrierFrequency ?? '1 kHz', modulationIndex: part.sffm?.modulationIndex ?? '0', signalFrequency: part.sffm?.signalFrequency ?? '100 Hz' } as Record<string, string>)[field] ?? fallback
+    if (mode === 'trnoise') return ({ gaussianRms: part.trnoise?.gaussianRms ?? '10n', timeStep: part.trnoise?.timeStep ?? '1u', flickerExponent: part.trnoise?.flickerExponent ?? '0', flickerAmplitude: part.trnoise?.flickerAmplitude ?? '0', rtsAmplitude: part.trnoise?.rtsAmplitude ?? '0', rtsCaptureTime: part.trnoise?.rtsCaptureTime ?? '1u', rtsEmissionTime: part.trnoise?.rtsEmissionTime ?? '1u' } as Record<string, string>)[field] ?? fallback
     return ({ offset: part.am?.offset ?? fallback, modulationOffset: part.am?.modulationOffset ?? part.value, modulationAmplitude: part.am?.modulationAmplitude ?? part.value, modulationFrequency: part.am?.modulationFrequency ?? '100 Hz', carrierFrequency: part.am?.carrierFrequency ?? '1 kHz', delay: part.am?.delay ?? '0', modulationPhase: part.am?.modulationPhase ?? '0', carrierPhase: part.am?.carrierPhase ?? '0' } as Record<string, string>)[field] ?? fallback
   }
   const sourceRange = (part: Part, parameter: string) => {
     const start = sourceValue(part, parameter)
     const field = parameter.split('.').at(-1) ?? ''
-    if (['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude'].includes(field) || field.startsWith('point.')) {
+    if (['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude', 'gaussianRms', 'flickerAmplitude', 'rtsAmplitude'].includes(field) || field.startsWith('point.')) {
       const magnitude = componentMagnitude(start, part.kind)
       const unit = part.kind === 'source' ? 'V' : 'A'
-      return { start, stop: magnitude === null ? start : `${(magnitude * 2).toExponential(5)} ${unit}` }
+      const nextMagnitude = magnitude === 0 && parameter.startsWith('trnoise.') ? 1e-3 : magnitude === null ? null : magnitude * 2
+      return { start, stop: nextMagnitude === null ? start : `${nextMagnitude.toExponential(5)} ${unit}` }
     }
     const normalized = start.trim().replaceAll(' ', '').replace(/(?:hz|s|°)$/i, '').replaceAll('µ', 'u').replaceAll('μ', 'u')
     const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
     const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match?.[2]?.toLowerCase() ?? ''] ?? 1
     const magnitude = match ? Number(match[1]) * scale : NaN
-    const unit = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency'].includes(field) ? 'Hz' : ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field) ? 's' : ['phase', 'modulationPhase', 'carrierPhase'].includes(field) ? '°' : ''
+    const unit = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency'].includes(field) ? 'Hz' : ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau', 'timeStep', 'rtsCaptureTime', 'rtsEmissionTime'].includes(field) ? 's' : ['phase', 'modulationPhase', 'carrierPhase'].includes(field) ? '°' : ''
     const next = magnitude === 0 ? (unit === 's' ? 1e-6 : 1) : magnitude * 2
     return { start, stop: Number.isFinite(magnitude) ? `${next.toExponential(5)}${unit ? ` ${unit}` : ''}` : start }
   }
@@ -70,7 +73,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : analysis === 'op' ? 'Compare up to 10 DC operating points while varying supported circuit or model parameters.' : analysis === 'ac' ? 'Compare up to 10 AC response curves while varying supported circuit or model parameters.' : analysis === 'noise' ? 'Compare up to 10 noise spectra while varying supported circuit or model parameters.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models, ICs, and reusable blocks.'}</p>
+    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : analysis === 'op' ? 'Compare up to 10 DC operating points while varying supported circuit or model parameters.' : analysis === 'ac' ? 'Compare up to 10 AC response curves while varying supported circuit or model parameters.' : analysis === 'noise' ? 'Compare up to 10 noise spectra while varying supported circuit or model parameters.' : 'Compare up to 10 transient cases while changing passive values, source waveform or TRNOISE fields, PWL amplitudes, or numeric parameters from imported device models, ICs, and reusable blocks.'}</p>
     {sweeps.map((sweep, index) => {
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
@@ -95,7 +98,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
         const pointCount = selectedPart.kind === 'currentSource' ? selectedPart.currentPwl?.length ?? 0 : selectedPart.pwl?.length ?? 0
         for (let point = 1; point <= pointCount; point += 1) sourceParameterOptions.push({ value: `pwl.point.${point}`, label: `Point ${point} amplitude` })
       }
-      const defaultSourceParameter = selectedSourceMode === 'pulse' ? 'pulse.high' : selectedSourceMode === 'sine' ? 'sine.amplitude' : selectedSourceMode === 'exp' ? 'exp.pulsed' : selectedSourceMode === 'sffm' ? 'sffm.amplitude' : selectedSourceMode === 'am' ? 'am.modulationAmplitude' : selectedSourceMode === 'pwl' ? 'pwl.scale' : undefined
+      const defaultSourceParameter = selectedSourceMode === 'pulse' ? 'pulse.high' : selectedSourceMode === 'sine' ? 'sine.amplitude' : selectedSourceMode === 'exp' ? 'exp.pulsed' : selectedSourceMode === 'sffm' ? 'sffm.amplitude' : selectedSourceMode === 'am' ? 'am.modulationAmplitude' : selectedSourceMode === 'pwl' ? 'pwl.scale' : selectedSourceMode === 'trnoise' ? 'trnoise.gaussianRms' : undefined
       return <div className="parameter-sweep-card" key={`${sweep.component}-${index}`}>
         <div className="parameter-sweep-heading"><strong>Parameter {index + 1}</strong><button type="button" aria-label={`Remove parameter ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
         {eligible.length > 100 && <label className="field-label">Find a component<input type="search" aria-label={`Filter eligible components for parameter ${index + 1}`} value={query} onChange={(event) => setComponentSearches((current) => ({ ...current, [index]: event.target.value }))} placeholder="Search by name or type"/><small className="field-hint">Showing {Math.min(matchingEligible.length, 100)} of {matchingEligible.length} matches{selectedEligible && !matchingEligible.some((part) => part.id === selectedEligible.id) ? '; current selection is also listed' : ''}.</small></label>}
@@ -126,6 +129,12 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
           }
           if (nextPart.sourceMode === 'pwl') {
             onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: undefined, instanceParameter: undefined, sourceParameter: undefined, start: '1', stop: '2' })
+            return
+          }
+          if (nextPart.sourceMode === 'trnoise') {
+            const sourceParameter = 'trnoise.gaussianRms'
+            const range = sourceRange(nextPart, sourceParameter)
+            onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: undefined, instanceParameter: undefined, sourceParameter, start: range.start, stop: range.stop })
             return
           }
           const sourceAmplitude = nextPart.sourceMode === 'sine' ? nextPart.sine?.amplitude : nextPart.sourceMode === 'exp' ? nextPart.exp?.pulsed : nextPart.sourceMode === 'sffm' ? nextPart.sffm?.amplitude : nextPart.sourceMode === 'am' ? nextPart.am?.modulationAmplitude : undefined

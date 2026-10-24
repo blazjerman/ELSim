@@ -346,6 +346,45 @@ test('AM waveform fields can be stepped on voltage and current sources', () => {
   assert.match(control, /alterparam ELSIM_SWEEP_SOURCE_V1_AM_CARRIERFREQUENCY=1\.00000000e\+3\nalterparam ELSIM_SWEEP_SOURCE_I1_AM_MODULATIONAMPLITUDE=1\.00000000e-3\nreset\nrun/)
 })
 
+test('transient-noise waveform fields can be stepped with their native units', () => {
+  const base = createStarterProject()
+  const source = base.parts.find((part) => part.ref === 'V1')
+  source.sourceMode = 'trnoise'
+  source.trnoise = { gaussianRms: '20 mV', timeStep: '10 us', flickerExponent: '1', flickerAmplitude: '1 mV', rtsAmplitude: '2 mV', rtsCaptureTime: '1 ms', rtsEmissionTime: '2 ms' }
+  const cases = [
+    ['trnoise.gaussianRms', '10 mV', '30 mV', /TRNOISE\(\{ELSIM_SWEEP_SOURCE_V1_TRNOISE_GAUSSIANRMS\} 10u 1 1m 2m 1m 2m\)/],
+    ['trnoise.timeStep', '5 us', '15 us', /TRNOISE\(20m \{ELSIM_SWEEP_SOURCE_V1_TRNOISE_TIMESTEP\} 1 1m 2m 1m 2m\)/],
+    ['trnoise.flickerExponent', '0.5', '1.5', /TRNOISE\(20m 10u \{ELSIM_SWEEP_SOURCE_V1_TRNOISE_FLICKEREXPONENT\} 1m 2m 1m 2m\)/],
+    ['trnoise.flickerAmplitude', '0.5 mV', '1.5 mV', /TRNOISE\(20m 10u 1 \{ELSIM_SWEEP_SOURCE_V1_TRNOISE_FLICKERAMPLITUDE\} 2m 1m 2m\)/],
+    ['trnoise.rtsAmplitude', '1 mV', '3 mV', /TRNOISE\(20m 10u 1 1m \{ELSIM_SWEEP_SOURCE_V1_TRNOISE_RTSAMPLITUDE\} 1m 2m\)/],
+    ['trnoise.rtsCaptureTime', '0.5 ms', '1.5 ms', /TRNOISE\(20m 10u 1 1m 2m \{ELSIM_SWEEP_SOURCE_V1_TRNOISE_RTSCAPTURETIME\} 2m\)/],
+    ['trnoise.rtsEmissionTime', '1 ms', '3 ms', /TRNOISE\(20m 10u 1 1m 2m 1m \{ELSIM_SWEEP_SOURCE_V1_TRNOISE_RTSEMISSIONTIME\}\)/],
+  ]
+  for (const [sourceParameter, start, stop, pattern] of cases) {
+    const project = structuredClone(base)
+    project.simulation.parameterSweeps = [{ component: 'V1', sourceParameter, start, stop, points: 2 }]
+    const validated = validateProject(project)
+    const runs = prepareParameterSweep(validated)
+    assert.equal(runs.length, 2, sourceParameter)
+    assert.ok(runs[0].label.includes(`V1.${sourceParameter}=`), runs[0].label)
+    assert.match(addResultControl(createNetlistArtifact(validated).text, runs), pattern, sourceParameter)
+  }
+  const invalidExponent = structuredClone(base)
+  invalidExponent.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'trnoise.flickerExponent', start: '0', stop: '1', points: 2 }]
+  assert.throws(() => validateProject(invalidExponent), /strictly between 0 and 2/)
+  const invalidAmplitude = structuredClone(base)
+  invalidAmplitude.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'trnoise.gaussianRms', start: '-1 mV', stop: '1 mV', points: 2 }]
+  assert.throws(() => validateProject(invalidAmplitude), /nonnegative/)
+  const missingFlickerExponent = structuredClone(base)
+  missingFlickerExponent.parts.find((part) => part.ref === 'V1').trnoise.flickerExponent = '0'
+  missingFlickerExponent.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'trnoise.flickerAmplitude', start: '0', stop: '1 mV', points: 2 }]
+  assert.throws(() => prepareParameterSweep(validateProject(missingFlickerExponent)), /flicker exponent strictly between 0 and 2/)
+  const missingRtsTimes = structuredClone(base)
+  missingRtsTimes.parts.find((part) => part.ref === 'V1').trnoise.rtsCaptureTime = '0'
+  missingRtsTimes.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'trnoise.rtsAmplitude', start: '0', stop: '1 mV', points: 2 }]
+  assert.throws(() => prepareParameterSweep(validateProject(missingRtsTimes)), /positive RTS capture and emission times/)
+})
+
 test('imported device model parameters are validated and emitted with altermod', () => {
   const project = createStarterProject()
   const part = { id: 'sweep-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 400, rotation: 0, deviceModel: 'USER_NPN' }

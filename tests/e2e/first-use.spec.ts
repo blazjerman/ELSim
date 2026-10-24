@@ -9983,6 +9983,35 @@ test('experimental TRNOISE voltage source simulates through browser ngspice', { 
   await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 DC 0 TRNOISE\(20m 1m 1\.1 1m 5m 2m 3m\)/)
 })
 
+test('TRNOISE Gaussian RMS can be stepped in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    const source = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    source.sourceMode = 'trnoise'
+    source.value = '0 V'
+    source.trnoise = { gaussianRms: '20 mV', timeStep: '10 us', flickerExponent: '0', flickerAmplitude: '0 V', rtsAmplitude: '0 V', rtsCaptureTime: '1 ms', rtsEmissionTime: '1 ms' }
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    project.simulation.stopTime = '3m'
+    project.simulation.maxStep = '100u'
+    project.simulation.parameterSweeps = [{ component: source.ref, sourceParameter: 'trnoise.gaussianRms', start: '10 mV', stop: '30 mV', points: 2 }]
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 source parameter' })).toHaveValue('trnoise.gaussianRms')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  await openComponentVoltagePlot(page)
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('V1.trnoise.gaussianRms=0.01 V'))).toBe(true)
+  expect(labels.some((label) => label.includes('V1.trnoise.gaussianRms=0.03 V'))).toBe(true)
+})
+
 test('transient-noise example teaches and runs the built-in noisy source', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

@@ -74,11 +74,11 @@ function componentUnit(kind: string): string {
 function sourceParameterUnit(parameter: SourceSweepParameter, kind: string): string {
   const field = parameter.split('.').at(-1)
   if (['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency'].includes(field ?? '')) return 'Hz'
-  if (['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field ?? '')) return 's'
+  if (['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau', 'timeStep', 'rtsCaptureTime', 'rtsEmissionTime'].includes(field ?? '')) return 's'
   if (parameter === 'pwl.scale') return '×'
   if (parameter.startsWith('pwl.point.')) return kind === 'source' ? 'V' : 'A'
   if (['phase', 'modulationPhase', 'carrierPhase'].includes(field ?? '')) return '°'
-  if (['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude'].includes(field ?? '')) return kind === 'source' ? 'V' : 'A'
+  if (['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude', 'gaussianRms', 'flickerAmplitude', 'rtsAmplitude'].includes(field ?? '')) return kind === 'source' ? 'V' : 'A'
   return ''
 }
 
@@ -91,17 +91,32 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     const validPwlPoint = mode === 'pwl' && pwlPointIndex !== undefined && Number(pwlPointIndex) >= 1 && Number(pwlPointIndex) <= (pwlPointCount ?? 0)
     if (!part || (part.kind !== 'source' && part.kind !== 'currentSource') || (sweep.sourceParameter === 'pwl.scale' ? mode !== 'pwl' : !validPwlPoint && (mode === 'pwl' || !sweep.sourceParameter.startsWith(`${mode}.`)))) throw new Error(`${sweep.component}.${sweep.sourceParameter} does not belong to its selected source waveform.`)
     const field = sweep.sourceParameter.split('.').at(-1)!
-    const dimensioned = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
+    const dimensioned = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau', 'timeStep', 'rtsCaptureTime', 'rtsEmissionTime'].includes(field)
     const parseValue = (value: string) => {
-      if (['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude'].includes(field) || validPwlPoint) return componentMagnitude(value, part.kind)
+      if (['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude', 'gaussianRms', 'flickerAmplitude', 'rtsAmplitude'].includes(field) || validPwlPoint) return componentMagnitude(value, part.kind)
       return scalarMagnitude(dimensioned ? value.trim().replace(/(?:hz|s)$/i, '') : ['phase', 'modulationPhase', 'carrierPhase'].includes(field) ? value.trim().replace(/°$/i, '') : value)
     }
     const values = sweep.listValues ? sweep.listValues.map(parseValue) : [sweep.start, sweep.stop].map(parseValue)
     const [start, stop] = values
     const frequency = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency'].includes(field)
-    const time = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
-    const positive = ['period', 'riseTau', 'fallTau'].includes(field)
-    if (values.some((value) => value === null) || start === null || stop === null || (!sweep.listValues && (start === stop || values.length !== 2)) || (frequency && values.some((value) => value! <= 0)) || (time && values.some((value) => value! < 0 || (positive && value! <= 0)))) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, different endpoints${frequency || positive ? ' (positive values required)' : ''}.`)
+    const time = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau', 'timeStep', 'rtsCaptureTime', 'rtsEmissionTime'].includes(field)
+    const noise = part.trnoise
+    const rtsEnabled = (componentMagnitude(noise?.rtsAmplitude ?? '0', 'source') ?? 0) > 0
+    const positive = ['period', 'riseTau', 'fallTau'].includes(field) || ['rtsCaptureTime', 'rtsEmissionTime'].includes(field) && rtsEnabled || field === 'timeStep' && ['gaussianRms', 'flickerAmplitude', 'rtsAmplitude'].some((name) => (componentMagnitude(noise?.[name as keyof typeof noise] ?? '0', 'source') ?? 0) > 0)
+    const noiseAmplitude = ['gaussianRms', 'flickerAmplitude', 'rtsAmplitude'].includes(field)
+    const exponent = field === 'flickerExponent'
+    const flickerEnabled = (componentMagnitude(noise?.flickerAmplitude ?? '0', 'source') ?? 0) > 0
+    if (values.some((value) => value === null) || start === null || stop === null || (!sweep.listValues && (start === stop || values.length !== 2)) || (frequency && values.some((value) => value! <= 0)) || (time && values.some((value) => value! < 0 || (positive && value! <= 0))) || (noiseAmplitude && values.some((value) => value! < 0)) || (exponent && values.some((value) => value! < 0 || value! > 2 || flickerEnabled && (value! <= 0 || value! >= 2)))) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, different endpoints${frequency || positive ? ' (positive values required)' : ''}.`)
+    if (mode === 'trnoise' && noiseAmplitude && values.some((value) => value! > 0)) {
+      const timeMagnitude = (value: string | undefined) => value === undefined ? null : scalarMagnitude(value.trim().replace(/s$/i, ''))
+      const sampleInterval = timeMagnitude(noise?.timeStep)
+      if (sampleInterval === null || sampleInterval <= 0) throw new Error(`${part.ref} needs a positive TRNOISE sample interval when a swept noise amplitude is nonzero.`)
+      if (field === 'flickerAmplitude') {
+        const exponent = scalarMagnitude(noise?.flickerExponent ?? '0')
+        if (exponent === null || exponent <= 0 || exponent >= 2) throw new Error(`${part.ref} needs a flicker exponent strictly between 0 and 2 when a swept flicker amplitude is nonzero.`)
+      }
+      if (field === 'rtsAmplitude' && [noise?.rtsCaptureTime, noise?.rtsEmissionTime].some((value) => { const magnitude = timeMagnitude(value); return magnitude === null || magnitude <= 0 })) throw new Error(`${part.ref} needs positive RTS capture and emission times when a swept RTS amplitude is nonzero.`)
+    }
     if (sweep.listValues && (values.length !== sweep.points || values.length < 2)) throw new Error(`${part.ref}.${sweep.sourceParameter} needs 2–10 explicit values.`)
     if (sweep.listValues) return values as number[]
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
@@ -152,7 +167,7 @@ function buildValues(project: Project, sweep: ParameterSweep) {
   const pulseHigh = (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
   const pwlScale = (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pwl'
   const waveformAmplitude = (part.kind === 'source' || part.kind === 'currentSource') && ['sine', 'exp', 'sffm'].includes(part.sourceMode ?? '')
-  if (part.kind === 'source' && part.sourceMode !== 'dc' && !pulseHigh && !pwlScale && !waveformAmplitude) throw new Error(`${part.ref} must use a supported scalar, PULSE, PWL, SINE, EXP, or SFFM waveform mode for parameter stepping.`)
+  if (part.kind === 'source' && part.sourceMode !== 'dc' && !pulseHigh && !pwlScale && !waveformAmplitude && part.sourceMode !== 'trnoise') throw new Error(`${part.ref} must use a supported scalar, PULSE, PWL, SINE, EXP, SFFM, AM, or TRNOISE waveform mode for parameter stepping.`)
   if (part.kind === 'currentSource' && part.sourceMode !== 'dc' && part.sourceMode !== undefined && !pulseHigh && !pwlScale && !waveformAmplitude) throw new Error(`${part.ref} must use a supported scalar, PULSE, PWL, SINE, EXP, or SFFM waveform mode for parameter stepping.`)
   const start = pwlScale ? scalarMagnitude(sweep.start) : componentMagnitude(sweep.start, part.kind)
   const stop = pwlScale ? scalarMagnitude(sweep.stop) : componentMagnitude(sweep.stop, part.kind)

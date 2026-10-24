@@ -386,6 +386,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc', 'pwl', 'sine', 'exp', 'sffm', 'am', 'trnoise'])
   assert.deepEqual(schema.$defs.part.properties.am.required, ['offset', 'modulationOffset', 'modulationAmplitude', 'modulationFrequency', 'carrierFrequency', 'delay', 'modulationPhase', 'carrierPhase'])
   assert.deepEqual(schema.$defs.part.properties.trnoise.required, ['gaussianRms', 'timeStep', 'flickerExponent', 'flickerAmplitude', 'rtsAmplitude', 'rtsCaptureTime', 'rtsEmissionTime'])
+  for (const field of ['gaussianRms', 'timeStep', 'flickerExponent', 'flickerAmplitude', 'rtsAmplitude', 'rtsCaptureTime', 'rtsEmissionTime']) assert.ok(schema.$defs.simulation.properties.parameterSweeps.items.properties.sourceParameter.enum.includes(`trnoise.${field}`))
   assert.deepEqual(schema.$defs.part.properties.sine.required, ['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'])
   assert.equal(schema.$defs.part.properties.pwl.maxItems, 256)
   assert.equal(schema.$defs.part.properties.pwlFileName.maxLength, 256)

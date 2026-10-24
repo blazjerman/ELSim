@@ -45,7 +45,7 @@ export function eligibleParameterSweepParts({ parts, analysis, dcSweepSource, mo
   if (analysis === 'dc') return parts.filter((part) =>
     (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'dc' && part.ref.toLowerCase() !== dcSweepSource?.toLowerCase())
 
-  const sourceModes = new Set(['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm', 'am'])
+  const sourceModes = new Set(['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm', 'am', 'trnoise'])
   return parts.filter((part) =>
     ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)
     || ((part.kind === 'source' || part.kind === 'currentSource') && sourceModes.has(part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')))

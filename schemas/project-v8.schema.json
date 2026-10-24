@@ -1526,7 +1526,14 @@
                   "am.carrierFrequency",
                   "am.delay",
                   "am.modulationPhase",
-                  "am.carrierPhase"
+                  "am.carrierPhase",
+                  "trnoise.gaussianRms",
+                  "trnoise.timeStep",
+                  "trnoise.flickerExponent",
+                  "trnoise.flickerAmplitude",
+                  "trnoise.rtsAmplitude",
+                  "trnoise.rtsCaptureTime",
+                  "trnoise.rtsEmissionTime"
                 ]
               },
               "start": {
