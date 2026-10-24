@@ -419,8 +419,24 @@ test('PSpice VSWITCH model sweeps map threshold fields to native SW parameters',
   assert.doesNotMatch(control, /altermod USER_VSW (?:VON|VOFF)=/)
   assert.doesNotMatch(control, /alter S1 /)
 
+  const resistanceSweep = structuredClone(project)
+  resistanceSweep.simulation.parameterSweeps = [
+    { component: switchPart.ref, parameter: 'RON', start: '2', stop: '20', points: 2 },
+    { component: switchPart.ref, parameter: 'ROFF', start: '1Meg', stop: '2Meg', points: 2 },
+  ]
+  const resistanceRuns = prepareParameterSweep(validateProject(resistanceSweep))
+  assert.deepEqual(resistanceRuns.map(({ values }) => values[0].altermodParameters), [
+    { RON: '2.00000000e+0', ROFF: '1.00000000e+6', VT: '3.00000000e+0', VH: '1.00000000e+0' },
+    { RON: '2.00000000e+0', ROFF: '2.00000000e+6', VT: '3.00000000e+0', VH: '1.00000000e+0' },
+    { RON: '2.00000000e+1', ROFF: '1.00000000e+6', VT: '3.00000000e+0', VH: '1.00000000e+0' },
+    { RON: '2.00000000e+1', ROFF: '2.00000000e+6', VT: '3.00000000e+0', VH: '1.00000000e+0' },
+  ])
+  assert.match(addResultControl(createNetlistArtifact(validateProject(resistanceSweep)).text, resistanceRuns), /altermod USER_VSW RON=2\.00000000e\+0 ROFF=1\.00000000e\+6 VT=3\.00000000e\+0 VH=1\.00000000e\+0\nrun/)
+
   const invalid = structuredClone(project)
   invalid.simulation.parameterSweeps = [{ component: switchPart.ref, parameter: 'VON', start: '1', stop: '1.5', points: 2 }]
+  assert.throws(() => prepareParameterSweep(validateProject(invalid)), /keep VON ≥ VOFF and ROFF > RON > 0/)
+  invalid.simulation.parameterSweeps = [{ component: switchPart.ref, parameter: 'RON', start: '900k', stop: '2Meg', points: 2 }]
   assert.throws(() => prepareParameterSweep(validateProject(invalid)), /keep VON ≥ VOFF and ROFF > RON > 0/)
 })
 
