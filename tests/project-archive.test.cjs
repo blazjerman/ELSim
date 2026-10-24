@@ -379,6 +379,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.simulation.properties.nominalTemperature.maxLength, 64)
   for (const name of ['relativeTolerance', 'absoluteCurrentTolerance', 'absoluteVoltageTolerance', 'minimumConductance']) assert.equal(schema.$defs.simulation.properties[name].maxLength, 64)
   assert.equal(schema.$defs.simulation.properties.transientErrorTolerance.maxLength, 64)
+  assert.equal(schema.$defs.simulation.properties.trapezoidalDampingFactor.maxLength, 64)
   for (const name of ['dcIterationLimit', 'dcTransferIterationLimit', 'transientIterationLimit']) assert.equal(schema.$defs.simulation.properties[name].pattern, '^\\s*[0-9]+\\s*$')
   assert.equal(schema.$defs.simulation.properties.shuntCapacitance.maxLength, 64)
   assert.deepEqual(schema.$defs.simulation.properties.integrationMethod.enum, ['trap', 'gear'])
@@ -427,6 +428,13 @@ test('transient solver tolerance survives project archive round-trip', async () 
   project.simulation.transientErrorTolerance = '5'
   const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
   assert.equal(restored.simulation.transientErrorTolerance, '5')
+})
+
+test('trapezoidal damping factor survives project archive round-trip', async () => {
+  const project = createStarterProject()
+  project.simulation.trapezoidalDampingFactor = '0.495'
+  const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
+  assert.equal(restored.simulation.trapezoidalDampingFactor, '0.495')
 })
 
 test('current-source SINE settings survive project archive round-trip', async () => {

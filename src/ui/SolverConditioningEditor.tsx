@@ -10,20 +10,22 @@ type NumericSettingProps = {
   hint: string
   example: string
   integer?: boolean
+  maxExclusive?: number
+  invalidMessage?: string
   onChange: (value?: string) => void
 }
 
-function NumericSetting({ label, ariaLabel, dataSetting, value, placeholder, hint, example, integer = false, onChange }: NumericSettingProps) {
+function NumericSetting({ label, ariaLabel, dataSetting, value, placeholder, hint, example, integer = false, maxExclusive, invalidMessage, onChange }: NumericSettingProps) {
   const text = value?.trim() ?? ''
   const valid = !text || (integer
     ? /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) && Number(text) >= 1 && Number(text) <= 1_000_000
-    : /^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text) && Number.isFinite(Number(text)) && Number(text) > 0)
+    : /^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text) && Number.isFinite(Number(text)) && Number(text) > 0 && (maxExclusive === undefined || Number(text) < maxExclusive))
   const errorId = `error-${dataSetting}`
   const hintId = `hint-${dataSetting}`
   return <label className="field-label">
     {label}
     <input data-analysis-setting={dataSetting} aria-label={ariaLabel} aria-invalid={!valid} aria-describedby={!valid ? errorId : hintId} value={value ?? ''} placeholder={placeholder ?? 'Ngspice default'} onChange={(event) => onChange(event.target.value || undefined)} />
-    {!valid && <small id={errorId} className="field-error" role="alert">{integer ? 'Enter an integer from 1 to 1000000' : 'Enter a positive finite number'}, such as {example}, or leave blank for ngspice’s default.</small>}
+    {!valid && <small id={errorId} className="field-error" role="alert">{invalidMessage ?? `${integer ? 'Enter an integer from 1 to 1000000' : 'Enter a positive finite number'}, such as ${example}, or leave blank for ngspice’s default.`}</small>}
     <small id={hintId} className="field-hint">{hint}</small>
   </label>
 }
@@ -40,6 +42,7 @@ export default function SolverConditioningEditor({
   dcTransferIterationLimit,
   transientIterationLimit,
   transientErrorTolerance,
+  trapezoidalDampingFactor,
   integrationMethod,
   integrationMaxOrder,
   skipAcOperatingPoint,
@@ -55,6 +58,7 @@ export default function SolverConditioningEditor({
   onDcTransferIterationLimitChange,
   onTransientIterationLimitChange,
   onTransientErrorToleranceChange,
+  onTrapezoidalDampingFactorChange,
   onIntegrationMethodChange,
   onIntegrationMaxOrderChange,
   onSkipAcOperatingPointChange,
@@ -70,6 +74,7 @@ export default function SolverConditioningEditor({
   dcTransferIterationLimit?: string
   transientIterationLimit?: string
   transientErrorTolerance?: string
+  trapezoidalDampingFactor?: string
   integrationMethod?: 'trap' | 'gear'
   integrationMaxOrder?: number
   skipAcOperatingPoint?: boolean
@@ -85,6 +90,7 @@ export default function SolverConditioningEditor({
   onDcTransferIterationLimitChange: (value?: string) => void
   onTransientIterationLimitChange: (value?: string) => void
   onTransientErrorToleranceChange: (value?: string) => void
+  onTrapezoidalDampingFactorChange: (value?: string) => void
   onIntegrationMethodChange: (value?: 'trap' | 'gear') => void
   onIntegrationMaxOrderChange: (value?: number) => void
   onSkipAcOperatingPointChange: (value: boolean) => void
@@ -109,6 +115,7 @@ export default function SolverConditioningEditor({
         </select>
         <small className="field-hint">Gear can reduce numerical ringing in some switching or stiff circuits, but adds numerical damping and can hide real fast changes. Compare results with the default before relying on them.</small>
       </label>
+      {integrationMethod !== 'gear' && <NumericSetting label="Trapezoidal damping factor (XMU)" ariaLabel="Trapezoidal damping factor (XMU)" dataSetting="trapezoidalDampingFactor" value={trapezoidalDampingFactor} hint="Ngspice defaults to 0.5. A value such as 0.495 can reduce numerical ringing. Too much damping can hide real oscillation; compare with the default before relying on the result." example="0.495" maxExclusive={0.5} invalidMessage="Enter a positive finite number below 0.5, such as 0.495, or leave blank for ngspice’s default." onChange={onTrapezoidalDampingFactorChange}/>}
       {integrationMethod === 'gear' && <label className="field-label">Maximum Gear order
         <select aria-label="Maximum Gear integration order" value={integrationMaxOrder ?? ''} onChange={(event) => onIntegrationMaxOrderChange(event.target.value ? Number(event.target.value) : undefined)}>
           <option value="">Ngspice default (2)</option>{[2, 3, 4, 5, 6].map((order) => <option key={order} value={order}>{order}</option>)}

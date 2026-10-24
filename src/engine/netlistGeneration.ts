@@ -1671,6 +1671,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:transientErrorTolerance', line: rows.length })
     } else if (project.simulation.analysis === 'tran') append(`.options trtol=${Number(value)}`, 'analysis:transientErrorTolerance', 'generated')
   }
+  if (includeHierarchyProbes && project.simulation.trapezoidalDampingFactor !== undefined) {
+    const value = project.simulation.trapezoidalDampingFactor
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) || !Number.isFinite(Number(value)) || Number(value) <= 0 || Number(value) >= 0.5) {
+      const message = 'Ngspice trapezoidal damping factor must be a positive finite number below 0.5.'
+      append(`* ERROR: ${cleanComment(message)}`, 'analysis:trapezoidalDampingFactor', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:trapezoidalDampingFactor', line: rows.length })
+    } else if (project.simulation.analysis === 'tran' && project.simulation.integrationMethod !== 'gear') append(`.options xmu=${Number(value)}`, 'analysis:trapezoidalDampingFactor', 'generated')
+  }
   if (includeHierarchyProbes && project.simulation.shuntResistance?.trim()) {
     const shuntResistance = componentMagnitude(project.simulation.shuntResistance, 'resistor')
     if (shuntResistance === null || shuntResistance <= 0) {

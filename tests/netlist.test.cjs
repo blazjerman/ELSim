@@ -882,6 +882,29 @@ test('transient truncation-error tolerance is validated and only emitted for tra
   assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:transientErrorTolerance'))
 })
 
+test('trapezoidal damping factor is bounded and ignored by Gear and non-transient analyses', () => {
+  const project = createStarterProject()
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options xmu=/mi)
+  project.simulation.trapezoidalDampingFactor = '0.495'
+  let artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal((artifact.text.match(/^\.options xmu=0\.495$/gim) ?? []).length, 1)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:trapezoidalDampingFactor' && source.role === 'generated'))
+  project.simulation.integrationMethod = 'gear'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.doesNotMatch(artifact.text, /^\.options xmu=/mi)
+  project.simulation.integrationMethod = 'trap'
+  project.simulation.analysis = 'ac'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.doesNotMatch(artifact.text, /^\.options xmu=/mi)
+  project.simulation.analysis = 'tran'
+  for (const value of ['0', '0.5', '0.51', '-0.1']) {
+    project.simulation.trapezoidalDampingFactor = value
+    assert.throws(() => validateProject(project), /trapezoidal damping factor must be a positive finite number below 0\.5/i)
+    assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:trapezoidalDampingFactor'))
+  }
+})
+
 test('transient integration method defaults to ngspice and can opt into trapezoidal or Gear', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options method=/mi)
