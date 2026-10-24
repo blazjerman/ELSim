@@ -31,14 +31,15 @@ Tauri uses the operating system WebView, while Electron packages its application
 
 ### Current prototype commands
 
-Run `npm ci` to install the project-pinned Tauri 2 CLI, then use `npm run desktop:dev` for the live Vite UI inside the desktop webview or `npm run desktop:build` to build the desktop application binary from production web assets. A preflight checks Rust and Linux WebKitGTK versions before starting and checks the locally built engine before packaging. The production shell build uses `build:offline`, so it requires the developer-built, ignored `public/engine/ngspice.mjs` and `.wasm` files. Tauri's Linux build requires the distribution's WebKitGTK 4.1 and related development packages; Windows and macOS require their platform toolchains. The current bundle configuration is deliberately disabled while the prototype is being validated, so `desktop:build` does not produce an installer yet. Browser builds and GitHub Pages remain independent.
+Run `npm ci` to install the project-pinned Tauri 2 CLI, then use `npm run desktop:dev` for the live Vite UI inside the desktop webview or `npm run desktop:build` to build the desktop application binary from production web assets. A preflight checks Rust and Linux WebKitGTK versions before starting and checks the locally built engine before packaging. The production shell build uses `build:offline`, so it requires the developer-built, ignored `public/engine/ngspice.mjs` and `.wasm` files. Tauri's Linux build requires the distribution's WebKitGTK 4.1 and related development packages; Windows and macOS require their platform toolchains. Platform-specific bundle icons are generated from the existing ELSim PWA icon and are configured, but installer bundling is still disabled until the prototype passes desktop runtime checks. Browser builds and GitHub Pages remain independent.
 
 - [ ] Verify desktop dev and production binaries on Linux with the required WebKitGTK packages installed.
 - [ ] Verify the same shell on Windows and macOS.
 - [ ] Validate service-worker, ngspice worker/WASM loading, and `.elsim` save/open behavior in each OS webview.
-- [ ] Add original platform icons and enable target installers only after these checks.
+- [x] Generate original platform icons from the existing ELSim PWA icon and configure them for desktop bundling.
+- [ ] Enable target installers only after these checks.
 
-Local verification on 2026-10-25: Tauri configuration JSON, Cargo metadata, and `cargo fmt --check` pass. The offline frontend build passes. `cargo check` is not yet available on the current host: its Rust 1.84 toolchain is older than the locked Tauri 2.12.5 minimum (Rust 1.90), and WebKitGTK 4.1 is not installed. No desktop binary or installer has been claimed.
+Local verification on 2026-10-25: Tauri configuration JSON and its structure against the pinned CLI schema, Cargo metadata, and `cargo fmt --check` pass. Desktop Linux/Windows/macOS icons are generated and present. The offline frontend build passes. `cargo check` is not yet available on the current host: its Rust 1.84 toolchain is older than the locked Tauri 2.12.5 minimum (Rust 1.90), and WebKitGTK 4.1 is not installed. No desktop binary or installer has been claimed.
 
 - Build and launch the unchanged app shell in Tauri on Windows, macOS, and Linux from clean checkouts. Record OS, toolchain, WebView version, installer size, and startup time.
 - Verify project open/save, user model/symbol import, worker initialization, RC transient, AC, DC sweep, cancellation, waveform zoom/pan, and large-trace interaction on each target.
