@@ -1298,7 +1298,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         skipModelThroughLine = model.endLine
         continue
       }
-      const expandedAko = conditionalDepth === 0 ? expandedAkoByLine.get(record.sourceLine) : undefined
+      // A single conditional AKO child can be expanded safely against an
+      // unconditional base while leaving its surrounding .IF branch intact.
+      // Conditional VSWITCH translation remains restricted above because it
+      // needs branch-aware model selection.
+      const expandedAko = expandedAkoByLine.get(record.sourceLine)
       if (expandedAko) {
         const { model, text } = expandedAko
         append(`* ELSim expanded native ngspice AKO model ${model.name} from ${model.akoBaseName}`, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: model.startLine })

@@ -66,7 +66,10 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
       if (resolved) { inherited = resolved; inheritedChannel = effectiveChannelsByModel.get(key) ?? currentModel.channel; break }
       const baseName = currentModel.akoBaseName
       if (!baseName) { inherited = currentModel.parameters; inheritedChannel = currentModel.channel; break }
-      if (currentModel.conditionalDefinition) { report(currentAsset, currentModel, `AKO model ${currentModel.name} is conditional and cannot be expanded safely.`); return null }
+      if (currentModel.conditionalVariantCount && currentModel.conditionalVariantCount > 1) {
+        report(currentAsset, currentModel, `AKO model ${currentModel.name} has multiple conditional variants and cannot be expanded safely.`)
+        return null
+      }
       if (!currentModel.akoSafeToExpand) { report(currentAsset, currentModel, `AKO model ${currentModel.name} contains parameters or flags outside the supported assignment-only expansion form.`); return null }
       if (visiting.has(key)) { report(currentAsset, currentModel, `AKO inheritance cycle detected while resolving ${currentModel.name}.`); return null }
       visiting.add(key)

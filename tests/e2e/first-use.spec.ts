@@ -7500,18 +7500,22 @@ test('native ngspice AKO models import and simulate after cross-library expansio
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'ako-child.lib', mimeType: 'text/plain', buffer: Buffer.from([
       '.MODEL DCHILD AKO:DBAS D(IS=2n)',
+      '.IF (1)',
+      '.MODEL DCOND AKO:DBAS D(IS=4n)',
+      '.ENDIF',
       '.SUBCKT LOCAL_DIODE A K',
       '.MODEL LOCAL_BASE D(IS=3n N=2)',
       '.MODEL LOCAL_CHILD AKO:LOCAL_BASE D(IS=4n)',
       '.ENDS LOCAL_DIODE',
     ].join('\n') + '\n'),
   })
-  await expect(page.getByText(/Imported 1 subcircuit and 3 device models from ako-child\.lib/)).toBeVisible()
+  await expect(page.getByText(/Imported 1 subcircuit and 4 device models from ako-child\.lib/)).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
   await expect(netlist).toContainText(/^\.model DCHILD D\(IS=2n N=1\)$/m)
+  await expect(netlist).toContainText(/^\.model DCOND D\(IS=4n N=1\)$/m)
   await expect(netlist).toContainText(/^\.model LOCAL_CHILD D\(IS=4n N=2\)$/m)
   await expect(netlist).not.toContainText(/AKO:/i)
 })

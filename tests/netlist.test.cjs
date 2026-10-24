@@ -42,11 +42,12 @@ test('netlist generation expands imported native AKO cards and maps them to the 
   const project = createStarterProject()
   project.modelAssets = [
     { id: 'ako-base', filename: 'base.lib', content: '.MODEL DBAS D(Is=1n N=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
-    { id: 'ako-child', filename: 'child.lib', content: '.MODEL DCHILD AKO:DBAS D(IS=2n)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'ako-child', filename: 'child.lib', content: '.MODEL DCHILD AKO:DBAS D(IS=2n)\n.IF (1)\n.MODEL DCONDITIONAL AKO:DBAS D(IS=3n)\n.ENDIF\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
   ]
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^\.model DCHILD D\(IS=2n N=1\)$/m)
+  assert.match(artifact.text, /^\.model DCONDITIONAL D\(IS=3n N=1\)$/m)
   assert.doesNotMatch(artifact.text, /AKO:/i)
   assert.equal(artifact.sourceMap.find((source) => source.assetId === 'ako-child' && source.assetLine === 1)?.role, 'model')
   assert.match(project.modelAssets[1].content, /AKO:DBAS/, 'the imported asset remains byte-for-byte unchanged')

@@ -4,7 +4,7 @@ export type SubcircuitParameter = { name: string; defaultValue: string; defaultV
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; scope?: string; conditional?: boolean; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalVariantCount?: number; scope?: string; conditional?: boolean; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -622,7 +622,10 @@ function canonicalModelType(type: string): string {
 }
 
 function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelConditionPath, seen: Map<string, SeenModelCard>, models: SpiceModelDefinition[]) {
-  if (conditionPath.length) Object.defineProperty(model, 'conditionalDefinition', { value: true })
+  if (conditionPath.length) {
+    Object.defineProperty(model, 'conditionalDefinition', { value: true })
+    Object.defineProperty(model, 'conditionalVariantCount', { value: 1, writable: true })
+  }
   if (conditionPath.length && model.type.toUpperCase() === 'VSWITCH') model.conditional = true
   const key = `${model.scope?.toLowerCase() ?? ''}:${model.name.toLowerCase()}`
   const previous = seen.get(key)
@@ -634,6 +637,7 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   const mutuallyExclusive = previous.conditionPath.some((frame) => conditionPath.some((candidate) => candidate.id === frame.id && candidate.branch !== frame.branch))
   const location = model.scope ? ` in .SUBCKT ${model.scope}` : ''
   if (!mutuallyExclusive) throw new Error(`Line ${model.startLine}: model card ${model.name} is declared more than once${location}.`)
+  previous.model.conditionalVariantCount = (previous.model.conditionalVariantCount ?? 1) + 1
   if (canonicalModelType(previous.model.type) !== canonicalModelType(model.type) || previous.model.channel !== model.channel) {
     throw new Error(`Line ${model.startLine}: conditional model cards named ${model.name} must keep the same device type and channel.`)
   }

@@ -995,6 +995,15 @@ test('expands deeply chained native AKO models without recursion limits', () => 
   assert.equal(result.cards.get('deep-chain:1'), '.model M11999 D(IS=1n N=11999)')
 })
 
+test('expands a single conditional AKO child against an unconditional base', () => {
+  const content = '.MODEL BASE D(IS=1n N=1)\n.IF (1)\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ENDIF\n'
+  const asset = { id: 'conditional-child', filename: 'conditional-child.lib', content }
+  const result = expandNgspiceAkoModels([{ asset, parsed: parseSubcircuitLibrary(content) }])
+
+  assert.deepEqual(result.issues, [])
+  assert.equal(result.cards.get('conditional-child:3'), '.model CHILD D(IS=2n N=1)')
+})
+
 test('reports missing, ambiguous, cyclic, mismatched, conditional, and unsafe AKO inheritance', () => {
   const makeEntries = (assets) => assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) }))
   const cases = [
@@ -1003,6 +1012,7 @@ test('reports missing, ambiguous, cyclic, mismatched, conditional, and unsafe AK
     [[{ id: 'cycle', filename: 'cycle.lib', content: '.MODEL A AKO:B D(Is=1n)\n.MODEL B AKO:A D(Is=2n)' }], /inheritance cycle/],
     [[{ id: 'wrong', filename: 'wrong.lib', content: '.MODEL BASE Q(Is=1n)\n.MODEL CHILD AKO:BASE D(Is=2n)' }], /has device type Q, but CHILD declares D/],
     [[{ id: 'conditional', filename: 'conditional.lib', content: '.if (1)\n.MODEL BASE D(Is=1n)\n.endif\n.MODEL CHILD AKO:BASE D(Is=2n)' }], /conditional and cannot be expanded safely/],
+    [[{ id: 'conditional-variants', filename: 'conditional-variants.lib', content: '.MODEL BASE D(IS=1n)\n.IF (1)\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ELSE\n.MODEL CHILD AKO:BASE D(IS=3n)\n.ENDIF' }], /multiple conditional variants and cannot be expanded safely/],
     [[{ id: 'unsafe', filename: 'unsafe.lib', content: '.MODEL BASE D(Is=1n)\n.MODEL CHILD AKO:BASE D(Is=2n) Pchan' }], /outside the supported assignment-only expansion form/],
   ]
   for (const [assets, expected] of cases) {
