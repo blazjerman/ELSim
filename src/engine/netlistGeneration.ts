@@ -1144,6 +1144,21 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:nominalTemperature', line: rows.length })
     } else append(`.options tnom=${Number(nominalTemperature)}`, 'analysis:nominalTemperature', 'generated')
   }
+  const convergenceSettings = [
+    ['relativeTolerance', 'reltol'],
+    ['absoluteCurrentTolerance', 'abstol'],
+    ['absoluteVoltageTolerance', 'vntol'],
+    ['minimumConductance', 'gmin'],
+  ] as const
+  if (includeHierarchyProbes) for (const [field, option] of convergenceSettings) {
+    const value = project.simulation[field]
+    if (value === undefined) continue
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) || !Number.isFinite(Number(value)) || Number(value) <= 0) {
+      const message = `Ngspice ${field === 'relativeTolerance' ? 'relative tolerance' : field === 'absoluteCurrentTolerance' ? 'absolute current tolerance' : field === 'absoluteVoltageTolerance' ? 'absolute voltage tolerance' : 'minimum conductance'} must be a positive finite number.`
+      append(`* ERROR: ${cleanComment(message)}`, `analysis:${field}`, 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: `analysis:${field}`, line: rows.length })
+    } else append(`.options ${option}=${Number(value)}`, `analysis:${field}`, 'generated')
+  }
   if (includeHierarchyProbes && project.simulation.shuntResistance?.trim()) {
     const shuntResistance = componentMagnitude(project.simulation.shuntResistance, 'resistor')
     if (shuntResistance === null || shuntResistance <= 0) {

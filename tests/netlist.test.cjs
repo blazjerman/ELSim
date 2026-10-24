@@ -483,6 +483,29 @@ test('optional floating-node RSHUNT and CSHUNT emit native ngspice options and v
   assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:shuntCapacitance'))
 })
 
+test('optional ngspice convergence controls validate and emit independent solver options', () => {
+  const project = createStarterProject()
+  const settings = [
+    ['relativeTolerance', 'reltol', '0.001'],
+    ['absoluteCurrentTolerance', 'abstol', '1e-12'],
+    ['absoluteVoltageTolerance', 'vntol', '1e-6'],
+    ['minimumConductance', 'gmin', '1e-12'],
+  ]
+  for (const [field, option] of settings) assert.doesNotMatch(createNetlistArtifact(project).text, new RegExp(`^\\.options ${option}=`, 'mi'))
+  for (const [field, , value] of settings) project.simulation[field] = value
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  for (const [field, option, value] of settings) {
+    assert.match(artifact.text, new RegExp(`^\\.options ${option}=${Number(value)}$`, 'mi'))
+    assert.ok(artifact.sourceMap.some((source) => source.sourceId === `analysis:${field}` && source.role === 'generated'))
+  }
+  for (const [field] of settings) {
+    project.simulation[field] = '0'
+    assert.throws(() => validateProject(project), /must be a positive finite number/i)
+    assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === `analysis:${field}`))
+  }
+})
+
 test('transient integration method defaults to ngspice and can opt into trapezoidal or Gear', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options method=/mi)

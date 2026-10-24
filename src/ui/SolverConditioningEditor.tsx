@@ -1,11 +1,126 @@
 import { componentMagnitude } from '../domain/componentValue'
 
-export default function SolverConditioningEditor({ resistance, capacitance, nominalTemperature, integrationMethod, integrationMaxOrder, skipAcOperatingPoint, analysis, onResistanceChange, onCapacitanceChange, onNominalTemperatureChange, onIntegrationMethodChange, onIntegrationMaxOrderChange, onSkipAcOperatingPointChange }: { resistance?: string; capacitance?: string; nominalTemperature?: string; integrationMethod?: 'trap' | 'gear'; integrationMaxOrder?: number; skipAcOperatingPoint?: boolean; analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; onResistanceChange: (value?: string) => void; onCapacitanceChange: (value?: string) => void; onNominalTemperatureChange: (value?: string) => void; onIntegrationMethodChange: (value?: 'trap' | 'gear') => void; onIntegrationMaxOrderChange: (value?: number) => void; onSkipAcOperatingPointChange: (value: boolean) => void }) {
-  const magnitude = resistance?.trim() ? componentMagnitude(resistance, 'resistor') : null
-  const error = resistance?.trim() && (magnitude === null || magnitude <= 0) ? 'Enter a positive resistance, such as 1 TΩ, or leave this blank to disable node shunts.' : undefined
+type Analysis = 'tran' | 'op' | 'ac' | 'dc' | 'noise'
+type NumericSettingProps = {
+  label: string
+  ariaLabel: string
+  dataSetting: string
+  value?: string
+  placeholder?: string
+  hint: string
+  example: string
+  onChange: (value?: string) => void
+}
+
+function NumericSetting({ label, ariaLabel, dataSetting, value, placeholder, hint, example, onChange }: NumericSettingProps) {
+  const text = value?.trim() ?? ''
+  const valid = !text || (/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text) && Number.isFinite(Number(text)) && Number(text) > 0)
+  const errorId = `error-${dataSetting}`
+  const hintId = `hint-${dataSetting}`
+  return <label className="field-label">
+    {label}
+    <input data-analysis-setting={dataSetting} aria-label={ariaLabel} aria-invalid={!valid} aria-describedby={!valid ? errorId : hintId} value={value ?? ''} placeholder={placeholder ?? 'Ngspice default'} onChange={(event) => onChange(event.target.value || undefined)} />
+    {!valid && <small id={errorId} className="field-error" role="alert">Enter a positive finite number, such as {example}, or leave blank for ngspice’s default.</small>}
+    <small id={hintId} className="field-hint">{hint}</small>
+  </label>
+}
+
+export default function SolverConditioningEditor({
+  resistance,
+  capacitance,
+  nominalTemperature,
+  relativeTolerance,
+  absoluteCurrentTolerance,
+  absoluteVoltageTolerance,
+  minimumConductance,
+  integrationMethod,
+  integrationMaxOrder,
+  skipAcOperatingPoint,
+  analysis,
+  onResistanceChange,
+  onCapacitanceChange,
+  onNominalTemperatureChange,
+  onRelativeToleranceChange,
+  onAbsoluteCurrentToleranceChange,
+  onAbsoluteVoltageToleranceChange,
+  onMinimumConductanceChange,
+  onIntegrationMethodChange,
+  onIntegrationMaxOrderChange,
+  onSkipAcOperatingPointChange,
+}: {
+  resistance?: string
+  capacitance?: string
+  nominalTemperature?: string
+  relativeTolerance?: string
+  absoluteCurrentTolerance?: string
+  absoluteVoltageTolerance?: string
+  minimumConductance?: string
+  integrationMethod?: 'trap' | 'gear'
+  integrationMaxOrder?: number
+  skipAcOperatingPoint?: boolean
+  analysis: Analysis
+  onResistanceChange: (value?: string) => void
+  onCapacitanceChange: (value?: string) => void
+  onNominalTemperatureChange: (value?: string) => void
+  onRelativeToleranceChange: (value?: string) => void
+  onAbsoluteCurrentToleranceChange: (value?: string) => void
+  onAbsoluteVoltageToleranceChange: (value?: string) => void
+  onMinimumConductanceChange: (value?: string) => void
+  onIntegrationMethodChange: (value?: 'trap' | 'gear') => void
+  onIntegrationMaxOrderChange: (value?: number) => void
+  onSkipAcOperatingPointChange: (value: boolean) => void
+}) {
+  const resistanceMagnitude = resistance?.trim() ? componentMagnitude(resistance, 'resistor') : null
+  const resistanceError = resistance?.trim() && (resistanceMagnitude === null || resistanceMagnitude <= 0) ? 'Enter a positive resistance, such as 1 TΩ, or leave this blank to disable node shunts.' : undefined
   const capacitanceMagnitude = capacitance?.trim() ? componentMagnitude(capacitance, 'capacitor') : null
   const capacitanceError = capacitance?.trim() && (capacitanceMagnitude === null || capacitanceMagnitude <= 0) ? 'Enter a positive capacitance, such as 0.13 pF, or leave this blank to disable node shunts.' : undefined
   const tnom = nominalTemperature?.trim()
   const nominalTemperatureError = tnom && (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(tnom) || !Number.isFinite(Number(tnom)) || Number(tnom) < -273.15 || Number(tnom) > 10000) ? 'Enter a model reference temperature from −273.15 to 10000 °C, or leave blank for ngspice’s 27 °C default.' : undefined
-  return <>{analysis === 'tran' && <><label className="field-label">Transient integration method<select data-analysis-setting="integrationMethod" aria-label="Transient integration method" value={integrationMethod ?? ''} onChange={(event) => { const method = (event.target.value || undefined) as 'trap' | 'gear' | undefined; onIntegrationMethodChange(method); if (method !== 'gear') onIntegrationMaxOrderChange(undefined) }}><option value="">Ngspice default (trapezoidal)</option><option value="trap">Trapezoidal</option><option value="gear">Gear (more damping)</option></select><small className="field-hint">Gear can reduce numerical ringing in some switching or stiff circuits, but adds numerical damping and can hide real fast changes. Compare results with the default before relying on them.</small></label>{integrationMethod === 'gear' && <label className="field-label">Maximum Gear order<select aria-label="Maximum Gear integration order" value={integrationMaxOrder ?? ''} onChange={(event) => onIntegrationMaxOrderChange(event.target.value ? Number(event.target.value) : undefined)}><option value="">Ngspice default (2)</option>{[2, 3, 4, 5, 6].map((order) => <option key={order} value={order}>{order}</option>)}</select><small className="field-hint">Ngspice permits Gear orders 2–6. Leave the default unless you need to control the solver order.</small></label>}</>}{analysis === 'ac' && <label className="checkbox-field"><input type="checkbox" aria-label="Skip DC operating point before AC analysis" data-analysis-setting="skipAcOperatingPoint" checked={skipAcOperatingPoint === true} onChange={(event) => onSkipAcOperatingPointChange(event.target.checked)}/><span><strong>Skip DC operating point before AC</strong><small>Can help linear circuits with ideal LC loops. Ngspice still runs an operating point if it detects nonlinear devices.</small></span></label>}<label className="field-label">Model nominal temperature (optional)<input data-analysis-setting="nominalTemperature" aria-label="Model nominal temperature" aria-invalid={Boolean(nominalTemperatureError)} aria-describedby={nominalTemperatureError ? 'error-nominalTemperature' : 'hint-nominalTemperature'} value={nominalTemperature ?? ''} placeholder="Ngspice default · 27 °C" onChange={(event) => onNominalTemperatureChange(event.target.value || undefined)}/>{nominalTemperatureError && <small id="error-nominalTemperature" className="field-error" role="alert">{nominalTemperatureError}</small>}<small id="hint-nominalTemperature" className="field-hint">Reference temperature where device-model parameters were measured. This is separate from circuit operating temperature above; leave blank to use ngspice’s 27 °C default.</small></label><label className="field-label">Floating-node resistance (optional)<input data-analysis-setting="shuntResistance" aria-label="Floating-node shunt resistance" aria-invalid={Boolean(error)} aria-describedby={error ? 'error-shuntResistance' : 'hint-shuntResistance'} value={resistance ?? ''} placeholder="Off" onChange={(event) => onResistanceChange(event.target.value || undefined)}/>{error && <small id="error-shuntResistance" className="field-error" role="alert">{error}</small>}<small id="hint-shuntResistance" className="field-hint">Adds a high-value resistor from each analog node to ground. This can help with floating nodes or a nearly singular matrix; it slightly changes the circuit. Try 1 TΩ first. Leave blank to keep the simulator default.</small></label><label className="field-label">Node shunt capacitance (optional)<input data-analysis-setting="shuntCapacitance" aria-label="Node shunt capacitance" aria-invalid={Boolean(capacitanceError)} aria-describedby={capacitanceError ? 'error-shuntCapacitance' : 'hint-shuntCapacitance'} value={capacitance ?? ''} placeholder="Off" onChange={(event) => onCapacitanceChange(event.target.value || undefined)}/>{capacitanceError && <small id="error-shuntCapacitance" className="field-error" role="alert">{capacitanceError}</small>}<small id="hint-shuntCapacitance" className="field-hint">Adds this capacitor from each analog node to ground. It may help matrix conditioning, but it changes node capacitance and can affect AC or transient results. Ngspice's manual gives 0.13 pF as an example. Leave blank to keep the simulator default.</small></label></>
+
+  return <>
+    {analysis === 'tran' && <>
+      <label className="field-label">Transient integration method
+        <select data-analysis-setting="integrationMethod" aria-label="Transient integration method" value={integrationMethod ?? ''} onChange={(event) => {
+          const method = (event.target.value || undefined) as 'trap' | 'gear' | undefined
+          onIntegrationMethodChange(method)
+          if (method !== 'gear') onIntegrationMaxOrderChange(undefined)
+        }}>
+          <option value="">Ngspice default (trapezoidal)</option><option value="trap">Trapezoidal</option><option value="gear">Gear (more damping)</option>
+        </select>
+        <small className="field-hint">Gear can reduce numerical ringing in some switching or stiff circuits, but adds numerical damping and can hide real fast changes. Compare results with the default before relying on them.</small>
+      </label>
+      {integrationMethod === 'gear' && <label className="field-label">Maximum Gear order
+        <select aria-label="Maximum Gear integration order" value={integrationMaxOrder ?? ''} onChange={(event) => onIntegrationMaxOrderChange(event.target.value ? Number(event.target.value) : undefined)}>
+          <option value="">Ngspice default (2)</option>{[2, 3, 4, 5, 6].map((order) => <option key={order} value={order}>{order}</option>)}
+        </select>
+        <small className="field-hint">Ngspice permits Gear orders 2–6. Leave the default unless you need to control the solver order.</small>
+      </label>}
+    </>}
+    {analysis === 'ac' && <label className="checkbox-field"><input type="checkbox" aria-label="Skip DC operating point before AC analysis" data-analysis-setting="skipAcOperatingPoint" checked={skipAcOperatingPoint === true} onChange={(event) => onSkipAcOperatingPointChange(event.target.checked)} /><span><strong>Skip DC operating point before AC</strong><small>Can help linear circuits with ideal LC loops. Ngspice still runs an operating point if it detects nonlinear devices.</small></span></label>}
+
+    <label className="field-label">Model nominal temperature (optional)
+      <input data-analysis-setting="nominalTemperature" aria-label="Model nominal temperature" aria-invalid={Boolean(nominalTemperatureError)} aria-describedby={nominalTemperatureError ? 'error-nominalTemperature' : 'hint-nominalTemperature'} value={nominalTemperature ?? ''} placeholder="Ngspice default · 27 °C" onChange={(event) => onNominalTemperatureChange(event.target.value || undefined)} />
+      {nominalTemperatureError && <small id="error-nominalTemperature" className="field-error" role="alert">{nominalTemperatureError}</small>}
+      <small id="hint-nominalTemperature" className="field-hint">Reference temperature where device-model parameters were measured. This is separate from circuit operating temperature above; leave blank to use ngspice’s 27 °C default.</small>
+    </label>
+
+    <details className="solver-tolerance-settings"><summary>Convergence controls (advanced)</summary>
+      <p className="field-hint">Tighter tolerances can improve numerical precision but may slow simulation or make convergence harder. Leave blank to keep ngspice defaults.</p>
+      <NumericSetting label="Relative tolerance (RELTOL)" ariaLabel="Relative convergence tolerance" dataSetting="relativeTolerance" value={relativeTolerance} example="1e-3" hint="Relative error limit for node voltages and nonlinear device currents. Ngspice default: 1e-3." onChange={onRelativeToleranceChange} />
+      <NumericSetting label="Absolute current tolerance (ABSTOL)" ariaLabel="Absolute current convergence tolerance" dataSetting="absoluteCurrentTolerance" value={absoluteCurrentTolerance} example="1e-12" hint="Absolute error limit for nonlinear device currents, in amperes. Ngspice default: 1e-12 A." onChange={onAbsoluteCurrentToleranceChange} />
+      <NumericSetting label="Absolute voltage tolerance (VNTOL)" ariaLabel="Absolute voltage convergence tolerance" dataSetting="absoluteVoltageTolerance" value={absoluteVoltageTolerance} example="1e-6" hint="Absolute error limit for node voltages, in volts. Ngspice default: 1e-6 V." onChange={onAbsoluteVoltageToleranceChange} />
+      <NumericSetting label="Minimum conductance (GMIN)" ariaLabel="Minimum conductance" dataSetting="minimumConductance" value={minimumConductance} example="1e-12" hint="Minimum conductance used by ngspice to help nonlinear devices converge, in siemens. Ngspice default: 1e-12 S." onChange={onMinimumConductanceChange} />
+    </details>
+
+    <label className="field-label">Floating-node resistance (optional)
+      <input data-analysis-setting="shuntResistance" aria-label="Floating-node shunt resistance" aria-invalid={Boolean(resistanceError)} aria-describedby={resistanceError ? 'error-shuntResistance' : 'hint-shuntResistance'} value={resistance ?? ''} placeholder="Off" onChange={(event) => onResistanceChange(event.target.value || undefined)} />
+      {resistanceError && <small id="error-shuntResistance" className="field-error" role="alert">{resistanceError}</small>}
+      <small id="hint-shuntResistance" className="field-hint">Adds a high-value resistor from each analog node to ground. This can help with floating nodes or a nearly singular matrix; it slightly changes the circuit. Try 1 TΩ first. Leave blank to keep the simulator default.</small>
+    </label>
+    <label className="field-label">Node shunt capacitance (optional)
+      <input data-analysis-setting="shuntCapacitance" aria-label="Node shunt capacitance" aria-invalid={Boolean(capacitanceError)} aria-describedby={capacitanceError ? 'error-shuntCapacitance' : 'hint-shuntCapacitance'} value={capacitance ?? ''} placeholder="Off" onChange={(event) => onCapacitanceChange(event.target.value || undefined)} />
+      {capacitanceError && <small id="error-shuntCapacitance" className="field-error" role="alert">{capacitanceError}</small>}
+      <small id="hint-shuntCapacitance" className="field-hint">Adds this capacitor from each analog node to ground. It may help matrix conditioning, but it changes node capacitance and can affect AC or transient results. Ngspice’s manual gives 0.13 pF as an example. Leave blank to keep the simulator default.</small>
+    </label>
+  </>
 }

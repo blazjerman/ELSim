@@ -6440,6 +6440,11 @@ test('transient solver options are editable and run in the browser engine', { ta
   await page.getByLabel('Maximum Gear integration order').selectOption('4')
   await page.getByLabel('Floating-node shunt resistance').fill('1 TΩ')
   await page.getByLabel('Node shunt capacitance').fill('0.13 pF')
+  await page.getByText('Convergence controls (advanced)').click()
+  await page.getByLabel('Relative convergence tolerance').fill('1e-3')
+  await page.getByLabel('Absolute current convergence tolerance').fill('1e-12')
+  await page.getByLabel('Absolute voltage convergence tolerance').fill('1e-6')
+  await page.getByLabel('Minimum conductance').fill('1e-12')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
@@ -6447,6 +6452,10 @@ test('transient solver options are editable and run in the browser engine', { ta
   await expect(page.locator('.netlist-modal pre')).toContainText('.options cshunt=1.3e-13')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options method=gear')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options maxord=4')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options reltol=0.001')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options abstol=1e-12')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options vntol=0.000001')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options gmin=1e-12')
 })
 
 test('linear AC analysis can opt out of its preliminary operating point', { tag: '@ngspice' }, async ({ page }) => {
