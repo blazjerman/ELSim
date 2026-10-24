@@ -627,28 +627,47 @@ test('AC transformer example emits coupled windings with the selected turns rati
   assert.match(createNetlistArtifact(overflow).text, /ERROR: T1 needs a positive finite primary inductance/i)
 })
 
-test('mutually coupled inductor parts emit a native K card and retain polarity source mapping', () => {
+test('multi-pair inductor couplings emit separate native K cards and retain source mapping', () => {
   const project = createStarterProject()
   project.parts.push(
-    { id: 'coupled-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 600, y: 600, rotation: 0, mutualCoupling: { partnerId: 'coupled-l2', coefficient: '0.98' } },
+    { id: 'coupled-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 600, y: 600, rotation: 0, mutualCouplings: [{ partnerId: 'coupled-l2', coefficient: '0.98' }, { partnerId: 'coupled-l3', coefficient: '0.95' }] },
     { id: 'coupled-l2', kind: 'inductor', ref: 'L2', value: '5 mH', x: 800, y: 600, rotation: 0 },
+    { id: 'coupled-l3', kind: 'inductor', ref: 'L3', value: '8 mH', x: 1000, y: 600, rotation: 0, mutualCouplings: [{ partnerId: 'coupled-l2', coefficient: '0.9' }] },
   )
   project.sheets[0] = { ...project.sheets[0], parts: project.parts }
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^L1 \S+ \S+ 10m$/m)
   assert.match(artifact.text, /^L2 \S+ \S+ 5m$/m)
-  assert.match(artifact.text, /^KL1 L1 L2 0\.98$/m)
-  assert.equal(artifact.sourceMap.find((entry) => entry.sourceId === 'coupled-l1' && artifact.text.split('\n')[entry.line - 1] === 'KL1 L1 L2 0.98')?.role, 'component')
+  assert.match(artifact.text, /^KL1_L2 L1 L2 0\.98$/m)
+  assert.match(artifact.text, /^KL1_L3 L1 L3 0\.95$/m)
+  assert.match(artifact.text, /^KL3 L3 L2 0\.9$/m)
+  assert.equal(artifact.sourceMap.find((entry) => entry.sourceId === 'coupled-l1' && artifact.text.split('\n')[entry.line - 1] === 'KL1_L2 L1 L2 0.98')?.role, 'component')
+
+  const legacy = structuredClone(project)
+  const legacyOwner = legacy.parts.find((part) => part.id === 'coupled-l1')
+  legacyOwner.mutualCoupling = legacyOwner.mutualCouplings[0]
+  delete legacyOwner.mutualCouplings
+  legacy.parts.find((part) => part.id === 'coupled-l3').mutualCouplings = []
+  legacy.sheets[0] = { ...legacy.sheets[0], parts: legacy.parts }
+  const upgraded = validateProject(legacy)
+  assert.deepEqual(upgraded.parts.find((part) => part.id === 'coupled-l1').mutualCouplings, [{ partnerId: 'coupled-l2', coefficient: '0.98' }])
+  assert.equal(upgraded.parts.find((part) => part.id === 'coupled-l1').mutualCoupling, undefined)
+  assert.match(createNetlistArtifact(upgraded).text, /^KL1 L1 L2 0\.98$/m)
 
   const invalid = structuredClone(project)
-  invalid.parts.find((part) => part.id === 'coupled-l1').mutualCoupling.partnerId = 'missing'
+  invalid.parts.find((part) => part.id === 'coupled-l1').mutualCouplings[0].partnerId = 'missing'
   invalid.sheets[0] = { ...invalid.sheets[0], parts: invalid.parts }
   assert.throws(() => validateProject(invalid), /must couple to another inductor in the same sheet/i)
   const invalidCoefficient = structuredClone(project)
-  invalidCoefficient.parts.find((part) => part.id === 'coupled-l1').mutualCoupling.coefficient = '1.01'
+  invalidCoefficient.parts.find((part) => part.id === 'coupled-l1').mutualCouplings[0].coefficient = '1.01'
   invalidCoefficient.sheets[0] = { ...invalidCoefficient.sheets[0], parts: invalidCoefficient.parts }
   assert.throws(() => validateProject(invalidCoefficient), /coupling coefficient must be greater than 0 and at most 1/i)
+
+  const duplicatePair = structuredClone(project)
+  duplicatePair.parts.find((part) => part.id === 'coupled-l2').mutualCouplings = [{ partnerId: 'coupled-l1', coefficient: '0.98' }]
+  duplicatePair.sheets[0] = { ...duplicatePair.sheets[0], parts: duplicatePair.parts }
+  assert.throws(() => validateProject(duplicatePair), /define the same mutual-inductor pair more than once/i)
 })
 
 test('transformer-current example is ready for transient winding animation', () => {

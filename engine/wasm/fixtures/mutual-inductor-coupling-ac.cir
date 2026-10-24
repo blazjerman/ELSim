@@ -1,14 +1,20 @@
-* Two native inductor parts coupled by a mutual-inductance K card.
+* Three coupled windings connected by independent pairwise mutual-inductance K cards.
 V1 IN 0 AC 1
 RSOURCE IN PRI 1
 L1 PRI 0 10m
 L2 SEC 0 10m
-K1 L1 L2 0.98
+L3 TERT 0 8m
+KL1_L2 L1 L2 0.9
+KL1_L3 L1 L3 0.85
+KL2_L3 L2 L3 0.8
 RLOAD SEC 0 1k
+RLOAD2 TERT 0 1k
 .control
 ac lin 1 1k 1k
 let coupled_magnitude = vm(SEC)
+let tertiary_magnitude = vm(TERT)
 print coupled_magnitude
+print tertiary_magnitude
 quit
 .endc
 .end

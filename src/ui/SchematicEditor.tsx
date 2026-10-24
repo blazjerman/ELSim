@@ -541,9 +541,9 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
   const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
   const coupledInductorIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const part of project.parts) if (part.kind === 'inductor' && part.mutualCoupling) {
+    for (const part of project.parts) if (part.kind === 'inductor') for (const coupling of part.mutualCouplings ?? (part.mutualCoupling ? [part.mutualCoupling] : [])) {
       ids.add(part.id)
-      ids.add(part.mutualCoupling.partnerId)
+      ids.add(coupling.partnerId)
     }
     return ids
   }, [project.parts])

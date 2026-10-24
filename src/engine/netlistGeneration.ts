@@ -193,7 +193,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   let usesEducationalOpamp = false
   const voltageSwitchModels: { name: string; onResistance: string; offResistance: string; threshold: string; hysteresis: string }[] = []
   const currentSwitchModels: { name: string; onResistance: string; offResistance: string; threshold: string; hysteresis: string }[] = []
-  const mutualCouplingCards: { part: Part; partner: Part; coefficient: number }[] = []
+  const mutualCouplingCards: { part: Part; partner: Part; coefficient: number; couplingCount: number }[] = []
   const transistorModels: { part: Part; name: string }[] = []
   const jfetModels: { part: Part; name: string }[] = []
   const mosfetModels: { part: Part; name: string }[] = []
@@ -1056,16 +1056,20 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
 
-  for (const part of project.parts) if (part.mutualCoupling) {
-    const partner = project.parts.find((candidate) => candidate.id === part.mutualCoupling!.partnerId)
-    const coefficient = Number(part.mutualCoupling.coefficient)
-    if (part.kind !== 'inductor' || !partner || partner.kind !== 'inductor' || partner.id === part.id || !Number.isFinite(coefficient) || coefficient <= 0 || coefficient > 1) {
-      const message = `${part.ref} mutual coupling needs a different inductor in this sheet and a coefficient greater than 0 and at most 1.`
-      append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
-      diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
-      continue
+  const inductorPartsById = new Map(project.parts.map((part) => [part.id, part]))
+  for (const part of project.parts) {
+    const couplings = part.mutualCouplings ?? (part.mutualCoupling ? [part.mutualCoupling] : [])
+    for (const coupling of couplings) {
+      const partner = inductorPartsById.get(coupling.partnerId)
+      const coefficient = Number(coupling.coefficient)
+      if (part.kind !== 'inductor' || !partner || partner.kind !== 'inductor' || partner.id === part.id || !Number.isFinite(coefficient) || coefficient <= 0 || coefficient > 1) {
+        const message = `${part.ref} mutual coupling needs a different inductor in this sheet and a coefficient greater than 0 and at most 1.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      mutualCouplingCards.push({ part, partner, coefficient, couplingCount: couplings.length })
     }
-    mutualCouplingCards.push({ part, partner, coefficient })
   }
 
   for (let assetIndex = 0; assetIndex < modelAssets.length; assetIndex += 1) {
@@ -1085,8 +1089,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesZener) append('.model DZENER D(BV=5.1 IBV=1m)', 'model:DZENER', 'model')
   if (usesSwitch) append('.model ELSIM_INTERNAL_SW SW(Ron=1m Roff=1T Vt=2.5 Vh=0)', 'model:ELSIM_INTERNAL_SW', 'model')
-  for (const { part, partner, coefficient } of mutualCouplingCards) {
-    const reference = reserveUniqueName(`K${part.ref}`, usedReferences)
+  for (const { part, partner, coefficient, couplingCount } of mutualCouplingCards) {
+    const reference = reserveUniqueName(`K${part.ref}${couplingCount > 1 ? `_${partner.ref}` : ''}`, usedReferences)
     append(`${reference} ${part.ref} ${partner.ref} ${coefficient}`, part.id, 'component')
   }
   for (const model of voltageSwitchModels) append(`.model ${model.name} SW(Ron=${model.onResistance} Roff=${model.offResistance} Vt=${model.threshold} Vh=${model.hysteresis})`, `model:${model.name}`, 'model')

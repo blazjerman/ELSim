@@ -109,7 +109,7 @@ function createBlockProject() {
 test('mutual inductor coupling is emitted inside its reusable sheet definition', () => {
   const project = createBlockProject()
   project.sheets[1].parts.push(
-    { id: 'child-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 500, y: 500, rotation: 0, mutualCoupling: { partnerId: 'child-l2', coefficient: '0.9' } },
+    { id: 'child-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 500, y: 500, rotation: 0, mutualCouplings: [{ partnerId: 'child-l2', coefficient: '0.9' }] },
     { id: 'child-l2', kind: 'inductor', ref: 'L2', value: '5 mH', x: 700, y: 500, rotation: 0 },
   )
 

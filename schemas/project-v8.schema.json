@@ -646,7 +646,21 @@
             "partnerId": { "type": "string", "minLength": 1, "maxLength": 128 },
             "coefficient": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$", "description": "Dimensionless magnetic coupling coefficient greater than zero and at most one; valid only for inductors. The first listed inductor terminals are the dotted terminals." }
           },
-          "description": "Optional pairwise mutual coupling to another inductor in the same sheet."
+          "description": "Legacy optional single mutual coupling; project validation upgrades it to mutualCouplings."
+        },
+        "mutualCouplings": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": ["partnerId", "coefficient"],
+            "additionalProperties": false,
+            "properties": {
+              "partnerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "coefficient": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$", "description": "Dimensionless magnetic coupling coefficient greater than zero and at most one. The first listed terminal of each inductor is the dotted terminal." }
+            }
+          },
+          "description": "Optional outgoing pairwise couplings to other inductors in this sheet; multiple records allow multi-winding magnetic networks."
         },
         "primaryWindingResistance": {
           "type": "string",

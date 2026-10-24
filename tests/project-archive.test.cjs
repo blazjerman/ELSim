@@ -42,6 +42,11 @@ test('project ZIP archive is deterministic and round-trips the complete v8 proje
   project.parts[0].pwl = [{ time: '0', voltage: '0' }, { time: '5m', voltage: '3.3' }, { time: '10m', voltage: '0' }]
   project.parts[0].pwlFileName = 'drive.txt'
   project.parts.push({ id: 'archive-i-pwl', kind: 'currentSource', ref: 'I1', value: '1m', sourceMode: 'pwl', currentPwl: [{ time: '0', current: '0' }, { time: '5m', current: '1m' }], x: 800, y: 500, rotation: 0 })
+  project.parts.push(
+    { id: 'archive-l1', kind: 'inductor', ref: 'L1', value: '10m', x: 900, y: 500, rotation: 0, componentDefinitionId: 'elsim.inductor', mutualCouplings: [{ partnerId: 'archive-l2', coefficient: '0.98' }, { partnerId: 'archive-l3', coefficient: '0.95' }] },
+    { id: 'archive-l2', kind: 'inductor', ref: 'L2', value: '5m', x: 1000, y: 500, rotation: 0, componentDefinitionId: 'elsim.inductor' },
+    { id: 'archive-l3', kind: 'inductor', ref: 'L3', value: '8m', x: 1100, y: 500, rotation: 0, componentDefinitionId: 'elsim.inductor', mutualCouplings: [{ partnerId: 'archive-l2', coefficient: '0.9' }] },
+  )
   project.sheets[0].parts = project.parts
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'keep-me' } } }
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n', sourceUrl: 'https://example.invalid/source', licenseReference: 'Vendor terms', rightsNotes: 'User supplied; redistribution not checked.' }

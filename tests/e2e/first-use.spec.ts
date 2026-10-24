@@ -11426,9 +11426,11 @@ test('ngspice parser failure without a source line identifies its only imported 
 
 test('inductors expose mutual coupling, mark pin-one polarity, and emit a native K card', { tag: '@ui-smoke' }, async ({ page }) => {
   const project = createStarterProject()
+  const originalPartIds = project.parts.map((part) => part.id)
   project.parts.push(
       { id: 'coupled-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 180, y: 180, rotation: 0 },
       { id: 'coupled-l2', kind: 'inductor', ref: 'L2', value: '5 mH', x: 300, y: 180, rotation: 0 },
+      { id: 'coupled-l3', kind: 'inductor', ref: 'L3', value: '8 mH', x: 420, y: 180, rotation: 0 },
   )
   project.sheets[0] = { ...project.sheets[0], parts: project.parts }
   await page.addInitScript((projectJson) => {
@@ -11437,12 +11439,46 @@ test('inductors expose mutual coupling, mark pin-one polarity, and emit a native
   }, JSON.stringify(project))
   await page.goto('/')
   await page.locator('.circuit-part[data-part-id="coupled-l1"]').click()
-  await page.getByLabel('Mutual coupling partner for L1').selectOption('coupled-l2')
-  await page.getByLabel('Mutual coupling coefficient for L1').fill('0.95')
+  await page.getByRole('button', { name: 'Add coupled inductor' }).click()
+  await page.getByLabel('Mutual coupling partner 1 for L1').selectOption('coupled-l2')
+  await page.getByLabel('Mutual coupling coefficient to L2 for L1').fill('0.95')
+  await page.getByRole('button', { name: 'Add coupled inductor' }).click()
+  await page.getByLabel('Mutual coupling coefficient to L3 for L1').fill('0.9')
   await expect(page.locator('.circuit-part[data-part-id="coupled-l1"] .mutual-inductor-dot')).toBeVisible()
   await expect(page.locator('.circuit-part[data-part-id="coupled-l2"] .mutual-inductor-dot')).toBeVisible()
+  await expect(page.locator('.circuit-part[data-part-id="coupled-l3"] .mutual-inductor-dot')).toBeVisible()
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')).toContainText('KL1 L1 L2 0.95')
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
+  await expect(netlist).toContainText('KL1_L2 L1 L2 0.95')
+  await expect(netlist).toContainText('KL1_L3 L1 L3 0.9')
+
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Control+a')
+  await page.keyboard.press('Control+c')
+  await page.keyboard.press('Control+v')
+  await expect.poll(() => page.evaluate((originalIds) => {
+    const saved = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const pasted = saved.parts.filter((part: { id: string }) => !originalIds.includes(part.id))
+    const copiedL1 = pasted.find((part: { ref: string }) => part.ref === 'L4')
+    return copiedL1?.mutualCouplings?.length ?? 0
+  }, originalPartIds)).toBe(2)
+  const copiedCoils = await page.evaluate((originalIds) => {
+    const saved = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return saved.parts.filter((part: { id: string; kind: string }) => part.kind === 'inductor' && !originalIds.includes(part.id))
+  }, originalPartIds)
+  const copiedCoilIds = new Set(copiedCoils.map((part: { id: string }) => part.id))
+  const copiedL1 = copiedCoils.find((part: { ref: string }) => part.ref === 'L4')
+  expect(copiedL1.mutualCouplings.every((coupling: { partnerId: string }) => copiedCoilIds.has(coupling.partnerId))).toBe(true)
+  expect(copiedL1.mutualCouplings.some((coupling: { partnerId: string }) => originalPartIds.includes(coupling.partnerId))).toBe(false)
+
+  await page.locator(`.circuit-part[data-part-id="${copiedL1.id}"]`).click()
+  await page.keyboard.press('Control+c')
+  await page.keyboard.press('Control+v')
+  await expect.poll(() => page.evaluate((originalIds) => {
+    const saved = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const pasted = saved.parts.filter((part: { id: string }) => !originalIds.includes(part.id))
+    return pasted.find((part: { ref: string }) => part.ref === 'L7')?.mutualCouplings?.length ?? null
+  }, originalPartIds)).toBe(0)
 })
 
 test('LTspice model compatibility check warns about limit() clamp semantics', { tag: '@ltspice' }, async ({ page }) => {

@@ -85,9 +85,11 @@ for (const fixture of selectedFixtures) {
     else assert.ok(spectrum.every((value) => value > 0), 'default resistor noise should remain present')
   }
   if (fixture === 'mutual-inductor-coupling-ac') {
-    assert.equal(wasmResult.status, 0, 'native mutual-inductor K card should solve')
+    assert.equal(wasmResult.status, 0, 'multi-pair inductor K cards should solve')
     const magnitude = Number(wasmResult.stdout.match(/coupled_magnitude\s*=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)/i)?.[1])
-    assert.ok(Number.isFinite(magnitude) && magnitude > 0.01, `mutual coupling should induce a nonzero secondary voltage, got ${magnitude}`)
+    const tertiaryMagnitude = Number(wasmResult.stdout.match(/tertiary_magnitude\s*=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)/i)?.[1])
+    assert.ok(Number.isFinite(magnitude) && magnitude > 0.01, `primary coupling should induce a nonzero secondary voltage, got ${magnitude}`)
+    assert.ok(Number.isFinite(tertiaryMagnitude) && tertiaryMagnitude > 0.01, `pairwise multi-winding coupling should induce a nonzero tertiary voltage, got ${tertiaryMagnitude}`)
   }
   if (fixture === 'imported-library-temp-default') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 125\.000000/, 'an imported library .TEMP card should set the circuit temperature when the project uses its default')
   if (fixture === 'imported-library-temp-override') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 85\.000000/, 'a later non-default project .TEMP directive should override the imported library value')
