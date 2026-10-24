@@ -1,0 +1,79 @@
+import { useEffect, useMemo, useState } from 'react'
+import { X } from 'lucide-react'
+import { calculateTransientSpectrum } from '../engine/fourier'
+import type { Trace } from '../engine/contract'
+
+function frequencyLabel(value: number): string {
+  if (value >= 1e6) return `${Number((value / 1e6).toPrecision(3))} MHz`
+  if (value >= 1e3) return `${Number((value / 1e3).toPrecision(3))} kHz`
+  if (value >= 1) return `${Number(value.toPrecision(3))} Hz`
+  return `${Number((value * 1e3).toPrecision(3))} mHz`
+}
+
+function amplitudeLabel(value: number): string {
+  return `${value.toFixed(1)} dB`
+}
+
+export default function FourierSpectrumDialog({ traces, onClose }: { traces: Trace[]; onClose: () => void }) {
+  const [traceId, setTraceId] = useState(traces[0]?.id ?? '')
+  const trace = traces.find((candidate) => candidate.id === traceId) ?? traces[0]
+  const calculation = useMemo(() => {
+    if (!trace) return { spectrum: null, error: 'Select a transient trace to inspect.' }
+    try { return { spectrum: calculateTransientSpectrum(trace), error: null } }
+    catch (error) { return { spectrum: null, error: error instanceof Error ? error.message : 'Could not calculate this spectrum.' } }
+  }, [trace])
+  const spectrum = calculation.spectrum
+  const plot = useMemo(() => {
+    if (!spectrum) return null
+    const { frequencies, peakAmplitudes } = spectrum
+    const bins = Array.from({ length: frequencies.length - 1 }, (_, index) => index + 1)
+    if (!bins.length) return null
+    const firstFrequency = frequencies[1], lastFrequency = frequencies.at(-1) ?? 0
+    if (!(firstFrequency > 0) || !(lastFrequency > firstFrequency)) return null
+    const decibels = bins.map((bin) => 20 * Math.log10(Math.max(peakAmplitudes[bin], 1e-15)))
+    const maximum = Math.max(...decibels)
+    const minimum = Math.max(-180, maximum - 80)
+    const top = 20, bottom = 300, left = 78, right = 760
+    const x = (frequency: number) => left + Math.log(frequency / firstFrequency) / Math.log(lastFrequency / firstFrequency) * (right - left)
+    const y = (value: number) => bottom - (value - minimum) / Math.max(1, maximum - minimum) * (bottom - top)
+    const points = bins.map((bin, index) => `${x(frequencies[bin]).toFixed(2)},${y(decibels[index]).toFixed(2)}`).join(' ')
+    let peakBin = bins[0]
+    for (const bin of bins) if (peakAmplitudes[bin] > peakAmplitudes[peakBin]) peakBin = bin
+    const frequencyTicks: number[] = []
+    const firstDecade = Math.ceil(Math.log10(firstFrequency))
+    const lastDecade = Math.floor(Math.log10(lastFrequency))
+    for (let decade = firstDecade; decade <= lastDecade; decade += 1) frequencyTicks.push(10 ** decade)
+    if (frequencyTicks.length < 2) frequencyTicks.push(firstFrequency, lastFrequency)
+    const amplitudeTicks: number[] = []
+    const firstTick = Math.ceil(minimum / 20) * 20
+    for (let value = firstTick; value <= maximum; value += 20) amplitudeTicks.push(value)
+    return { bins, firstFrequency, lastFrequency, minimum, maximum, left, right, top, bottom, x, y, points, peakBin, frequencyTicks, amplitudeTicks }
+  }, [spectrum])
+  useEffect(() => {
+    const keyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', keyDown)
+    return () => window.removeEventListener('keydown', keyDown)
+  }, [onClose])
+
+  return <div className="netlist-modal-backdrop spectrum-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <section className="netlist-modal spectrum-dialog" role="dialog" aria-modal="true" aria-labelledby="spectrum-title" aria-describedby="spectrum-description">
+      <div className="modal-heading"><div><span className="eyebrow">TRANSIENT ANALYSIS</span><h2 id="spectrum-title">FFT spectrum</h2></div><button className="subtle-icon" aria-label="Close FFT spectrum" onClick={onClose}><X size={16}/></button></div>
+      <p id="spectrum-description">Inspect the frequency content of a solved transient trace. ELSim resamples ngspice’s adaptive time points uniformly, removes the DC offset, and applies a Hann window.</p>
+      <label className="field-label">Transient trace<select aria-label="Transient trace for FFT" value={trace?.id ?? ''} onChange={(event) => setTraceId(event.target.value)}>{traces.map((item) => <option key={item.id} value={item.id}>{item.label} ({item.unit})</option>)}</select></label>
+      {calculation.error && <p className="field-error" role="alert">{calculation.error}</p>}
+      {spectrum && plot && trace && <>
+        <div className="spectrum-summary"><strong>Peak: {frequencyLabel(spectrum.frequencies[plot.peakBin])}</strong><span>{spectrum.peakAmplitudes[plot.peakBin].toPrecision(4)} {trace.unit} peak</span><span>{spectrum.sampleCount.toLocaleString()} samples · {frequencyLabel(spectrum.sampleRate / spectrum.sampleCount)} resolution · Nyquist {frequencyLabel(spectrum.frequencies.at(-1) ?? 0)}</span></div>
+        <svg className="spectrum-chart" viewBox="0 0 800 344" role="img" aria-label={`FFT of ${trace.label}, peak at ${frequencyLabel(spectrum.frequencies[plot.peakBin])}`}>
+          {plot.amplitudeTicks.map((value) => <g key={`amp-${value}`}><line x1={plot.left} x2={plot.right} y1={plot.y(value)} y2={plot.y(value)} className="plot-grid"/><text x={plot.left - 8} y={plot.y(value) + 4} textAnchor="end" className="plot-tick">{amplitudeLabel(value)}</text></g>)}
+          {plot.frequencyTicks.map((value) => <g key={`freq-${value}`}><line x1={plot.x(value)} x2={plot.x(value)} y1={plot.top} y2={plot.bottom} className="plot-grid"/><text x={plot.x(value)} y={plot.bottom + 20} textAnchor="middle" className="plot-tick">{frequencyLabel(value)}</text></g>)}
+          <line x1={plot.left} x2={plot.right} y1={plot.bottom} y2={plot.bottom} className="plot-axis"/>
+          <polyline points={plot.points} fill="none" stroke="#91e0ae" strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>
+          <circle cx={plot.x(spectrum.frequencies[plot.peakBin])} cy={plot.y(20 * Math.log10(Math.max(spectrum.peakAmplitudes[plot.peakBin], 1e-15)))} r="4" fill="#f2d17e"/>
+          <text x={(plot.left + plot.right) / 2} y="340" textAnchor="middle" className="plot-tick">Frequency (Hz, logarithmic)</text>
+        </svg>
+        <small className="field-hint">Magnitude is peak amplitude relative to 1 {trace.unit} (dB{trace.unit}). The finite time window limits frequency resolution; this display is a derived FFT, not ngspice’s `.four` harmonic table.</small>
+      </>}
+      <div className="modal-footer"><span>{spectrum ? 'Single-sided spectrum' : 'FFT unavailable'}</span><button className="primary-small" onClick={onClose}>Done</button></div>
+    </section>
+  </div>
+}
