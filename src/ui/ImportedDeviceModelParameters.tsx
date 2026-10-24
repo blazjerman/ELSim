@@ -5,6 +5,29 @@ import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 
 type Model = SpiceModelDefinition & { assetId: string; filename: string }
 
+function effectiveUnparsedParameters(model: Model, parsedAssets: AnalyzedModelLibraries['assets']) {
+  const chain: SpiceModelDefinition[] = []
+  const visited = new Set<string>()
+  let current: SpiceModelDefinition | undefined = model
+  while (current) {
+    const key = `${current.name.toLowerCase()}:${current.scope?.toLowerCase() ?? ''}:${current.startLine}`
+    if (visited.has(key)) break
+    visited.add(key)
+    chain.push(current)
+    if (!current.akoBaseName) break
+    const bases = parsedAssets.flatMap(({ parsed }) => parsed.models.filter((candidate) => !candidate.scope && candidate.name.toLowerCase() === current!.akoBaseName!.toLowerCase()))
+    if (bases.length !== 1) break
+    current = bases[0]
+  }
+
+  const effective = new Map<string, NonNullable<SpiceModelDefinition['unparsedParameters']>[number]>()
+  for (const source of chain.reverse()) {
+    for (const parameter of source.parameters) effective.delete(parameter.name.toLowerCase())
+    for (const parameter of source.unparsedParameters ?? []) effective.set(parameter.name.toLowerCase(), parameter)
+  }
+  return [...effective.values()]
+}
+
 export default function ImportedDeviceModelParameters({ model, parsedAssets, onReview }: {
   model: Model
   parsedAssets: AnalyzedModelLibraries['assets']
@@ -23,7 +46,8 @@ export default function ImportedDeviceModelParameters({ model, parsedAssets, onR
     return matches.length === 1 ? matches[0] : undefined
   }, [model.akoBaseName, parsedAssets])
   const localNames = useMemo(() => new Set(model.parameters.map((parameter) => parameter.name.toLowerCase())), [model.parameters])
-  const unparsedParameters = model.unparsedParameters ?? []
+  const unparsedParameters = useMemo(() => effectiveUnparsedParameters(model, parsedAssets), [model, parsedAssets])
+  const localUnparsedNames = useMemo(() => new Set((model.unparsedParameters ?? []).map(({ name }) => name.toLowerCase())), [model.unparsedParameters])
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase()
     return search ? parameters.filter(({ name, defaultValue }) => `${name} ${defaultValue}`.toLocaleLowerCase().includes(search)) : parameters
@@ -38,7 +62,7 @@ export default function ImportedDeviceModelParameters({ model, parsedAssets, onR
     <label className="field-label">Find a model parameter<input aria-label={`Search parameters for ${model.name}`} type="search" value={query} placeholder="Search names or default values" onChange={(event) => { setQuery(event.target.value); setVisibleCount(16) }}/></label>
     {visible.length ? <ul>{visible.map((parameter) => <li key={parameter.name}>{parameter.name} = {parameter.defaultValue}{!localNames.has(parameter.name.toLowerCase()) ? ' · inherited' : ''}</li>)}</ul> : filteredUnparsed.length ? null : <p role="status">No model parameters match “{query}”.</p>}
     {unparsedParameters.length > 0 && <div className="field-hint" role="note"><strong>Some assignments are shown as source text.</strong> ELSim could not classify these values for the inspector or parameter sweeps. The original model card is preserved and passed to ngspice.</div>}
-    {filteredUnparsed.length > 0 && <ul aria-label="Unparsed model assignments">{filteredUnparsed.map((parameter) => <li key={parameter.name}><code>{parameter.name} = {parameter.sourceValue}</code> <span>(source value; not sweepable)</span></li>)}</ul>}
+    {filteredUnparsed.length > 0 && <ul aria-label="Unparsed model assignments">{filteredUnparsed.map((parameter) => <li key={parameter.name}><code>{parameter.name} = {parameter.sourceValue}</code> <span>({localUnparsedNames.has(parameter.name.toLowerCase()) ? 'source value' : 'inherited source value'}; not sweepable)</span></li>)}</ul>}
     {filtered.length > visible.length && <button type="button" className="place-model" onClick={() => setVisibleCount((count) => count + 50)}>Show {Math.min(50, filtered.length - visible.length)} more parameters ({filtered.length - visible.length} remaining)</button>}
     <small>Values include inherited AKO defaults and child overrides. Edit the source library to change them.</small>
     <button type="button" className="place-model" onClick={() => onReview(model.assetId, model.startLine)}>Review {model.filename}:{model.startLine}</button>

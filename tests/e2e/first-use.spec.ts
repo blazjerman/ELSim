@@ -6477,22 +6477,33 @@ test('imported device model inspector shows and searches unparsed source assignm
   await page.locator('.circuit-part[data-part-id="diode-polarity-d1"]').click()
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
-    name: 'custom-diode.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL DUSER D(IS=1n N={vendor_shape(2)} RS=3)\n'),
+    name: 'custom-diode.lib', mimeType: 'text/plain', buffer: Buffer.from([
+      '.MODEL DBASE D(N={vendor_shape(2)})',
+      '.MODEL DUSER AKO:DBASE D(IS=1n)',
+      '.MODEL DOVERRIDE AKO:DBASE D(N=2)',
+    ].join('\n')),
   })
   await page.getByLabel('Device model for D1').selectOption('DUSER')
-  const modelDetails = page.getByText('DUSER · 2 model parameters · 1 unparsed', { exact: true })
+  const modelDetails = page.getByText('DUSER · AKO:DBASE · 1 model parameters · 1 unparsed', { exact: true })
   await expect(modelDetails).toBeVisible()
   await modelDetails.click()
   await expect(page.getByRole('note')).toContainText('original model card is preserved and passed to ngspice')
   await expect(page.getByLabel('Unparsed model assignments')).toContainText('N = {vendor_shape(2)}')
+  await expect(page.getByLabel('Unparsed model assignments')).toContainText('inherited source value')
   await expect(page.getByLabel('Unparsed model assignments')).toContainText('not sweepable')
   const search = page.getByRole('searchbox', { name: 'Search parameters for DUSER' })
   await search.fill('vendor_shape')
   await expect(page.getByLabel('Unparsed model assignments')).toBeVisible()
   await expect(page.getByText('IS = 1n', { exact: true })).toHaveCount(0)
   await search.fill('')
+  await page.getByLabel('Device model for D1').selectOption('DOVERRIDE')
+  const overridingDetails = page.getByText('DOVERRIDE · AKO:DBASE · 1 model parameters', { exact: true })
+  await expect(overridingDetails).toBeVisible()
+  await overridingDetails.click()
+  await expect(page.getByLabel('Unparsed model assignments')).toHaveCount(0)
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DUSER D(IS=1n N={vendor_shape(2)} RS=3)')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DBASE D(N={vendor_shape(2)})')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DUSER AKO:DBASE D(IS=1n)')
 })
 
 test('resistor AC value is editable, saved, and generated as an AC-only override @ui-smoke', async ({ page }) => {
