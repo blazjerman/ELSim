@@ -1,0 +1,11 @@
+* Equal resistor divider sensitivity: dV(out)/dR1 = -10*1k/(2k)^2 = -2.5 mV/ohm
+V1 in 0 DC 10
+R1 in out 1k
+R2 out 0 1k
+.control
+set filetype=ascii
+sens V(out)
+write /result.raw all
+quit
+.endc
+.end

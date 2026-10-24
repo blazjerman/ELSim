@@ -1,0 +1,10 @@
+* RC pole-zero reference: the pole is -1/(R*C) = -100 rad/s
+R1 in out 1k
+C1 out 0 10u
+.control
+set filetype=ascii
+pz in 0 out 0 vol pz
+write /result.raw all
+quit
+.endc
+.end

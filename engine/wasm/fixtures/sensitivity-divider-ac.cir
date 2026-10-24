@@ -1,0 +1,11 @@
+* Equal resistor divider AC sensitivity at low frequency approaches -0.25 mV/ohm for a 1 V input
+V1 in 0 AC 1
+R1 in out 1k
+R2 out 0 1k
+.control
+set filetype=ascii
+sens V(out) AC dec 10 1 100k
+write /result.raw all
+quit
+.endc
+.end

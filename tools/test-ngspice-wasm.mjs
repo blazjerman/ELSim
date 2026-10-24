@@ -23,7 +23,8 @@ fixtures.push('imported-subckt-sqr-parameter-op')
 fixtures.push('imported-library-global-node-op')
 fixtures.push('bracketed-subckt-parameter-op')
 fixtures.push('bsim3-bin-family-sweep')
-fixtures.push('transfer-function-analysis')
+fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac')
+const fixturesWithRawResults = new Set(['pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac'])
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
 const requestedFixtures = process.env.NGSPICE_WASM_ONLY?.split(',').map((name) => name.trim()).filter(Boolean) ?? []
@@ -71,6 +72,21 @@ function realRawVector(raw, name) {
   return Array.from({ length: pointCount }, (_, point) => Number(rows[point * variableCount + variableIndex].trim().split(/\s+/).at(-1)))
 }
 
+function complexRawVector(raw, name) {
+  const variableSection = raw.split(/^Variables:\s*$/mi)[1]?.split(/^Values:\s*$/mi)[0] ?? ''
+  const variables = [...variableSection.matchAll(/^\s*(\d+)\s+(\S+)\s+(\S+)/gm)]
+  const variableIndex = variables.findIndex(([, , variable]) => variable.toLowerCase() === name.toLowerCase())
+  assert.notEqual(variableIndex, -1, `raw data is missing ${name}`)
+  const variableCount = variables.length
+  const pointCount = Number(raw.match(/^No\. Points:\s*(\d+)/mi)?.[1])
+  const rows = (raw.split(/^Values:\s*$/mi)[1] ?? '').split(/\r?\n/).filter((line) => line.trim())
+  return Array.from({ length: pointCount }, (_, point) => {
+    const value = rows[point * variableCount + variableIndex]?.trim().split(/\s+/).at(-1) ?? ''
+    const [real, imaginary = '0'] = value.split(',')
+    return { real: Number(real), imaginary: Number(imaginary) }
+  })
+}
+
 for (const fixture of selectedFixtures) {
   const deckPath = path.join(root, 'engine/wasm/fixtures', `${fixture}.cir`)
   if (fixture === 'imported-ako-model-psa') {
@@ -78,10 +94,35 @@ for (const fixture of selectedFixtures) {
     assert.notEqual(defaultMode.status, 0, 'the default browser mode should reject AKO inheritance')
     assert.match(defaultMode.stderr, /model type mismatch/i, 'default mode should identify AKO as an unsupported model type')
   }
-  const wasmResult = await runInWorker(deckPath, fixture === 'bsim3-bin-family-sweep' || fixture === 'current-source-op' || fixture === 'current-source-multiplier-tran' || fixture === 'diode-area-perimeter-scaling-op' || fixture === 'fet-area-scaling-op' || fixture === 'diode-initial-conditions-tran' || fixture === 'controlled-switch-initial-state-tran' || fixture === 'current-controlled-switch' || fixture === 'imported-model-function-parameter-op' || fixture === 'imported-mosfet-model-op' || fixture === 'vdmos-power-op' || fixture === 'jfet-model-op' || fixture === 'pjfet-model-op' || fixture === 'mesfet-model-op' || fixture === 'jfet-switch' || fixture === 'hierarchical-block-op' || fixture === 'hierarchical-controlled-source-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op' || fixture === 'lc-energy-transient' || fixture === 'imported-library-ic-nodeset' || fixture === 'imported-library-save-vectors-tran' || fixture === 'imported-library-probe-current-tran' || fixture === 'imported-library-measurement-tran' || fixture === 'imported-library-measurement-ac' || fixture === 'imported-library-measurement-dc' || fixture === 'imported-library-measurement-duplicate-tran' || fixture === 'model-duplicate-parameter-last-wins' || fixture === 'potentiometer-imported-r-model-op' || fixture === 'transmission-line-delay-tran' || fixture === 'lossy-transmission-line-tran' || fixture === 'hierarchical-lossy-transmission-line-tran' || fixture === 'txl-transmission-line-tran' || fixture === 'hierarchical-txl-transmission-line-tran' || fixture === 'coupled-transmission-line-tran' || (fixture === 'urc-line-tran' || fixture === 'urc-line-native-current-tran') || /^coupled-transmission-line-\d+-tran$/.test(fixture), fixture === 'two-source-dc-sweep' ? ['/result-0.raw', '/result-1.raw', '/result-2.raw'] : fixture === 'bsim3-bin-family-sweep' ? ['/result-0.raw', '/result-1.raw'] : undefined, fixture === 'ltspice-uplim-op', fixture === 'imported-ako-model-psa' ? 'psa' : undefined)
+  const wasmResult = await runInWorker(deckPath, fixturesWithRawResults.has(fixture) || fixture === 'bsim3-bin-family-sweep' || fixture === 'current-source-op' || fixture === 'current-source-multiplier-tran' || fixture === 'diode-area-perimeter-scaling-op' || fixture === 'fet-area-scaling-op' || fixture === 'diode-initial-conditions-tran' || fixture === 'controlled-switch-initial-state-tran' || fixture === 'current-controlled-switch' || fixture === 'imported-model-function-parameter-op' || fixture === 'imported-mosfet-model-op' || fixture === 'vdmos-power-op' || fixture === 'jfet-model-op' || fixture === 'pjfet-model-op' || fixture === 'mesfet-model-op' || fixture === 'jfet-switch' || fixture === 'hierarchical-block-op' || fixture === 'hierarchical-controlled-source-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op' || fixture === 'lc-energy-transient' || fixture === 'imported-library-ic-nodeset' || fixture === 'imported-library-save-vectors-tran' || fixture === 'imported-library-probe-current-tran' || fixture === 'imported-library-measurement-tran' || fixture === 'imported-library-measurement-ac' || fixture === 'imported-library-measurement-dc' || fixture === 'imported-library-measurement-duplicate-tran' || fixture === 'model-duplicate-parameter-last-wins' || fixture === 'potentiometer-imported-r-model-op' || fixture === 'transmission-line-delay-tran' || fixture === 'lossy-transmission-line-tran' || fixture === 'hierarchical-lossy-transmission-line-tran' || fixture === 'txl-transmission-line-tran' || fixture === 'hierarchical-txl-transmission-line-tran' || fixture === 'coupled-transmission-line-tran' || (fixture === 'urc-line-tran' || fixture === 'urc-line-native-current-tran') || /^coupled-transmission-line-\d+-tran$/.test(fixture), fixture === 'two-source-dc-sweep' ? ['/result-0.raw', '/result-1.raw', '/result-2.raw'] : fixture === 'bsim3-bin-family-sweep' ? ['/result-0.raw', '/result-1.raw'] : undefined, fixture === 'ltspice-uplim-op', fixture === 'imported-ako-model-psa' ? 'psa' : undefined)
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status\nstdout:\n${wasmResult.stdout}\nstderr:\n${wasmResult.stderr}`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
+  if (fixture === 'pole-zero-rc') {
+    assert.ok(wasmResult.raw, 'pole-zero analysis should write its complex raw result')
+    const pole = complexRawVector(wasmResult.raw, 'v(pole(1))')[0]
+    assert.ok(Math.abs(pole.real + 100) < 1e-8 && Math.abs(pole.imaginary) < 1e-10, `a 1 kΩ/10 µF RC network should have one pole at -100 rad/s, got ${pole.real} + j${pole.imaginary}`)
+    process.stdout.write('PASS pole-zero-rc: pole = -100 rad/s\n')
+    continue
+  }
+  if (fixture === 'sensitivity-divider-dc') {
+    assert.ok(wasmResult.raw, 'DC sensitivity analysis should write its raw result')
+    const r1 = realRawVector(wasmResult.raw, 'v(r1)')[0]
+    const r2 = realRawVector(wasmResult.raw, 'v(r2)')[0]
+    assert.ok(Math.abs(r1 + 0.0025) < 1e-8, `dV(out)/dR1 should be -2.5 mV/Ω, got ${r1} V/Ω`)
+    assert.ok(Math.abs(r2 - 0.0025) < 1e-8, `dV(out)/dR2 should be +2.5 mV/Ω, got ${r2} V/Ω`)
+    process.stdout.write('PASS sensitivity-divider-dc: dV(out)/dR1,R2 = -2.5,+2.5 mV/Ω\n')
+    continue
+  }
+  if (fixture === 'sensitivity-divider-ac') {
+    assert.ok(wasmResult.raw, 'AC sensitivity analysis should write its complex raw result')
+    const r1 = complexRawVector(wasmResult.raw, 'v(r1)')[0]
+    const r2 = complexRawVector(wasmResult.raw, 'v(r2)')[0]
+    assert.ok(Math.abs(r1.real + 0.00025) < 1e-8 && Math.abs(r1.imaginary) < 1e-8, `low-frequency dV(out)/dR1 should approach -0.25 mV/Ω, got ${r1.real} + j${r1.imaginary}`)
+    assert.ok(Math.abs(r2.real - 0.00025) < 1e-8 && Math.abs(r2.imaginary) < 1e-8, `low-frequency dV(out)/dR2 should approach +0.25 mV/Ω, got ${r2.real} + j${r2.imaginary}`)
+    process.stdout.write('PASS sensitivity-divider-ac: low-frequency derivatives = -0.25,+0.25 mV/Ω\n')
+    continue
+  }
   if (fixture === 'resistor-noise-disabled' || fixture === 'resistor-noise-default') {
     const table = wasmResult.stdout.match(/Noise Spectral Density Curves[\s\S]*?Index\s+frequency\s+onoise_spectrum\s*\n-+\s*\n([\s\S]*?)(?:\n\n|Note: Simulation executed)/i)?.[1]
     assert.ok(table, `${fixture}: ngspice should print its solved output-noise spectrum`)
