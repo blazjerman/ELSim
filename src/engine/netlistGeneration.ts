@@ -330,7 +330,29 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
   const ambiguousGlobalFunctionNames = [...globalFunctionDefinitions].filter(([, definitions]) => definitions.length > 1).map(([name]) => name)
-  const withoutQuotedStrings = (text: string) => text.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'/g, (literal) => ' '.repeat(literal.length))
+  const withoutQuotedStrings = (text: string) => {
+    const characters = text.split('')
+    let quote = ''
+    for (let index = 0; index < characters.length; index += 1) {
+      const character = characters[index]
+      if (quote) {
+        characters[index] = ' '
+        if (character === '\\' && index + 1 < characters.length) {
+          characters[index + 1] = ' '
+          index += 1
+        } else if (character === quote) {
+          if (characters[index + 1] === quote) {
+            characters[index + 1] = ' '
+            index += 1
+          } else quote = ''
+        }
+      } else if (character === '"' || character === "'") {
+        quote = character
+        characters[index] = ' '
+      }
+    }
+    return characters.join('')
+  }
   const referencedFunctionNames = (text: string, scopedBodies: ReadonlyMap<string, string[]> = new Map()) => [...new Set([...globalFunctionDefinitions.keys(), ...scopedBodies.keys()])].filter((functionName) => {
     const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     return new RegExp(`(?:^|[^A-Za-z0-9_.$])${escapedName}\\s*\\(`, 'i').test(withoutQuotedStrings(text))
