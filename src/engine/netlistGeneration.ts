@@ -315,7 +315,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   })
   const referencedGlobalParameterNames = (text: string) => [...globalParameterExpressions.keys()].filter((parameterName) => {
     const escapedName = parameterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(`(?:^|[^A-Za-z0-9_])${escapedName}(?![A-Za-z0-9_])`, 'i').test(text)
+    return new RegExp(`(?:^|[^A-Za-z0-9!#$%_\\[\\]])${escapedName}(?![A-Za-z0-9!#$%_\\[\\]])`, 'i').test(text)
   })
   const ambiguousFunctionCallsInText = (text: string, shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map(), followGlobalParameters = false) => {
     const ambiguous = new Set<string>()
