@@ -459,10 +459,15 @@ function symmetricZeroRange(range: [number, number] | undefined): [number, numbe
 
 function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors, secondCursorValue, onSecondCursorChange, ngspiceFourier, onRunNativeFourier }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string>; secondCursorValue?: number; onSecondCursorChange: (value: number | null) => void; ngspiceFourier?: NgspiceFourierAnalysis[]; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void }) {
   const [spectrumOpen, setSpectrumOpen] = useState(false)
+  const spectrumTriggerRef = useRef<HTMLButtonElement>(null)
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   const [activeCursor, setActiveCursor] = useState<'A' | 'B'>('A')
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
+  const closeSpectrum = () => {
+    setSpectrumOpen(false)
+    window.requestAnimationFrame(() => spectrumTriggerRef.current?.focus())
+  }
   const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(range, onRangeChange)
   const plotSize = useResponsivePlotSize()
@@ -574,7 +579,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     setKeyboardAnnouncement(`Cursor ${activeCursor}. Time ${formatTime(time, axis[axis.length - 1], 5)}${readings.length ? `. ${readings.join('; ')}.` : '.'}`)
   }
   return <div className="waveform-view">
-    <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={() => setSpectrumOpen(true)} disabled={!shown.some((trace) => trace.axis.length >= 32)} title="Open a derived FFT spectrum for the visible traces">FFT spectrum</button><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button ref={spectrumTriggerRef} className="plot-export" onClick={() => setSpectrumOpen(true)} disabled={!shown.some((trace) => trace.axis.length >= 32)} title="Open a derived FFT spectrum for the visible traces">FFT spectrum</button><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <MeasurementCursorControls label="Transient measurement cursors" cursorALabel="Cursor A · playback" active={activeCursor} hasSecond={secondCursorIndex !== null} onSelect={setActiveCursor} onAdd={() => { const existing = getSimulationCursor(); const current = existing ?? first; if (existing === null) setSimulationCursor(current); const quarter = Math.max(1, Math.floor((last - first) / 4)); const next = current <= first + (last - first) / 2 ? Math.min(last, current + quarter) : Math.max(first, current - quarter); onSecondCursorChange(axis?.[next] ?? maxTime); setActiveCursor('B') }} onRemove={() => { onSecondCursorChange(null); setActiveCursor('A') }}/>
     <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${formatTime(minTime, axis?.[axis.length - 1] ?? maxTime)} to ${formatTime(maxTime, axis?.[axis.length - 1] ?? maxTime)}. Cursor ${activeCursor} is selected. Focus the plot and use Left and Right arrows to move it, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {minorValueTicks.map((value) => <line key={`y-minor-${value}`} x1={left} x2={right} y1={yForValue(value, hasVoltage ? 'V' : 'A')} y2={yForValue(value, hasVoltage ? 'V' : 'A')} className="plot-grid-minor"/>)}
@@ -589,7 +594,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={colorFor}/>
     <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors} keyboardAnnouncement={keyboardAnnouncement} secondCursorIndex={secondCursorIndex}/>
-    {spectrumOpen && <Suspense fallback={<div className="waveform-empty" role="status">Loading FFT spectrum…</div>}><FourierSpectrumDialog traces={shown.filter((trace) => trace.axis.length >= 32)} initialRange={{ start: minTime, end: maxTime }} ngspiceFourier={ngspiceFourier} onRunNativeFourier={onRunNativeFourier} onClose={() => setSpectrumOpen(false)}/></Suspense>}
+    {spectrumOpen && <Suspense fallback={<div className="waveform-empty" role="status">Loading FFT spectrum…</div>}><FourierSpectrumDialog traces={shown.filter((trace) => trace.axis.length >= 32)} initialRange={{ start: minTime, end: maxTime }} ngspiceFourier={ngspiceFourier} onRunNativeFourier={onRunNativeFourier} onClose={closeSpectrum}/></Suspense>}
   </div>
 }
 

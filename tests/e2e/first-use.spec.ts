@@ -2683,6 +2683,8 @@ test('transient FFT dialog supports window selection and time intervals', { tag:
   await plot.getByRole('button', { name: 'FFT spectrum' }).click()
   const dialog = page.getByRole('dialog', { name: 'FFT spectrum' })
   await expect(dialog).toBeVisible()
+  const closeFft = dialog.getByRole('button', { name: 'Close FFT spectrum' })
+  await expect(closeFft).toBeFocused()
   const fftTrace = dialog.getByRole('combobox', { name: 'Transient trace for FFT' })
   const voltageTraceId = await fftTrace.locator('option').filter({ hasText: /V\(vout\)/i }).getAttribute('value')
   expect(voltageTraceId).toBeTruthy()
@@ -2759,8 +2761,14 @@ test('transient FFT dialog supports window selection and time intervals', { tag:
   await expect(dialog.locator('.spectrum-summary').first()).toContainText('1 ms to 8 ms')
   await dialog.getByRole('button', { name: 'Whole run' }).click()
   await expect(dialog.locator('.spectrum-summary').first()).not.toContainText('1 ms to 8 ms')
+  await closeFft.focus()
+  await page.keyboard.press('Shift+Tab')
+  await expect(dialog.getByRole('button', { name: 'Done' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(closeFft).toBeFocused()
   await dialog.getByRole('button', { name: 'Done' }).click()
   await expect(dialog).toHaveCount(0)
+  await expect(plot.getByRole('button', { name: 'FFT spectrum' })).toBeFocused()
 })
 
 test('edit and rerun marks old plots stale and refreshes the same probes from the edited circuit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

@@ -6,6 +6,7 @@ import type { SpectrumWindow } from '../engine/fourier'
 import type { NgspiceFourierAnalysis } from '../engine/fourier'
 import type { Trace } from '../engine/contract'
 import { formatTime } from './formatTime'
+import { trapDialogTab } from './dialogKeyboard'
 
 type SpectrumDisplay = 'magnitude' | 'phase'
 
@@ -162,8 +163,8 @@ export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFou
   }
 
   return <div className="netlist-modal-backdrop spectrum-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-    <section className="netlist-modal spectrum-dialog" role="dialog" aria-modal="true" aria-labelledby="spectrum-title" aria-describedby="spectrum-description">
-      <div className="modal-heading"><div><span className="eyebrow">TRANSIENT ANALYSIS</span><h2 id="spectrum-title">FFT spectrum</h2></div><button className="subtle-icon" aria-label="Close FFT spectrum" onClick={onClose}><X size={16}/></button></div>
+    <section className="netlist-modal spectrum-dialog" role="dialog" aria-modal="true" aria-labelledby="spectrum-title" aria-describedby="spectrum-description" onKeyDown={trapDialogTab}>
+      <div className="modal-heading"><div><span className="eyebrow">TRANSIENT ANALYSIS</span><h2 id="spectrum-title">FFT spectrum</h2></div><button autoFocus className="subtle-icon" aria-label="Close FFT spectrum" onClick={onClose}><X size={16}/></button></div>
       <p id="spectrum-description">Inspect the frequency content of a solved transient trace. ELSim resamples ngspice’s adaptive time points uniformly, removes the DC offset, then applies the selected window. Windowing trades peak width for lower spectral leakage.</p>
       <label className="field-label">Transient trace<select aria-label="Transient trace for FFT" value={trace?.id ?? ''} onChange={(event) => setTraceId(event.target.value)}>{traces.map((item) => <option key={item.id} value={item.id}>{item.label} ({item.unit})</option>)}</select></label>
       <label className="field-label">Window function<select aria-label="FFT window function" value={windowFunction} onChange={(event) => setWindowFunction(event.target.value as SpectrumWindow)}><option value="rectangular">Rectangular · sharp main lobe, more leakage</option><option value="hann">Hann · balanced general-purpose default</option><option value="hamming">Hamming · lower nearby sidelobes</option><option value="blackman">Blackman · lower distant leakage, wider peak</option></select></label>
