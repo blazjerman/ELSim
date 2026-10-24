@@ -847,7 +847,7 @@ test('strips a terminal .END from model libraries without accepting trailing cir
   const parsed = parseSubcircuitLibrary('.MODEL DFAST D(Is=1n)\n.END\n* allowed trailing comment\n')
   assert.equal(parsed.modelText, '.MODEL DFAST D(Is=1n)')
   assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(Is=1n)\n.END\n.MODEL DLATE D(Is=2n)'), /\.END must be the final non-comment line/)
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT AMP IN OUT\n.END\n.ENDS AMP'), /\.END is not allowed inside a \.SUBCKT/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT AMP IN OUT\n.END\n.ENDS AMP'), /\.END terminates a complete circuit deck and cannot appear inside a \.SUBCKT/)
   assert.throws(() => parseSubcircuitLibrary('.LIB fast\n.MODEL DFAST D\n.END\n.ENDL fast'), /\.END cannot appear inside a \.LIB section/)
 })
 
@@ -1426,7 +1426,7 @@ test('accepts a final standalone-deck .END but omits it from imported model text
   assert.deepEqual(parsed.models.map(({ name }) => name), ['DFAST'])
   assert.equal(parsed.modelText, '.MODEL DFAST D(IS=1n)')
   assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(IS=1n)\n.END\nR1 1 0 1k'), /Line 3: \.END must be the final non-comment line/)
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT AMP IN OUT\n.END\n.ENDS AMP'), /\.END is not allowed inside a \.SUBCKT/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT AMP IN OUT\n.END\n.ENDS AMP'), /\.END terminates a complete circuit deck and cannot appear inside a \.SUBCKT/)
   assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(IS=1n)\n.END extra'), /\.END does not accept arguments/)
 })
 
@@ -1990,9 +1990,15 @@ test('rejects ambiguous or malformed model-library section wrappers explicitly',
 
 test('rejects nested includes, external .LIB references, executable, and whole-circuit directives', () => {
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT x A\n.include evil.lib\n.ENDS'), /must be a top-level library reference/)
-  for (const directive of ['.lib "evil.lib" tt', '.control', '.endc', '.end', '.exec command', '.shell command', '.cm plugin']) {
-    assert.throws(() => parseSubcircuitLibrary(`.SUBCKT x A\nR1 A 0 1k\n${directive}\n.ENDS`), /not allowed/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT x A\nR1 A 0 1k\n.lib "evil.lib" tt\n.ENDS'), /not allowed/)
+  for (const directive of ['.control', '.endc']) {
+    assert.throws(() => parseSubcircuitLibrary(`.SUBCKT x A\nR1 A 0 1k\n${directive}\n.ENDS`), /Line 3: executable \.CONTROL\/.ENDC scripts cannot be imported as model libraries; import a model-only file/i)
   }
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT x A\nR1 A 0 1k\n.end\n.ENDS'), /Line 3: \.END terminates a complete circuit deck and cannot appear inside a \.SUBCKT/i)
+  for (const directive of ['.exec command', '.shell command']) {
+    assert.throws(() => parseSubcircuitLibrary(`.SUBCKT x A\nR1 A 0 1k\n${directive}\n.ENDS`), /Line 3: .*would execute an external command and is not run by ELSim/i)
+  }
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT x A\nR1 A 0 1k\n.cm plugin\n.ENDS'), /Line 3: \.CM loads a compiled XSPICE module, which this browser runtime does not load/i)
 })
 
 test('parses nested subcircuits in source order and assigns dependencies to their owning block', () => {

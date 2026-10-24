@@ -114,6 +114,21 @@ export function isValidSpiceModelName(value: string, allowLeadingDigit = false):
 const safeTopLevel = new Set(['.title', '.model', '.param', '.func', '.csparam', '.global', '.option', '.options', '.temp', '.ic', '.nodeset', '.save', '.probe', '.meas', '.measure'])
 const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
 
+function forbiddenModelLibraryDirectiveMessage(directive: string): string {
+  switch (directive.toLowerCase()) {
+    case '.control': case '.endc':
+      return 'executable .CONTROL/.ENDC scripts cannot be imported as model libraries; import a model-only file containing .SUBCKT or .MODEL definitions and supported shared records'
+    case '.end':
+      return '.END terminates a complete circuit deck and cannot appear inside a .SUBCKT; remove it from the subcircuit body (a final .END after the library is allowed)'
+    case '.exec': case '.shell':
+      return `${directive} would execute an external command and is not run by ELSim; import only model definitions and supported shared records`
+    case '.cm':
+      return '.CM loads a compiled XSPICE module, which this browser runtime does not load; use a model supported by the browser engine or a plain-text subcircuit'
+    default:
+      return `${directive} is not allowed in an imported model library`
+  }
+}
+
 function hasValidGlobalNodeNames(tokens: string[]): boolean {
   return tokens.length > 1 && tokens.slice(1).every(isValidSpiceNodeName)
 }
@@ -293,8 +308,8 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
       throw new Error(`Line ${line.start}: ${tokens[0]} is not supported inside an ngspice .IF block.`)
     }
     if (directive === '.end') {
-      if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .END is not allowed inside a .SUBCKT.`)
-      if (activeSection) throw new Error(`Line ${line.start}: .END cannot appear inside a .LIB section.`)
+      if (activeSubcircuits.length) throw new Error(`Line ${line.start}: ${forbiddenModelLibraryDirectiveMessage(tokens[0])}.`)
+      if (activeSection) throw new Error(`Line ${line.start}: .END cannot appear inside a .LIB section; a final .END is allowed only after the section closes.`)
       if (tokens.length !== 1) throw new Error(`Line ${line.start}: .END does not accept arguments in an imported model library.`)
       sawEnd = true
       continue
@@ -1242,7 +1257,7 @@ function parseSubcircuitLibraryFromInspection(
       includes.push({ reference, filename: includedAssetBasename(reference), section: match[4], sourceLine: line.start })
       continue
     }
-    if (forbidden.has(directive)) throw new Error(`Line ${line.start}: ${tokens[0]} is not allowed in an imported model library.`)
+    if (forbidden.has(directive)) throw new Error(`Line ${line.start}: ${forbiddenModelLibraryDirectiveMessage(tokens[0])}.`)
 
     if (directive === '.subckt') {
       const name = tokens[1]
