@@ -73,12 +73,12 @@ function componentUnit(kind: string): string {
 
 function sourceParameterUnit(parameter: SourceSweepParameter, kind: string): string {
   const field = parameter.split('.').at(-1)
-  if (['frequency', 'carrierFrequency', 'signalFrequency'].includes(field ?? '')) return 'Hz'
+  if (['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency'].includes(field ?? '')) return 'Hz'
   if (['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field ?? '')) return 's'
   if (parameter === 'pwl.scale') return '×'
   if (parameter.startsWith('pwl.point.')) return kind === 'source' ? 'V' : 'A'
-  if (field === 'phase') return '°'
-  if (['initial', 'high', 'pulsed', 'offset', 'amplitude'].includes(field ?? '')) return kind === 'source' ? 'V' : 'A'
+  if (['phase', 'modulationPhase', 'carrierPhase'].includes(field ?? '')) return '°'
+  if (['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude'].includes(field ?? '')) return kind === 'source' ? 'V' : 'A'
   return ''
 }
 
@@ -91,14 +91,14 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     const validPwlPoint = mode === 'pwl' && pwlPointIndex !== undefined && Number(pwlPointIndex) >= 1 && Number(pwlPointIndex) <= (pwlPointCount ?? 0)
     if (!part || (part.kind !== 'source' && part.kind !== 'currentSource') || (sweep.sourceParameter === 'pwl.scale' ? mode !== 'pwl' : !validPwlPoint && (mode === 'pwl' || !sweep.sourceParameter.startsWith(`${mode}.`)))) throw new Error(`${sweep.component}.${sweep.sourceParameter} does not belong to its selected source waveform.`)
     const field = sweep.sourceParameter.split('.').at(-1)!
-    const dimensioned = ['frequency', 'carrierFrequency', 'signalFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
+    const dimensioned = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
     const parseValue = (value: string) => {
-      if (['initial', 'high', 'pulsed', 'offset', 'amplitude'].includes(field) || validPwlPoint) return componentMagnitude(value, part.kind)
-      return scalarMagnitude(dimensioned ? value.trim().replace(/(?:hz|s)$/i, '') : field === 'phase' ? value.trim().replace(/°$/i, '') : value)
+      if (['initial', 'high', 'pulsed', 'offset', 'amplitude', 'modulationOffset', 'modulationAmplitude'].includes(field) || validPwlPoint) return componentMagnitude(value, part.kind)
+      return scalarMagnitude(dimensioned ? value.trim().replace(/(?:hz|s)$/i, '') : ['phase', 'modulationPhase', 'carrierPhase'].includes(field) ? value.trim().replace(/°$/i, '') : value)
     }
     const values = sweep.listValues ? sweep.listValues.map(parseValue) : [sweep.start, sweep.stop].map(parseValue)
     const [start, stop] = values
-    const frequency = ['frequency', 'carrierFrequency', 'signalFrequency'].includes(field)
+    const frequency = ['frequency', 'carrierFrequency', 'signalFrequency', 'modulationFrequency'].includes(field)
     const time = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
     const positive = ['period', 'riseTau', 'fallTau'].includes(field)
     if (values.some((value) => value === null) || start === null || stop === null || (!sweep.listValues && (start === stop || values.length !== 2)) || (frequency && values.some((value) => value! <= 0)) || (time && values.some((value) => value! < 0 || (positive && value! <= 0)))) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, different endpoints${frequency || positive ? ' (positive values required)' : ''}.`)

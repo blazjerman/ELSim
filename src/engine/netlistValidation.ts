@@ -8,7 +8,7 @@ import {
   spiceSheetScalar, spiceSheetTimeMagnitude, spiceSheetValue,
 } from './spiceValues'
 
-export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
+export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project, connectivity?: Connectivity): AnalysisSettingError[] {
@@ -78,6 +78,22 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       if (signal === null || signal <= 0) add('sffm.signalFrequency', `${part.ref} SFFM modulating frequency must be positive.`, part.id, 'sffm.signalFrequency')
       const modulationIndex = index === null ? null : Number(index)
       if (modulationIndex === null || !Number.isFinite(modulationIndex) || modulationIndex < 0 || carrier !== null && carrier > 0 && signal !== null && signal > 0 && modulationIndex > carrier / signal) add('sffm.modulationIndex', `${part.ref} SFFM modulation index must be from zero through carrier/modulating frequency.`, part.id, 'sffm.modulationIndex')
+    }
+    for (const part of independentSources.filter((item) => item.sourceMode === 'am')) {
+      const quantity = part.kind === 'source' ? 'voltage' : 'current'
+      const am = { offset: '0', modulationOffset: part.value, modulationAmplitude: part.value, modulationFrequency: '100 Hz', carrierFrequency: '1 kHz', delay: '0', modulationPhase: '0', carrierPhase: '0', ...part.am }
+      for (const field of ['offset', 'modulationOffset', 'modulationAmplitude'] as const) {
+        if (spiceSheetValue(am[field], part.kind, sourceParameters) === null) add(`am.${field}`, `${part.ref} AM ${field === 'offset' ? 'offset' : field === 'modulationOffset' ? 'modulation offset' : 'modulation amplitude'} must be a valid ${quantity} or a declared parameter.`, part.id, `am.${field}`)
+      }
+      for (const field of ['modulationFrequency', 'carrierFrequency'] as const) {
+        const magnitude = spiceSheetMagnitude(am[field], 'frequency', sourceParameters)
+        if (magnitude === null || magnitude <= 0) add(`am.${field}`, `${part.ref} AM ${field === 'carrierFrequency' ? 'carrier' : 'modulating'} frequency must be positive.`, part.id, `am.${field}`)
+      }
+      const delay = spiceSheetTimeMagnitude(am.delay, sourceParameters)
+      if (delay === null || delay < 0) add('am.delay', `${part.ref} AM delay must be a nonnegative time.`, part.id, 'am.delay')
+      for (const field of ['modulationPhase', 'carrierPhase'] as const) {
+        if (spiceScalar(spiceSheetParameterDefault(am[field], sourceParameters) ?? am[field], '') === null) add(`am.${field}`, `${part.ref} AM phase must be numeric degrees or a declared parameter.`, part.id, `am.${field}`)
+      }
     }
     for (const part of independentSources.filter((item) => item.sourceMode === 'pwl')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'

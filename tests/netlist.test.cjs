@@ -2675,6 +2675,21 @@ test('SFFM source order converts LTspice fields to ngspice fields for voltage an
   assert.ok(validateAnalysisSettings(project).some((error) => error.field === 'sffm.modulationIndex'))
 })
 
+test('AM transient sources emit ngspice field order and validate both source quantities', () => {
+  const project = createStarterProject()
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.sourceMode = 'am'
+  voltage.am = { offset: '1', modulationOffset: '2', modulationAmplitude: '0.5', modulationFrequency: '20', carrierFrequency: '5k', delay: '1m', modulationPhase: '30', carrierPhase: '45' }
+  project.parts.push({ id: 'am-i1', kind: 'currentSource', ref: 'I1', value: '2m', sourceMode: 'am', am: { offset: '1m', modulationOffset: '2m', modulationAmplitude: '0.5m', modulationFrequency: '20', carrierFrequency: '5k', delay: '1m', modulationPhase: '30', carrierPhase: '45' }, x: 700, y: 500, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 AM\(1 2 0\.5 20 5k 1m 30 45\)$/m)
+  assert.match(artifact.text, /^I1 .* .* AM\(1m 2m 0\.5m 20 5k 1m 30 45\)$/m)
+  voltage.am.carrierFrequency = '0'
+  assert.ok(validateAnalysisSettings(project).some((error) => error.field === 'am.carrierFrequency'))
+})
+
 
 test('pulse source cycle counts are emitted for voltage/current and validated as nonnegative integers', () => {
   const project = createStarterProject()

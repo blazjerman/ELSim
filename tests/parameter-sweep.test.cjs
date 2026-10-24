@@ -325,6 +325,27 @@ test('pulse timing, SINE phase, EXP tau, and SFFM modulation fields are swept in
   assert.throws(() => validateProject(project), /time constants must be positive/)
 })
 
+test('AM waveform fields can be stepped on voltage and current sources', () => {
+  const project = createStarterProject()
+  const voltage = project.parts.find((part) => part.ref === 'V1')
+  voltage.sourceMode = 'am'
+  voltage.am = { offset: '0', modulationOffset: '5', modulationAmplitude: '5', modulationFrequency: '100 Hz', carrierFrequency: '1 kHz', delay: '0', modulationPhase: '0', carrierPhase: '0' }
+  const current = { id: 'am-sweep-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', sourceMode: 'am', am: { offset: '0', modulationOffset: '1m', modulationAmplitude: '1m', modulationFrequency: '100 Hz', carrierFrequency: '1 kHz', delay: '0', modulationPhase: '0', carrierPhase: '0' }, x: 700, y: 600, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [
+    { component: 'V1', sourceParameter: 'am.carrierFrequency', start: '1 kHz', stop: '2 kHz', points: 2 },
+    { component: 'I1', sourceParameter: 'am.modulationAmplitude', start: '1 mA', stop: '2 mA', points: 2 },
+  ]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 4)
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /AM\(0 5 5 100 \{ELSIM_SWEEP_SOURCE_V1_AM_CARRIERFREQUENCY\} 0 0 0\)/)
+  assert.match(control, /AM\(0 1m \{ELSIM_SWEEP_SOURCE_I1_AM_MODULATIONAMPLITUDE\} 100 1k 0 0 0\)/)
+  assert.match(control, /alterparam ELSIM_SWEEP_SOURCE_V1_AM_CARRIERFREQUENCY=1\.00000000e\+3\nalterparam ELSIM_SWEEP_SOURCE_I1_AM_MODULATIONAMPLITUDE=1\.00000000e-3\nreset\nrun/)
+})
+
 test('imported device model parameters are validated and emitted with altermod', () => {
   const project = createStarterProject()
   const part = { id: 'sweep-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 400, rotation: 0, deviceModel: 'USER_NPN' }

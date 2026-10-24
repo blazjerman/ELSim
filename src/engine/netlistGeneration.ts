@@ -69,6 +69,24 @@ function spiceSffm(part: Part, parameters: Project['sheets'][number]['parameters
   return `SFFM(${offset} ${amplitude} ${carrier} ${index} ${signal})`
 }
 
+function spiceAm(part: Part, parameters: Project['sheets'][number]['parameters'] = []): string | null {
+  if (part.kind !== 'source' && part.kind !== 'currentSource') return null
+  const waveform = { offset: '0', modulationOffset: part.value, modulationAmplitude: part.value, modulationFrequency: '100', carrierFrequency: '1k', delay: '0', modulationPhase: '0', carrierPhase: '0', ...part.am }
+  const offset = spiceSheetValue(waveform.offset, part.kind, parameters)
+  const modulationOffset = spiceSheetValue(waveform.modulationOffset, part.kind, parameters)
+  const modulationAmplitude = spiceSheetValue(waveform.modulationAmplitude, part.kind, parameters)
+  const modulationFrequency = spiceSheetFrequency(waveform.modulationFrequency, parameters)
+  const carrierFrequency = spiceSheetFrequency(waveform.carrierFrequency, parameters)
+  const delay = spiceSheetTime(waveform.delay, parameters)
+  const modulationPhase = spiceSheetScalar(waveform.modulationPhase, parameters)
+  const carrierPhase = spiceSheetScalar(waveform.carrierPhase, parameters)
+  const modulationMagnitude = spiceSheetMagnitude(waveform.modulationFrequency, 'frequency', parameters)
+  const carrierMagnitude = spiceSheetMagnitude(waveform.carrierFrequency, 'frequency', parameters)
+  const delayMagnitude = spiceSheetTimeMagnitude(waveform.delay, parameters)
+  if (offset === null || modulationOffset === null || modulationAmplitude === null || modulationFrequency === null || modulationMagnitude === null || modulationMagnitude <= 0 || carrierFrequency === null || carrierMagnitude === null || carrierMagnitude <= 0 || delay === null || delayMagnitude === null || delayMagnitude < 0 || modulationPhase === null || carrierPhase === null) return null
+  return `AM(${offset} ${modulationOffset} ${modulationAmplitude} ${modulationFrequency} ${carrierFrequency} ${delay} ${modulationPhase} ${carrierPhase})`
+}
+
 export function createNetlist(project: Project): string {
   return createNetlistArtifact(project).text
 }
@@ -375,6 +393,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           continue
         }
         transientValue = waveform
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'am') {
+        const waveform = spiceAm(part, sheetParameters)
+        if (!waveform) {
+          const message = `${part.ref} AM settings must contain valid source levels, positive carrier/modulating frequencies, nonnegative delay, and numeric phases.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = waveform
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
         const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
         const offset = spiceSheetValue(sine.offset, 'currentSource', sheetParameters), amplitude = spiceSheetValue(sine.amplitude, 'currentSource', sheetParameters)
@@ -451,6 +478,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const waveform = spiceSffm(part, sheetParameters)
         if (!waveform) {
           const message = `${part.ref} SFFM settings must contain valid voltages, positive carrier/modulating frequencies, and a valid modulation index.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = waveform
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'am') {
+        const waveform = spiceAm(part, sheetParameters)
+        if (!waveform) {
+          const message = `${part.ref} AM settings must contain valid source levels, positive carrier/modulating frequencies, nonnegative delay, and numeric phases.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue

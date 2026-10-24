@@ -262,8 +262,8 @@ const definitions = [
 ] as const satisfies readonly BuiltInComponentDefinition[]
 
 const componentHelpByKind: Readonly<Record<PartKind, string>> = {
-  source: 'Sets a voltage between its positive and negative pins. Choose DC, pulse, or PWL in Properties.',
-  currentSource: 'Sets current direction and magnitude. Use a DC, pulse, or PWL value in Properties.',
+  source: 'Sets a voltage between its positive and negative pins. Choose DC, pulse, PWL, SINE, EXP, SFFM, or AM in Properties.',
+  currentSource: 'Sets current direction and magnitude. Choose DC, pulse, PWL, SINE, EXP, SFFM, or AM in Properties.',
   resistor: 'Limits current. A larger resistance gives less current for the same voltage.',
   potentiometer: 'An adjustable three-terminal resistor. Connect the upper terminal, wiper, and lower terminal; move the wiper to change the divider ratio.',
   lamp: 'Acts as a resistor; its glow follows simulated electrical power, not filament temperature.',

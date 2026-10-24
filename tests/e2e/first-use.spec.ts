@@ -9946,6 +9946,23 @@ test('voltage SFFM waveform preserves LTspice fields and runs in the browser eng
   await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 SFFM\(0 1 1k 5 100\)/)
 })
 
+test('voltage AM waveform is editable, saved, and solved by browser ngspice', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('am')
+  await page.getByLabel('Overall offset (V)').fill('0')
+  await page.getByLabel('Modulation offset (V)').fill('5')
+  await page.getByLabel('Modulation amplitude (V)').fill('2')
+  await page.getByLabel('Modulating frequency').fill('100')
+  await page.getByLabel('Carrier frequency').fill('1k')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 AM\(0 5 2 100 1k 0 0 0\)/)
+})
+
 test('PWL waveform example opens with editable points and solves the RC response', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

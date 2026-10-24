@@ -376,9 +376,10 @@
             "pwl",
             "sine",
             "exp",
-            "sffm"
+            "sffm",
+            "am"
           ],
-          "description": "For transient analysis, voltage and independent current sources support pulse, DC, PWL, or SINE. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
+          "description": "For transient analysis, voltage and independent current sources support pulse, DC, PWL, SINE, EXP, SFFM, and AM. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
         },
         "acMagnitude": {
           "type": "string",
@@ -545,6 +546,21 @@
             }
           },
           "description": "LTspice SFFM source settings: offset, amplitude, carrier frequency, modulation index, and modulating signal frequency."
+        },
+        "am": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["offset", "modulationOffset", "modulationAmplitude", "modulationFrequency", "carrierFrequency", "delay", "modulationPhase", "carrierPhase"],
+          "properties": {
+            "offset": { "type": "string", "maxLength": 64 },
+            "modulationOffset": { "type": "string", "maxLength": 64 },
+            "modulationAmplitude": { "type": "string", "maxLength": 64 },
+            "modulationFrequency": { "type": "string", "maxLength": 64 },
+            "carrierFrequency": { "type": "string", "maxLength": 64 },
+            "delay": { "type": "string", "maxLength": 64 },
+            "modulationPhase": { "type": "string", "maxLength": 64 },
+            "carrierPhase": { "type": "string", "maxLength": 64 }
+          }
         },
         "pwl": {
           "type": "array",
@@ -1486,7 +1502,15 @@
                   "sffm.amplitude",
                   "sffm.carrierFrequency",
                   "sffm.modulationIndex",
-                  "sffm.signalFrequency"
+                  "sffm.signalFrequency",
+                  "am.offset",
+                  "am.modulationOffset",
+                  "am.modulationAmplitude",
+                  "am.modulationFrequency",
+                  "am.carrierFrequency",
+                  "am.delay",
+                  "am.modulationPhase",
+                  "am.carrierPhase"
                 ]
               },
               "start": {
