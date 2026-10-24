@@ -320,7 +320,7 @@ function TransientCursorTime({ axis }: { axis?: Float64Array }) {
   return <span>{cursorIndex === null || !axis ? 'Click plot for cursor values' : `t = ${formatTime(axis[cursorIndex], axis[axis.length - 1], 5)}`}</span>
 }
 
-function TransientCursorMarker({ axis, first, last, minTime, maxTime, left, right, top, bottom }: {
+function TransientCursorMarker({ axis, first, last, minTime, maxTime, left, right, top, bottom, secondCursorIndex }: {
   axis?: Float64Array
   first: number
   last: number
@@ -330,28 +330,41 @@ function TransientCursorMarker({ axis, first, last, minTime, maxTime, left, righ
   right: number
   top: number
   bottom: number
+  secondCursorIndex: number | null
 }) {
   const cursorIndex = useSimulationCursorAnimation()
-  if (cursorIndex === null || !axis || cursorIndex < first || cursorIndex > last) return null
-  const x = left + ((axis[cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)
-  return <line x1={x} x2={x} y1={top} y2={bottom} className="plot-cursor"/>
+  if (!axis) return null
+  const xForIndex = (index: number) => left + ((axis[index] - minTime) / (maxTime - minTime || 1)) * (right - left)
+  return <>
+    {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xForIndex(cursorIndex)} x2={xForIndex(cursorIndex)} y1={top} y2={bottom} className="plot-cursor"/>}
+    {secondCursorIndex !== null && secondCursorIndex >= first && secondCursorIndex <= last && <line x1={xForIndex(secondCursorIndex)} x2={xForIndex(secondCursorIndex)} y1={top} y2={bottom} className="plot-cursor plot-cursor-b"/>}
+  </>
 }
 
-function TransientCursorReadout({ axis, shown, traceIndexById, colors, keyboardAnnouncement }: {
+function TransientCursorReadout({ axis, shown, traceIndexById, colors, keyboardAnnouncement, secondCursorIndex }: {
   axis?: Float64Array
   shown: Trace[]
   traceIndexById: Map<string, number>
   colors: string[]
   keyboardAnnouncement: string
+  secondCursorIndex: number | null
 }) {
   const cursorIndex = useSimulationCursorWhen(shown.length > 0)
+  const hasDelta = cursorIndex !== null && secondCursorIndex !== null && axis && cursorIndex >= 0 && cursorIndex < axis.length && secondCursorIndex >= 0 && secondCursorIndex < axis.length
   return <><div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => {
     const time = axis?.[cursorIndex] ?? 0
     const index = axis === trace.axis && cursorIndex >= 0 && cursorIndex < trace.axis.length
       ? cursorIndex
       : nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
     return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span>
-  })}</div><span className="sr-only" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span></>
+  })}{hasDelta && <><span className="cursor-delta-time">Δt = {formatTime(axis[secondCursorIndex] - axis[cursorIndex], axis[axis.length - 1], 5)}</span>{shown.map((trace) => {
+    const timeA = axis[cursorIndex]
+    const timeB = axis[secondCursorIndex]
+    const indexA = axis === trace.axis ? cursorIndex : nearestAxisIndex(trace.axis, timeA, 0, Math.max(0, trace.axis.length - 1))
+    const indexB = axis === trace.axis ? secondCursorIndex : nearestAxisIndex(trace.axis, timeB, 0, Math.max(0, trace.axis.length - 1))
+    const color = colors[(traceIndexById.get(trace.id) ?? 0) % colors.length]
+    return <span key={`delta-${trace.id}`} style={{ color }}>{trace.label} B = {trace.values[indexB].toPrecision(5)} {trace.unit} · Δ{trace.label} = {(trace.values[indexB] - trace.values[indexA]).toPrecision(5)} {trace.unit}</span>
+  })}</>}</div><span className="sr-only" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span></>
 }
 
 function useResponsivePlotSize() {
@@ -429,6 +442,8 @@ function symmetricZeroRange(range: [number, number] | undefined): [number, numbe
 function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string> }) {
   const [spectrumOpen, setSpectrumOpen] = useState(false)
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
+  const [secondCursorTime, setSecondCursorTime] = useState<number | null>(null)
+  const [activeCursor, setActiveCursor] = useState<'A' | 'B'>('A')
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
@@ -439,6 +454,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const first = Math.floor(navigation.window.start * Math.max(0, (axis?.length ?? 1) - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, (axis?.length ?? 1) - 1)))
   const minTime = axis?.[first] ?? 0, maxTime = axis?.[Math.min(last, (axis?.length ?? 1) - 1)] ?? 1
+  const secondCursorIndex = secondCursorTime === null || !axis?.length ? null : nearestAxisIndex(axis, secondCursorTime, 0, axis.length - 1)
   const sampledTraceById = useMemo(() => {
     const sampled = new Map<string, { indices: number[]; range: [number, number] | null }>()
     for (const id of selectedIds) {
@@ -525,10 +541,12 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const rect = event.currentTarget.getBoundingClientRect()
     const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left)))
     const next = nearestAxisIndex(axis, minTime + fraction * (maxTime - minTime), first, Math.min(last, axis.length - 1))
-    setSimulationCursor(next)
+    if (activeCursor === 'B' && secondCursorTime !== null) setSecondCursorTime(axis[next])
+    else setSimulationCursor(next)
   }
   const handlePlotKeyDown = (event: ReactKeyboardEvent<SVGSVGElement>) => {
-    const next = handleCursorKeyDown(event, getSimulationCursor(), first, Math.min(last, (axis?.length ?? 1) - 1), setSimulationCursor)
+    const movingB = activeCursor === 'B' && secondCursorIndex !== null && axis
+    const next = handleCursorKeyDown(event, movingB ? secondCursorIndex : getSimulationCursor(), first, Math.min(last, (axis?.length ?? 1) - 1), movingB ? (index) => setSecondCursorTime(axis[index]) : setSimulationCursor)
     if (next === null || !axis) return
     const time = axis[next]
     const readings = shown.slice(0, 5).map((trace) => {
@@ -536,11 +554,17 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       return `${trace.label} ${trace.values[index].toPrecision(5)} ${trace.unit}`
     })
     if (shown.length > readings.length) readings.push(`${shown.length - readings.length} more traces`)
-    setKeyboardAnnouncement(`Time ${formatTime(time, axis[axis.length - 1], 5)}${readings.length ? `. ${readings.join('; ')}.` : '.'}`)
+    setKeyboardAnnouncement(`Cursor ${activeCursor}. Time ${formatTime(time, axis[axis.length - 1], 5)}${readings.length ? `. ${readings.join('; ')}.` : '.'}`)
   }
   return <div className="waveform-view">
     <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={() => setSpectrumOpen(true)} disabled={!shown.some((trace) => trace.axis.length >= 32)} title="Open a derived FFT spectrum for the visible traces">FFT spectrum</button><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${formatTime(minTime, axis?.[axis.length - 1] ?? maxTime)} to ${formatTime(maxTime, axis?.[axis.length - 1] ?? maxTime)}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
+    <div className="transient-cursor-controls" role="group" aria-label="Transient measurement cursors">
+      <button type="button" aria-pressed={activeCursor === 'A'} onClick={() => setActiveCursor('A')}>Cursor A · playback</button>
+      {secondCursorIndex === null
+        ? <button type="button" onClick={() => { const current = getSimulationCursor() ?? first; if (getSimulationCursor() === null) setSimulationCursor(current); const quarter = Math.max(1, Math.floor((last - first) / 4)); const next = current <= first + (last - first) / 2 ? Math.min(last, current + quarter) : Math.max(first, current - quarter); setSecondCursorTime(axis?.[next] ?? maxTime); setActiveCursor('B') }}>Add cursor B</button>
+        : <><button type="button" aria-pressed={activeCursor === 'B'} onClick={() => setActiveCursor('B')}>Cursor B</button><button type="button" aria-label="Remove cursor B" onClick={() => { setSecondCursorTime(null); setActiveCursor('A') }}>Remove B</button></>}
+    </div>
+    <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${formatTime(minTime, axis?.[axis.length - 1] ?? maxTime)} to ${formatTime(maxTime, axis?.[axis.length - 1] ?? maxTime)}. Cursor ${activeCursor} is selected. Focus the plot and use Left and Right arrows to move it, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {minorValueTicks.map((value) => <line key={`y-minor-${value}`} x1={left} x2={right} y1={yForValue(value, hasVoltage ? 'V' : 'A')} y2={yForValue(value, hasVoltage ? 'V' : 'A')} className="plot-grid-minor"/>)}
       {valueTicks.map((value) => <g key={`y-major-${value}`}><line x1={left} x2={right} y1={yForValue(value, hasVoltage ? 'V' : 'A')} y2={yForValue(value, hasVoltage ? 'V' : 'A')} className={Math.abs(value) <= valueStep * 1e-8 ? 'plot-grid-zero' : 'plot-grid'}/>{Math.abs(value) > valueStep * 1e-8 && hasVoltage && <text data-value-unit="V" x={left - 5} y={yForValue(value, 'V') + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(value, 'V')}</text>}</g>)}
       {hasCurrent && currentTicks.filter((value) => Math.abs(value) > currentStep * 1e-8).map((value) => <g key={`y-current-${value}`} className="plot-value-tick-current"><line x1={right - 3} x2={right} y1={yForValue(value, 'A')} y2={yForValue(value, 'A')} className="plot-axis"/><text data-value-unit="A" x={right + 4} y={yForValue(value, 'A') + 3} className="plot-tick">{formatEngineeringTick(value, 'A')}</text></g>)}
@@ -549,10 +573,10 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       {(hasVoltage || hasCurrent) && <g className="plot-zero-reference">{hasVoltage && <><line x1={left} x2={right} y1={yForValue(0, 'V')} y2={yForValue(0, 'V')}/><text x={left - 5} y={yForValue(0, 'V') + 3} textAnchor="end">0 V</text></>}{hasCurrent && <><line x1={left} x2={right} y1={yForValue(0, 'A')} y2={yForValue(0, 'A')}/><text x={right + 4} y={yForValue(0, 'A') + 3}>0 A</text></>}</g>}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
-      <TransientCursorMarker axis={axis} first={first} last={last} minTime={minTime} maxTime={maxTime} left={left} right={right} top={top} bottom={bottom}/>
+      <TransientCursorMarker axis={axis} first={first} last={last} minTime={minTime} maxTime={maxTime} left={left} right={right} top={top} bottom={bottom} secondCursorIndex={secondCursorIndex}/>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={colorFor}/>
-    <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors} keyboardAnnouncement={keyboardAnnouncement}/>
+    <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors} keyboardAnnouncement={keyboardAnnouncement} secondCursorIndex={secondCursorIndex}/>
     {spectrumOpen && <Suspense fallback={<div className="waveform-empty" role="status">Loading FFT spectrum…</div>}><FourierSpectrumDialog traces={shown.filter((trace) => trace.axis.length >= 32)} initialRange={{ start: minTime, end: maxTime }} onClose={() => setSpectrumOpen(false)}/></Suspense>}
   </div>
 }
