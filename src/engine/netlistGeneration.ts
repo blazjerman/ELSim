@@ -315,13 +315,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
   const ambiguousGlobalFunctionNames = [...globalFunctionDefinitions].filter(([, definitions]) => definitions.length > 1).map(([name]) => name)
+  const withoutQuotedStrings = (text: string) => text.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'/g, (literal) => ' '.repeat(literal.length))
   const referencedFunctionNames = (text: string, scopedBodies: ReadonlyMap<string, string[]> = new Map()) => [...new Set([...globalFunctionDefinitions.keys(), ...scopedBodies.keys()])].filter((functionName) => {
     const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(`(?:^|[^A-Za-z0-9_.$])${escapedName}\\s*\\(`, 'i').test(text)
+    return new RegExp(`(?:^|[^A-Za-z0-9_.$])${escapedName}\\s*\\(`, 'i').test(withoutQuotedStrings(text))
   })
   const referencedGlobalParameterNames = (text: string) => [...globalParameterExpressions.keys()].filter((parameterName) => {
     const escapedName = parameterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(`(?:^|[^A-Za-z0-9!#$%_\\[\\]])${escapedName}(?![A-Za-z0-9!#$%_\\[\\]])`, 'i').test(text)
+    return new RegExp(`(?:^|[^A-Za-z0-9!#$%_\\[\\]])${escapedName}(?![A-Za-z0-9!#$%_\\[\\]])`, 'i').test(withoutQuotedStrings(text))
   })
   const ambiguousGlobalParametersInText = (text: string, shadowedParameters: ReadonlySet<string> = new Set(), shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map()) => {
     const ambiguous = new Set<string>()

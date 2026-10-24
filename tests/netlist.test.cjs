@@ -260,6 +260,18 @@ test('an imported IC instance override cannot call duplicate imported global fun
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'ambiguous-function-override-ic' && /X1 uses instance parameter GAIN of imported subcircuit FUNCTION_STAGE expression that calls ambiguous global \.FUNC SCALE \(first\.lib:1, second\.lib:1\)/i.test(diagnostic.message)), true)
 })
 
+test('quoted imported IC override strings do not look like global parameter or function references', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'quoted-override-ic', kind: 'subcircuit', ref: 'X1', value: 'STRING_STAGE', modelName: 'STRING_STAGE', modelPins: ['IN', 'OUT'], modelParameters: { DATAFILE: '"BASE"', LABEL: '"SCALE(2)"' }, x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'string-stage-library', filename: 'stage.lib', content: '.SUBCKT STRING_STAGE IN OUT PARAMS: DATAFILE="default" LABEL="default"\nR1 IN OUT 1k\n.ENDS STRING_STAGE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'first-definitions', filename: 'first.lib', content: '.PARAM BASE=1\n.FUNC SCALE(x) {x}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'second-definitions', filename: 'second.lib', content: '.PARAM BASE=2\n.FUNC SCALE(x) {x*2}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'quoted-override-ic' && /ambiguous global \.PARAM|ambiguous global \.FUNC/.test(diagnostic.message)), false)
+})
+
 test('a scoped subcircuit parameter shadows duplicate imported globals', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'scoped-parameter-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'PARAM_STAGE', modelPins: ['IN', 'OUT'], value: 'PARAM_STAGE', x: 800, y: 600, rotation: 0 })
