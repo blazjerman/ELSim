@@ -467,6 +467,25 @@ test('optional floating-node RSHUNT and CSHUNT emit native ngspice options and v
   assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:shuntCapacitance'))
 })
 
+test('transient integration method defaults to ngspice and can opt into trapezoidal or Gear', () => {
+  const project = createStarterProject()
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options method=/mi)
+  project.simulation.integrationMethod = 'gear'
+  let artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal((artifact.text.match(/^\.options method=gear$/gim) ?? []).length, 1)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:integrationMethod' && source.role === 'generated'))
+  project.simulation.integrationMethod = 'trap'
+  artifact = createNetlistArtifact(project)
+  assert.match(artifact.text, /^\.options method=trap$/mi)
+  project.simulation.analysis = 'ac'
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options method=/mi)
+  project.simulation.analysis = 'tran'
+  project.simulation.integrationMethod = 'other'
+  assert.throws(() => validateProject(project), /invalid transient integration method/i)
+  assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:integrationMethod'))
+})
+
 test('per-device DTEMP offsets and absolute TEMP settings reach native instances exclusively', () => {
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')

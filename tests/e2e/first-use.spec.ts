@@ -6428,11 +6428,12 @@ test('global simulation temperature is passed to ngspice', { tag: '@ngspice' }, 
   await expect(page.locator('.netlist-modal pre')).toContainText('.temp 85')
 })
 
-test('floating-node RSHUNT and CSHUNT options are editable and run in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
+test('transient solver options are editable and run in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
-  await page.getByText('Solver conditioning (advanced)').click()
+  await page.getByText('Solver settings (advanced)').click()
+  await page.getByLabel('Transient integration method').selectOption('gear')
   await page.getByLabel('Floating-node shunt resistance').fill('1 TΩ')
   await page.getByLabel('Node shunt capacitance').fill('0.13 pF')
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -6440,6 +6441,7 @@ test('floating-node RSHUNT and CSHUNT options are editable and run in the browse
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('.options rshunt=1000000000000')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options cshunt=1.3e-13')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options method=gear')
 })
 
 test('imported ngspice .TEMP is preserved and a project temperature overrides it', { tag: '@ngspice' }, async ({ page }) => {

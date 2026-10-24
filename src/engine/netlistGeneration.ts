@@ -1132,6 +1132,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:shuntCapacitance', line: rows.length })
     } else append(`.options cshunt=${shuntCapacitance}`, 'analysis:shuntCapacitance', 'generated')
   }
+  if (includeHierarchyProbes && project.simulation.integrationMethod) {
+    if (!['trap', 'gear'].includes(project.simulation.integrationMethod)) {
+      const message = 'Transient integration method must be trapezoidal or Gear.'
+      append(`* ERROR: ${cleanComment(message)}`, 'analysis:integrationMethod', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:integrationMethod', line: rows.length })
+    } else if (project.simulation.analysis === 'tran') {
+      append(`.options method=${project.simulation.integrationMethod}`, 'analysis:integrationMethod', 'generated')
+    }
+  }
   if (includeHierarchyProbes) for (const directive of hierarchicalSaveVectors(project)) append(directive, 'hierarchy:probe', 'generated')
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesZener) append('.model DZENER D(BV=5.1 IBV=1m)', 'model:DZENER', 'model')

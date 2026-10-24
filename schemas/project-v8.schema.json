@@ -1338,6 +1338,9 @@
           "minLength": 1,
           "maxLength": 64
         },
+        "integrationMethod": {
+          "enum": ["trap", "gear"]
+        },
         "noiseSweep": {
           "type": "object",
           "additionalProperties": false,
