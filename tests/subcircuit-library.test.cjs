@@ -1038,6 +1038,30 @@ test('matches conditional AKO bases across imported libraries by normalized nume
   assert.deepEqual(result.parameters.get('conditional-child-lib:2').map(({ name, defaultVariesByCondition }) => [name, defaultVariesByCondition]), [['IS', true], ['N', true]])
 })
 
+test('matches cross-library numeric AKO branches with equivalent ngspice comparison operators', () => {
+  const baseContent = [
+    '.IF (1 == 1)',
+    '.MODEL BASE D(IS=1n)',
+    '.ELSE',
+    '.MODEL BASE D(IS=2n)',
+    '.ENDIF',
+  ].join('\n')
+  const childContent = [
+    '.IF (1 = 1)',
+    '.MODEL CHILD AKO:BASE D(N=2)',
+    '.ELSE',
+    '.MODEL CHILD AKO:BASE D(N=3)',
+    '.ENDIF',
+  ].join('\n')
+  const result = expandNgspiceAkoModels([
+    { asset: { id: 'base', filename: 'base.lib', content: baseContent }, parsed: parseSubcircuitLibrary(baseContent) },
+    { asset: { id: 'child', filename: 'child.lib', content: childContent }, parsed: parseSubcircuitLibrary(childContent) },
+  ])
+  assert.deepEqual(result.issues, [])
+  assert.equal(result.cards.get('child:2'), '.model CHILD D(IS=1n N=2)')
+  assert.equal(result.cards.get('child:4'), '.model CHILD D(IS=2n N=3)')
+})
+
 test('does not infer cross-library conditional AKO equivalence from parameter names', () => {
   const baseContent = '.IF (LEVEL = 1)\n.MODEL BASE D(IS=1n)\n.ELSE\n.MODEL BASE D(IS=9n)\n.ENDIF'
   const childContent = '.IF (level=1)\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ELSE\n.MODEL CHILD AKO:BASE D(IS=3n)\n.ENDIF'

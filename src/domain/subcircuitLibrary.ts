@@ -662,7 +662,14 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
 }
 
 function conditionalBranchSignature(block: { branch: number; sawElse: boolean; conditions: string[] }): string {
-  const conditions = block.conditions.map((condition) => condition.toLowerCase().trim().replace(/\s+/g, ' ').replace(/\s*([=<>!+*/^(),-])\s*/g, '$1'))
+  const conditions = block.conditions.map((condition) => condition.toLowerCase().trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([=<>!+*/^(),-])\s*/g, '$1')
+    // ngspice accepts both '=' and '==' for equality and both '<>' and '!='
+    // for inequality. Normalize these numeric-only paths so equivalent
+    // branches in separate libraries can safely share AKO variants.
+    .replace(/<>/g, '!=')
+    .replace(/(?<![<>=!])=(?!=)/g, '=='))
   return `${conditions.map((condition, index) => `${index ? 'elseif' : 'if'}:${condition}`).join('|')}|${block.sawElse ? 'else' : `branch:${block.branch}`}`
 }
 
