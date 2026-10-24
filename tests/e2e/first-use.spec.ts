@@ -2751,6 +2751,26 @@ test('transfer-function analysis runs in browser ngspice and reports gain and im
   await expect(plot.locator('.op-table')).toContainText('Input impedance at V1')
 })
 
+test('pole-zero analysis locates the RC pole in the complex plane', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Analysis type').first().selectOption('pz')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByLabel('Output node').selectOption('vout')
+  await page.getByLabel('Input source').selectOption('V1')
+  await page.getByLabel('Roots').selectOption('poles')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  const plot = page.locator('.plot-window').first()
+  await expect(plot).toBeVisible({ timeout: 60_000 })
+  await expect(plot.locator('.waveform-title')).toContainText('Pole-zero map')
+  await expect(plot.locator('.pz-chart')).toBeVisible()
+  const pole = plot.locator('.op-table tr').filter({ hasText: 'Pole 1' })
+  await expect(pole).toContainText('Stable')
+  await expect(pole).toContainText('-100')
+  await page.locator('[data-analysis-setting="pzRoots"]').selectOption('zeros')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByRole('status').filter({ hasText: /no finite roots for this selection/ })).toBeVisible({ timeout: 60_000 })
+})
+
 test('DC and AC sensitivity analyses plot ngspice parameter derivatives', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])

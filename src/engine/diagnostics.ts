@@ -20,7 +20,7 @@ export function firstNgspiceError(stdout: string, stderr: string, status: number
 
 /** Turn an ngspice failure into a protocol diagnostic while retaining any
  * source-map location ngspice reported. Guidance is intentionally advisory. */
-export function diagnosticForNgspice(message: string, artifact: NetlistArtifact, analysis?: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens'): SimulationDiagnostic {
+export function diagnosticForNgspice(message: string, artifact: NetlistArtifact, analysis?: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz'): SimulationDiagnostic {
   const lineText = message.match(/(?:line(?:\s+no\.?)?|card)\s*[:#]?\s*(\d+)/i)?.[1]
   const line = lineText ? Number(lineText) : undefined
   const source = line === undefined ? undefined : artifact.sourceMap.find((entry) => entry.line === line)

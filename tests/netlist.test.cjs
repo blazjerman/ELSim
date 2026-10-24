@@ -50,6 +50,24 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('pole-zero settings generate native ngspice analysis and validate source terminals', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'pz'
+  project.simulation.poleZero = { outputNode: 'vout', inputSource: 'V1', roots: 'both' }
+  const both = createNetlistArtifact(project)
+  assert.match(both.text, /^\.pz vin 0 vout 0 vol pz$/mi)
+  assert.match(both.text, /^\.options rshunt=(?:1e12|1000000000000)$/mi)
+  assert.doesNotMatch(both.text, /^V1 vin 0 /mi, 'remove the selected ideal source so it cannot short the analysis input port')
+  assert.deepEqual(validateAnalysisSettings(project), [])
+  assert.deepEqual(both.diagnostics.filter(({ severity }) => severity === 'error'), [])
+  project.simulation.poleZero.roots = 'poles'
+  assert.match(createNetlistArtifact(project).text, /^\.pz vin 0 vout 0 vol pol$/mi)
+  project.simulation.poleZero.roots = 'zeros'
+  assert.match(createNetlistArtifact(project).text, /^\.pz vin 0 vout 0 vol zer$/mi)
+  project.simulation.poleZero.outputNode = '0'
+  assert.equal(validateAnalysisSettings(project).find((error) => error.field === 'pzOutput')?.message, 'Choose a labeled, non-ground output node for pole-zero analysis.')
+})
+
 test('DC and AC sensitivity settings generate ngspice native .sens analyses', () => {
   const dcProject = createStarterProject()
   dcProject.simulation.analysis = 'sens'

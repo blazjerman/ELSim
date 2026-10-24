@@ -71,7 +71,7 @@ export type SimulationResult = {
   sourceMap: NetlistSource[]
   traces: Trace[]
   diagnostics: SimulationDiagnostic[]
-  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens'
+  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz'
   sensitivityMode?: 'dc' | 'ac'
   measurements: MeasurementResult[]
   noiseSummaries?: NoiseSummary[]
@@ -371,9 +371,9 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
     const result = candidate.result
     if (!isRecord(result) || !isCompletedMetadata(result.metadata) || typeof result.netlist !== 'string'
       || !Array.isArray(result.sourceMap) || !result.sourceMap.every(isSource)
-      || !Array.isArray(result.traces) || result.traces.length === 0
+      || !Array.isArray(result.traces) || result.traces.length === 0 && result.analysis !== 'pz'
       || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
-      || !['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens'].includes(String(result.analysis))
+      || !['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens', 'pz'].includes(String(result.analysis))
       || (result.sensitivityMode !== undefined && !['dc', 'ac'].includes(String(result.sensitivityMode)))
       || (result.analysis === 'sens' && !['dc', 'ac'].includes(String(result.sensitivityMode)))
       || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)
@@ -411,7 +411,7 @@ export function engineResponseIssue(value: unknown): string {
     }
     if (typeof result.netlist !== 'string') return 'generated netlist is missing'
     if (!Array.isArray(result.sourceMap) || !result.sourceMap.every(isSource)) return 'netlist source map is malformed'
-    if (!Array.isArray(result.traces) || result.traces.length === 0) return 'result has no waveform traces'
+    if (!Array.isArray(result.traces) || result.traces.length === 0 && result.analysis !== 'pz') return 'result has no waveform traces'
     const validatedVectors = new WeakSet<Float64Array>()
     for (let index = 0; index < result.traces.length; index++) {
       const trace = result.traces[index]
@@ -422,7 +422,7 @@ export function engineResponseIssue(value: unknown): string {
       if (!isTrace(trace, validatedVectors)) return `trace ${index + 1} metadata is malformed`
     }
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
-    if (!['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens'].includes(String(result.analysis))) return 'analysis type is invalid'
+    if (!['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens', 'pz'].includes(String(result.analysis))) return 'analysis type is invalid'
     if (result.sensitivityMode !== undefined && !['dc', 'ac'].includes(String(result.sensitivityMode))) return 'sensitivity analysis mode is invalid'
     if (result.analysis === 'sens' && !['dc', 'ac'].includes(String(result.sensitivityMode))) return 'sensitivity analysis mode is missing'
     if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'

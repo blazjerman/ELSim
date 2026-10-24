@@ -44,6 +44,18 @@ Values:
  -2.500000e-03
 `
 
+test('complex pole-zero raw vectors retain each root without treating it as an axis', () => {
+  const raw = `Title: RC pole-zero\nPlotname: Pole-Zero Analysis\nFlags: complex\nNo. Variables: 3\nNo. Points: 1\nVariables:\n  0 v(pole(1)) voltage\n  1 v(zero(1)) voltage\n  2 v(all) voltage\nValues:\n 0 -1.000000e+03,0.000000e+00\n 1.000000e+03,0.000000e+00\n  -1.000000e+03,0.000000e+00\n`
+  const parsed = parseAsciiRawFile(raw)
+  assert.equal(parsed.analysis, 'pz')
+  assert.equal(parsed.isComplex, true)
+  assert.deepEqual(parsed.variables.map(({ name, values, imaginaryValues }) => ({ name, values: [...values], imaginaryValues: [...(imaginaryValues ?? [])] })), [
+    { name: 'v(pole(1))', values: [-1000], imaginaryValues: [0] },
+    { name: 'v(zero(1))', values: [1000], imaginaryValues: [0] },
+    { name: 'v(all)', values: [-1000], imaginaryValues: [0] },
+  ])
+})
+
 test('transfer-function raw data retains gain and impedance vectors as one-point results', () => {
   const raw = `Title: Small-signal divider\nPlotname: Transfer Function\nFlags: real\nNo. Variables: 3\nNo. Points: 1\nVariables:\n  0 v(transfer_function) voltage\n  1 v(output_impedance_at_v(out)) voltage\n  2 v(v1#input_impedance) voltage\nValues:\n 0 5.000000e-01\n  5.000000e+02\n  2.000000e+03\n`
   const parsed = parseAsciiRawFile(raw)

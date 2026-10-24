@@ -1439,7 +1439,9 @@
             "ac",
             "dc",
             "noise",
-            "tf"
+            "tf",
+            "sens",
+            "pz"
           ]
         },
         "stopTime": {
@@ -1520,6 +1522,25 @@
           "properties": {
             "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
             "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" }
+          }
+        },
+        "sensitivity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "mode"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "mode": { "enum": ["dc", "ac"] }
+          }
+        },
+        "poleZero": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "inputSource", "roots"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
+            "roots": { "enum": ["poles", "zeros", "both"] }
           }
         },
         "sourceAcMagnitude": {

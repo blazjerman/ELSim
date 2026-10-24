@@ -42,6 +42,11 @@ test('result control executes the selected AC and DC analyses instead of the def
   assert.match(sensitivity, /\.control\nset filetype=binary\nsens V\(out\) AC dec 10 1 1meg\nwrite \/result\.raw all/)
 })
 
+test('pole-zero result control runs native roots and writes them as complex vectors', () => {
+  const netlist = 'V1 in 0 DC 0\nR1 in out 1k\nC1 out 0 1u\n.pz in 0 out 0 vol pz\n.end'
+  assert.match(addResultControl(netlist), /\.control\nset filetype=binary\npz in 0 out 0 vol pz\nwrite \/result\.raw all/)
+})
+
 test('result control can request ngspice native Fourier output after transient solve', () => {
   const netlist = 'V1 in 0 SIN(0 1 1k)\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 5m\n.end'
   const control = addResultControl(netlist, [], [], { fundamentalFrequency: 1000, traceId: 'v(out)', vector: 'v(out)' })

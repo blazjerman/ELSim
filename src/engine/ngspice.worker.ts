@@ -59,9 +59,34 @@ function makeTraces(rawData: string | Uint8Array): Trace[] {
   })
 }
 
+function isEmptyPoleZeroRaw(rawData: string | Uint8Array): boolean {
+  const header = typeof rawData === 'string' ? rawData.slice(0, 1024) : new TextDecoder().decode(rawData.subarray(0, 1024))
+  return /^Plotname:\s*constants\s*$/im.test(header)
+}
+
+function labelPoleZeroTraces(rawTraces: Trace[]): Trace[] {
+  return rawTraces.flatMap((trace) => {
+    const match = trace.id.match(/^v\((pole|zero)\((\d+)\)\)$/i)
+    if (!match) return [] // ngspice's aggregate v(all) vector duplicates the roots.
+    const kind = match[1].toLowerCase() as 'pole' | 'zero'
+    const index = Number(match[2])
+    return [{
+      ...trace,
+      id: `pz:${kind}:${index}`,
+      label: `${kind === 'pole' ? 'Pole' : 'Zero'} ${index}`,
+      unit: 's⁻¹',
+      axisLabel: 'Root index',
+      axisUnit: '',
+      axis: Float64Array.of(index),
+      values: Float64Array.of(trace.values[0] ?? 0),
+      ...(trace.imaginaryValues ? { imaginaryValues: Float64Array.of(trace.imaginaryValues[0] ?? 0) } : {}),
+    }]
+  })
+}
+
 async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: Extract<EngineRequest, { type: 'run' }>['ngspiceFourier']): Promise<void> {
   const configuredAnalysis = metadata.settings.analysis
-  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' || configuredAnalysis === 'tf' || configuredAnalysis === 'sens' ? configuredAnalysis : undefined
+  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' || configuredAnalysis === 'tf' || configuredAnalysis === 'sens' || configuredAnalysis === 'pz' ? configuredAnalysis : undefined
   const stdout: string[] = []
   const stderr: string[] = []
   const profileStarted = profileWorker ? performance.now() : 0
@@ -92,7 +117,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
     module.FS.writeFile('/project.cir', runDeck)
-    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'tf' ? 'small-signal transfer-function' : metadata.settings.analysis === 'sens' ? 'sensitivity' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'tf' ? 'small-signal transfer-function' : metadata.settings.analysis === 'sens' ? 'sensitivity' : metadata.settings.analysis === 'pz' ? 'pole-zero' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
     const solverStarted = profileWorker ? performance.now() : 0
     const status = module.callMain(['-b', '/project.cir'])
     if (profileWorker) solverMs = performance.now() - solverStarted
@@ -111,7 +136,10 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
         label: `${trace.label} · ${sweep.label}`,
         sweep: { label: sweep.label, index },
       })))
-      : makeTraces(readRawFileAndRelease(module.FS, '/result.raw'))
+      : (() => {
+        const rawData = readRawFileAndRelease(module.FS, '/result.raw')
+        return analysis === 'pz' && isEmptyPoleZeroRaw(rawData) ? [] : makeTraces(rawData)
+      })()
     const rawTfSettings = metadata.settings.transferFunction
     let tfSettings: { inputSource?: string } | undefined
     try {
@@ -120,7 +148,9 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     } catch { /* Labels fall back when older or external engine clients omit this setting. */ }
     const inputRef = typeof tfSettings?.inputSource === 'string' ? tfSettings.inputSource : 'input source'
     const inputUnit = /^I/i.test(inputRef) ? 'A' : 'V'
-    const traces = analysis === 'sens'
+    const traces = analysis === 'pz'
+      ? labelPoleZeroTraces(rawTraces)
+      : analysis === 'sens'
       ? labelSensitivityTraces(rawTraces, (() => {
         try {
           const rawSettings = metadata.settings.simulation
@@ -137,7 +167,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
         return trace
       })
       : rawTraces
-    if (!traces.length) throw new Error('ngspice completed but produced no voltage or current vectors.')
+    if (!traces.length && analysis !== 'pz') throw new Error('ngspice completed but produced no voltage or current vectors.')
     const measurementTraces = parameterSweep?.length
       ? parameterSweep.map((_, index) => traces.filter((trace) => trace.sweep?.index === index))
       : [traces]
@@ -159,7 +189,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       sourceMap: artifact.sourceMap,
       traces,
       diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics, ...importedMeasurementOutput.diagnostics],
-      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens',
+      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz',
       ...(analysis === 'sens' ? { sensitivityMode: (() => {
         try {
           const rawSettings = metadata.settings.simulation

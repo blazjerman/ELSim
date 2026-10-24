@@ -714,6 +714,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 
   for (const part of project.parts) {
     if (part.kind === 'ground') continue
+    if (project.simulation.analysis === 'pz' && (part.kind === 'source' || part.kind === 'currentSource')
+      && part.ref.toLowerCase() === project.simulation.poleZero?.inputSource.trim().toLowerCase()) continue
     if (!validReference(part)) {
       const message = `${part.ref} has an invalid reference designator for ${part.kind}.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -1010,7 +1012,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period}${cycleCount ? ` ${cycleCount}` : ''})`
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'tf' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : isAcAnalysis ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'tf' || project.simulation.analysis === 'pz' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : isAcAnalysis ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
     }
     else if (part.kind === 'urcLine') {
       const nodes = [0, 1, 2].map((index) => pinNet(connectivity, part, index))
@@ -1785,7 +1787,31 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const source = generatedSheetSourceMap.get(index + 1)
     append(line, source?.sourceId ?? 'hierarchy:generated', source?.role ?? 'model', source ? { assetId: source.assetId, assetLine: source.assetLine, generatedCopy: source.generatedCopy, generatedCopyId: source.generatedCopyId } : {})
   }
-  if (project.simulation.analysis === 'tf') {
+  if (project.simulation.analysis === 'pz') {
+    const settings = project.simulation.poleZero ?? { outputNode: '', inputSource: '', roots: 'both' as const }
+    const outputLabel = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const outputNet = outputLabel ? connectivity.labelNets.get(outputLabel.id) : undefined
+    const inputSource = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
+    const inputPositive = inputSource ? pinNet(connectivity, inputSource, 0) : undefined
+    const inputNegative = inputSource ? pinNet(connectivity, inputSource, 1) : undefined
+    if (!outputLabel || !outputNet || outputNet === '0' || !inputSource || !inputPositive || !inputNegative || inputPositive === 'unconnected' || inputNegative === 'unconnected') {
+      const message = 'Pole-zero analysis needs a labeled non-ground output node and a connected independent voltage or current input source.'
+      append(`* ERROR: ${message}`, 'analysis:pz', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:pz', line: rows.length })
+    } else {
+      // The selected source is removed so it cannot short the PZ input port.
+      // A very weak global shunt keeps source-only input nodes numerically grounded.
+      if (!includeHierarchyProbes || !project.simulation.shuntResistance?.trim()) {
+        const shuntResistance = project.simulation.shuntResistance?.trim() ? componentMagnitude(project.simulation.shuntResistance, 'resistor') : 1e12
+        if (shuntResistance === null || shuntResistance <= 0) {
+          const message = 'Pole-zero analysis needs a positive shunt resistance to keep the source input port grounded.'
+          append(`* ERROR: ${message}`, 'analysis:pz', 'analysis')
+          diagnostics.push({ severity: 'error', message, sourceId: 'analysis:pz', line: rows.length })
+        } else append(`.options rshunt=${shuntResistance}`, 'analysis:pz', 'generated')
+      }
+      append(`.pz ${inputPositive} ${inputNegative} ${outputNet} 0 ${inputSource.kind === 'source' ? 'vol' : 'cur'} ${{ poles: 'pol', zeros: 'zer', both: 'pz' }[settings.roots] ?? 'pz'}`, 'analysis:pz', 'analysis')
+    }
+  } else if (project.simulation.analysis === 'tf') {
     const settings = project.simulation.transferFunction ?? { outputNode: '', inputSource: '' }
     const outputLabel = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     const outputNet = outputLabel ? connectivity.labelNets.get(outputLabel.id) : undefined

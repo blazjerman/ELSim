@@ -297,6 +297,10 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   malformedNoiseRange.plotSettings.panels = [{ id: 'plot-invalid-noise-range', bounds: { x: 0, y: 0, width: 640, height: 360 }, selectedTraceIds: [], ranges: { noise: { start: 0.8, end: 0.2 } } }]
   assert.throws(() => validateProject(malformedNoiseRange), /Plot panel view range is malformed/)
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v8.schema.json'), 'utf8'))
+  assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('sens'))
+  assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('pz'))
+  assert.deepEqual(schema.$defs.simulation.properties.poleZero.properties.roots.enum, ['poles', 'zeros', 'both'])
+  assert.deepEqual(schema.$defs.simulation.properties.sensitivity.properties.mode.enum, ['dc', 'ac'])
   const modelPinPattern = new RegExp(schema.$defs.part.properties.modelPins.items.pattern, 'u')
   for (const pin of ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+', 'GND']) assert.equal(modelPinPattern.test(pin), true, pin)
   for (const pin of ['A B', 'A=B', 'A%B', 'A(B', 'A)B', 'A,B', '[A]', '<A>', 'A~B', '{A}', "A'B", 'A’B', 'A'.repeat(65)]) assert.equal(modelPinPattern.test(pin), false, JSON.stringify(pin))

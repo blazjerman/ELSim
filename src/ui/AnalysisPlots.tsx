@@ -688,6 +688,27 @@ function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColo
   </div>
 }
 
+function PoleZeroView({ traces, selectedIds, onToggle, onExport, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; savedColors: Record<string, string> }) {
+  const visibility = useTraceVisibility(selectedIds, onToggle)
+  const shown = traces.filter((trace) => visibility.visibleIdSet.has(trace.id))
+  const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
+  const colorById = useMemo(() => new Map(traces.map((trace, index) => [trace.id, colors[index % colors.length]])), [traces, colors])
+  const extent = Math.max(1, ...shown.flatMap((trace) => [Math.abs(trace.values[0] ?? 0), Math.abs(trace.imaginaryValues?.[0] ?? 0)])) * 1.12
+  const left = 56, right = 744, top = 18, bottom = 342
+  const xFor = (value: number) => left + (value + extent) / (2 * extent) * (right - left)
+  const yFor = (value: number) => bottom - (value + extent) / (2 * extent) * (bottom - top)
+  return <div className="waveform-view pz-view">
+    <div className="waveform-title"><strong>Pole-zero map</strong><span>{shown.length} roots shown · real and imaginary frequency in rad/s</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={visibility.disabledIdSet} onToggleVisibility={visibility.toggleVisibility} onRemove={visibility.remove} ariaLabel="Pole-zero roots" colorFor={(index) => colors[index % colors.length]}/>
+    <svg className="waveform-chart pz-chart" viewBox="0 0 760 380" role="img" aria-label="Complex pole-zero plane. Horizontal axis is real frequency in radians per second; vertical axis is imaginary frequency in radians per second.">
+      {[-1, -0.5, 0, 0.5, 1].map((tick) => <g key={tick}><line x1={xFor(tick * extent)} x2={xFor(tick * extent)} y1={top} y2={bottom} className={tick === 0 ? 'plot-axis' : 'plot-grid'}/><line x1={left} x2={right} y1={yFor(tick * extent)} y2={yFor(tick * extent)} className={tick === 0 ? 'plot-axis' : 'plot-grid'}/><text x={xFor(tick * extent)} y={bottom + 18} textAnchor="middle" className="plot-tick">{formatEngineeringTick(tick * extent, 'rad/s')}</text><text x={left - 7} y={yFor(tick * extent) + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(tick * extent, 'rad/s')}</text></g>)}
+      {shown.map((trace) => { const real = trace.values[0] ?? 0, imaginary = trace.imaginaryValues?.[0] ?? 0; const zero = trace.id.startsWith('pz:zero:'); return <g key={trace.id} aria-label={`${trace.label}: ${real.toPrecision(5)} ${imaginary < 0 ? '−' : '+'} j${Math.abs(imaginary).toPrecision(5)} rad/s`}><title>{`${trace.label}: ${real.toPrecision(5)} ${imaginary < 0 ? '−' : '+'} j${Math.abs(imaginary).toPrecision(5)} rad/s`}</title>{zero ? <><line x1={xFor(real) - 7} x2={xFor(real) + 7} y1={yFor(imaginary) - 7} y2={yFor(imaginary) + 7} stroke={colorById.get(trace.id)} strokeWidth="2.5"/><line x1={xFor(real) - 7} x2={xFor(real) + 7} y1={yFor(imaginary) + 7} y2={yFor(imaginary) - 7} stroke={colorById.get(trace.id)} strokeWidth="2.5"/></> : <circle cx={xFor(real)} cy={yFor(imaginary)} r="6" fill={colorById.get(trace.id)} stroke="var(--plot-bg, #10151a)" strokeWidth="2"/>}</g>})}
+      <text x={(left + right) / 2} y="375" textAnchor="middle" className="plot-tick">Real (rad/s)</text><text transform={`translate(14 ${(top + bottom) / 2}) rotate(-90)`} textAnchor="middle" className="plot-tick">Imaginary (rad/s)</text>
+    </svg>
+    <div className="op-table-wrap"><table className="op-table"><thead><tr><th>Root</th><th>Real (rad/s)</th><th>Imaginary (rad/s)</th><th>Stability</th></tr></thead><tbody>{shown.map((trace) => { const real = trace.values[0] ?? 0, imaginary = trace.imaginaryValues?.[0] ?? 0; const pole = trace.id.startsWith('pz:pole:'); return <tr key={trace.id}><td><span style={{ color: colorById.get(trace.id) }}>●</span> {trace.label}</td><td>{real.toPrecision(7)}</td><td>{imaginary.toPrecision(7)}</td><td>{pole ? real < -1e-12 ? 'Stable' : real > 1e-12 ? 'Unstable' : 'Marginal' : '—'}</td></tr>})}</tbody></table></div>
+  </div>
+}
+
 function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors, secondCursorValue, onSecondCursorChange }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string>; secondCursorValue?: number; onSecondCursorChange: (value: number | null) => void }) {
   const isNoise = result.analysis === 'noise'
   const isSensitivity = result.analysis === 'sens'
@@ -999,7 +1020,9 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
 
 export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, valueRanges, onValueRangeChange, traceColors = {}, secondCursorValues, onSecondCursorValueChange, onRunNativeFourier }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; valueRanges?: PlotPanel['valueRanges']; onValueRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, PlotValueRange> | undefined) => void; traceColors?: Record<string, string>; secondCursorValues?: PlotPanel['secondCursorValues']; onSecondCursorValueChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', value: number | null) => void; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void }) {
   const cursorChange = (analysis: 'tran' | 'ac' | 'dc' | 'noise') => (value: number | null) => onSecondCursorValueChange(analysis, value)
-  const plot = result.analysis === 'op' || result.analysis === 'tf' || result.analysis === 'sens' && result.sensitivityMode === 'dc'
+  const plot = result.analysis === 'pz'
+    ? <PoleZeroView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors}/>
+    : result.analysis === 'op' || result.analysis === 'tf' || result.analysis === 'sens' && result.sensitivityMode === 'dc'
     ? <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors} transferFunction={result.analysis === 'tf'} sensitivity={result.analysis === 'sens'}/>
     : result.analysis === 'ac'
       ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} valueRanges={valueRanges?.ac} onValueRangeChange={(ranges) => onValueRangeChange('ac', ranges)} onExport={onExport} savedColors={traceColors} secondCursorValue={secondCursorValues?.ac} onSecondCursorChange={cursorChange('ac')}/>

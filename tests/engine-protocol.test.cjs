@@ -100,6 +100,8 @@ test('response consumer rejects malformed or incomplete worker messages', () => 
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, metadata: { ...completedMetadata, modelAssets: [{ id: 'model-1', filename: 'custom.lib', sha256: 'bad' }] } } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'delay', vector: 'v(in)', value: 0.1, unit: 'V' }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'noise', noiseSummaries: [{ outputRms: 1e-8, inputRms: 2e-8, inputUnit: 'A', sweep: { label: 'R1=1k', index: 0 } }] } }), true)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'pz', traces: [] } }), true, 'a valid PZ analysis may have no finite roots for the selected class')
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'tran', traces: [] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'noise', noiseSummaries: [{ outputRms: -1, inputRms: 2e-8, inputUnit: 'A' }] } }), false)
   const ngspiceFourier = { traceId: 'v(out)', vector: 'v(out)', fundamentalFrequency: 1000, thdPercent: 0.01, harmonics: Array.from({ length: 10 }, (_, order) => ({ order, frequency: order * 1000, magnitude: order === 1 ? 5 : 0, phaseDegrees: 0, normalizedMagnitude: order === 1 ? 1 : 0, normalizedPhaseDegrees: 0 })) }
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, ngspiceFourier: [ngspiceFourier] } }), true)

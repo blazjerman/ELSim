@@ -8,7 +8,7 @@ import {
   spiceSheetScalar, spiceSheetTimeMagnitude, spiceSheetValue, spiceValueMagnitude,
 } from './spiceValues'
 
-export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'tfOutput' | 'tfSource' | 'sensOutput' | 'sensMode' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase' | 'trnoise.gaussianRms' | 'trnoise.timeStep' | 'trnoise.flickerExponent' | 'trnoise.flickerAmplitude' | 'trnoise.rtsAmplitude' | 'trnoise.rtsCaptureTime' | 'trnoise.rtsEmissionTime'
+export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'tfOutput' | 'tfSource' | 'sensOutput' | 'sensMode' | 'pzOutput' | 'pzSource' | 'pzRoots' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase' | 'trnoise.gaussianRms' | 'trnoise.timeStep' | 'trnoise.flickerExponent' | 'trnoise.flickerAmplitude' | 'trnoise.rtsAmplitude' | 'trnoise.rtsCaptureTime' | 'trnoise.rtsEmissionTime'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project, connectivity?: Connectivity): AnalysisSettingError[] {
@@ -157,6 +157,16 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     if (!output || resolved.labelNets.get(output.id) === '0') add('tfOutput', 'Choose a labeled, non-ground output node for transfer-function analysis.')
     if (!independentSources.some((part) => part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())) add('tfSource', 'Choose an independent voltage or current input source.')
     if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('tfSource', 'Parameter stepping is not available for transfer-function analysis yet.')
+  } else if (project.simulation.analysis === 'pz') {
+    const settings = project.simulation.poleZero ?? { outputNode: '', inputSource: '', roots: 'both' as const }
+    const resolved = connectivity ?? analyzeConnectivity(project)
+    const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    if (!output || resolved.labelNets.get(output.id) === '0') add('pzOutput', 'Choose a labeled, non-ground output node for pole-zero analysis.')
+    const source = independentSources.find((part) => part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
+    if (!source) add('pzSource', 'Choose an independent voltage or current input source.')
+    else for (const pin of [0, 1]) if (resolved.pinNets.get(`${source.id}:${pin}`) === undefined) add('pzSource', `${source.ref} must have both input terminals connected for pole-zero analysis.`, source.id)
+    if (!['poles', 'zeros', 'both'].includes(settings.roots)) add('pzRoots', 'Choose poles, zeros, or both.')
+    if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('pzRoots', 'Parameter stepping is not available for pole-zero analysis.')
   } else if (project.simulation.analysis === 'sens') {
     const settings = project.simulation.sensitivity ?? { outputNode: '', mode: 'dc' as const }
     const resolved = connectivity ?? analyzeConnectivity(project)
