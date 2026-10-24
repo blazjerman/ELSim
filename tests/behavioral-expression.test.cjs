@@ -87,7 +87,7 @@ test('native ngspice accepts only documented B-source functions and preserves na
   }
   for (const expression of [
     'if(V(in), 1, 0)', 'limit(V(in), 0, 3)', 'mod(V(in), 2)', 'pwrs(V(in), 0.5)',
-    'xor(V(in), V(in))', 'int(V(in))', 'square(V(in))', 'buf(V(in))', 'inv(V(in))',
+    'xor(V(in), V(in))', 'square(V(in))', 'buf(V(in))', 'inv(V(in))',
     'arcsin(V(in))', 'arccos(V(in))', 'atan2(V(in), 1)', 'cbrt(V(in))', 'hypot(V(in), 1)',
     'table(V(in), 0, 0, 1, 1)',
   ]) {
@@ -194,6 +194,11 @@ test('native ngspice B-source functions are accepted only in the ngspice dialect
     assert.equal(translateBehavioralExpression(expression), expression)
     assert.throws(() => parseBehavioralExpression(expression, 'ltspice'), /not supported/)
   }
+  const truncation = 'int(V(in) * 1.5)'
+  assert.deepEqual(parseBehavioralExpression(truncation).references, { nodes: ['in'], differentialNodes: [], components: [] })
+  assert.equal(translateBehavioralExpression(truncation), '(sgn(V(in) * 1.5) * floor(abs(V(in) * 1.5)))')
+  assert.throws(() => parseBehavioralExpression('int(V(in), 0)'), /expects 1/)
+  assert.equal(translateBehavioralExpression('int(V(in))', 'ltspice'), '(sgn(V(in)) * floor(abs(V(in))))')
   assert.throws(() => parseBehavioralExpression('nint(V(in), 0)'), /expects 1/)
   assert.throws(() => parseBehavioralExpression('ternary_fcn(V(in), 1)'), /expects 3/)
 })

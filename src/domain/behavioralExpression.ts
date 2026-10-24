@@ -38,6 +38,7 @@ const ltspiceOnlyFunctions = new Map<string, { min: number; max: number }>([
 
 // These are native ngspice B-source built-ins, not LTspice expression helpers.
 const ngspiceOnlyFunctions = new Map<string, { min: number; max: number }>([
+  ['int', { min: 1, max: 1 }],
   ['nint', { min: 1, max: 1 }],
   ['sgn', { min: 1, max: 1 }],
   ['ternary_fcn', { min: 3, max: 3 }],
@@ -364,18 +365,21 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
   return { references: { nodes: [...nodes], differentialNodes: [...differentialNodes], components: [...components], ...(parameters.size ? { parameters: [...parameters] } : {}) } }
 }
 
-/** Translate supported LTspice B-source helpers to equivalent ngspice expressions. */
+/** Translate ELSim-supported B-source helpers to equivalent ngspice expressions. */
 export function translateBehavioralExpression(expression: string, dialect: BehavioralDialect = 'ngspice'): string {
-  // Native B-source syntax is already ngspice syntax. Preserve it byte-for-byte;
-  // only parsed LTspice expressions need dialect translation.
-  if (dialect === 'ngspice') return expression
-  const translatedBoolean = translateBooleanBinaryOperators(expression, dialect)
+  // Native B-source syntax is already ngspice syntax except `int()`: ngspice
+  // documents truncation toward zero, but the pinned runtime lacks that
+  // function. Translate it to supported floor/ceil primitives below.
+  if (dialect === 'ngspice' && !/\bint\s*\(/i.test(expression)) return expression
+  const translatedBoolean = dialect === 'ltspice' ? translateBooleanBinaryOperators(expression, dialect) : null
   if (translatedBoolean !== null) return translatedBoolean
   expression = translateRemainderOperators(expression)
   expression = translateBooleanInversions(expression, dialect)
   let output = ''
   let cursor = 0
-  const translatableFunctionPattern = /\b(table|if|limit|mod|pwrs|xor|int|square|buf|inv|arccos|arcsin|arctan|atan2|cbrt|hypot|u)\s*\(/ig
+  const translatableFunctionPattern = dialect === 'ngspice'
+    ? /\b(int)\s*\(/ig
+    : /\b(table|if|limit|mod|pwrs|xor|int|square|buf|inv|arccos|arcsin|arctan|atan2|cbrt|hypot|u)\s*\(/ig
   while (cursor < expression.length) {
     translatableFunctionPattern.lastIndex = cursor
     const found = translatableFunctionPattern.exec(expression)

@@ -2393,6 +2393,14 @@ test('behavioral voltage and current sources emit validated B-source expressions
   assert.throws(() => validateProject(project), /unknown node/)
 })
 
+test('native ngspice int() is emitted as truncation toward zero with supported runtime functions', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'native-bsource-int', kind: 'behavioral', ref: 'BINT', value: 'int(V(vin))', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^BINT n\d+ n\d+ V=\{\(sgn\(V\(vin\)\) \* floor\(abs\(V\(vin\)\)\)\)\}$/m)
+})
+
 test('native B-source expressions reject unsupported LTspice function names instead of rewriting them', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'native-bsource-if', kind: 'behavioral', ref: 'B1', value: 'if(V(vin), 5, 0)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
