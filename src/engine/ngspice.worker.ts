@@ -2,6 +2,7 @@
 import { parseRawTraces, rawTraceUnit, readRawFileAndRelease } from './raw'
 import { addResultControl } from './resultControl'
 import { parseNoiseSummaries } from './noiseSummary'
+import { parseNgspiceFourierOutput } from './fourier'
 import { parseImportedMeasurementOutput, parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
 import { isEngineRequest, transferableTraceBuffers, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
@@ -57,7 +58,7 @@ function makeTraces(rawData: string | Uint8Array): Trace[] {
   })
 }
 
-async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = []): Promise<void> {
+async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: Extract<EngineRequest, { type: 'run' }>['ngspiceFourier']): Promise<void> {
   const configuredAnalysis = metadata.settings.analysis
   const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' ? configuredAnalysis : undefined
   const stdout: string[] = []
@@ -85,7 +86,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     }
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.15, message: 'Preparing simulation' } satisfies EngineResponse)
     if (profileWorker) moduleLoadMs = performance.now() - moduleLoadStarted
-    const runDeck = addResultControl(artifact.text, parameterSweep, measurements)
+    const runDeck = addResultControl(artifact.text, parameterSweep, measurements, ngspiceFourier)
     if (needsLtspiceFullDeckTranslation(runDeck)) {
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
@@ -137,6 +138,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
         ...measurementOutput.results.filter((measurement) => !ambiguousProjectMeasurementIds.has(measurement.id.toLowerCase())),
         ...importedMeasurementOutput.results,
       ],
+      ...(ngspiceFourier ? { ngspiceFourier: parseNgspiceFourierOutput(output, ngspiceFourier.fundamentalFrequency, ngspiceFourier.vector, ngspiceFourier.traceId) } : {}),
       ...(analysis === 'noise' ? { noiseSummaries: parseNoiseSummaries(output, /^\s*\.noise\s+\S+\s+I[A-Za-z0-9_]+\b/im.test(artifact.text) ? 'A' : 'V', parameterSweep?.map((sweep) => sweep.label) ?? []) } : {}),
     }
     if (profileWorker) {
@@ -166,6 +168,6 @@ worker.addEventListener('message', (event: MessageEvent<unknown>) => {
     return
   }
   const request = event.data
-  if (request.type === 'run') void run(request.requestId, request.artifact, request.metadata, request.parameterSweep, request.measurements)
+  if (request.type === 'run') void run(request.requestId, request.artifact, request.metadata, request.parameterSweep, request.measurements, request.ngspiceFourier)
   else if (request.type === 'dispose') worker.close()
 })

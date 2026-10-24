@@ -39,6 +39,15 @@ test('result control executes the selected AC and DC analyses instead of the def
   assert.doesNotMatch(dc, /\nrun\n/)
 })
 
+test('result control can request ngspice native Fourier output after transient solve', () => {
+  const netlist = 'V1 in 0 SIN(0 1 1k)\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 5m\n.end'
+  const control = addResultControl(netlist, [], [], { fundamentalFrequency: 1000, traceId: 'v(out)', vector: 'v(out)' })
+  assert.match(control, /tran 1u 5m\nfourier 1000 v\(out\)\nwrite \/result\.raw all/)
+  assert.throws(() => addResultControl(netlist, [], [], { fundamentalFrequency: 1000, traceId: 'v(out)', vector: 'v(out)\nquit' }), /requires a transient run/)
+  assert.match(addResultControl(netlist, [], [], { fundamentalFrequency: 1000, traceId: 'i(@r1[i])', vector: '@r1[i]' }), /fourier 1000 @r1\[i\]/)
+  assert.throws(() => addResultControl(netlist, [{ values: [{ component: 'R1', value: '1e3' }], label: 'R1=1k' }], [], { fundamentalFrequency: 1000, traceId: 'v(out)', vector: 'v(out)' }), /without a parameter sweep/)
+})
+
 test('AC result control avoids unsupported capacitor and inductor branch-current saves', () => {
   const ac = addResultControl('V1 in 0 AC 1\nR1 in out 1k\nL1 out node 1m\nC1 node 0 1u\n.ac dec 20 10 1meg\n.end')
   assert.doesNotMatch(ac, /^\.save\b/m)

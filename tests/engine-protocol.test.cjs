@@ -45,6 +45,11 @@ test('request consumer rejects malformed payloads before engine execution', () =
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'delay', operation: 'delay', vector: 'v(in)', threshold: '0', targetVector: 'v(out)', targetThreshold: 'NaN', edge: 'rise', targetEdge: 'rise' }] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '8m', to: '2m' }] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '-2m' }] }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, ngspiceFourier: { fundamentalFrequency: 1000, traceId: 'v(out)', vector: 'v(out)' } }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, ngspiceFourier: { fundamentalFrequency: 1000, traceId: 'i(@r1[i])', vector: '@r1[i]' } }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, ngspiceFourier: { fundamentalFrequency: 1000, traceId: 'v(out)\nquit', vector: 'v(out)' } }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, ngspiceFourier: { fundamentalFrequency: 1000, traceId: 'i(@r1[i])', vector: 'i(@r1[i])' } }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, ngspiceFourier: { fundamentalFrequency: 0, traceId: 'v(out)', vector: 'v(out)' } }), false)
 })
 
 test('independent worker response producer satisfies response contract', () => {
@@ -91,6 +96,9 @@ test('response consumer rejects malformed or incomplete worker messages', () => 
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'delay', vector: 'v(in)', value: 0.1, unit: 'V' }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'noise', noiseSummaries: [{ outputRms: 1e-8, inputRms: 2e-8, inputUnit: 'A', sweep: { label: 'R1=1k', index: 0 } }] } }), true)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'noise', noiseSummaries: [{ outputRms: -1, inputRms: 2e-8, inputUnit: 'A' }] } }), false)
+  const ngspiceFourier = { traceId: 'v(out)', vector: 'v(out)', fundamentalFrequency: 1000, thdPercent: 0.01, harmonics: Array.from({ length: 10 }, (_, order) => ({ order, frequency: order * 1000, magnitude: order === 1 ? 5 : 0, phaseDegrees: 0, normalizedMagnitude: order === 1 ? 1 : 0, normalizedPhaseDegrees: 0 })) }
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, ngspiceFourier } }), true)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, ngspiceFourier: { ...ngspiceFourier, harmonics: [] } } }), false)
   assert.equal(isEngineResponse({ type: 'unknown', requestId: 'run-1' }), false)
 })
 

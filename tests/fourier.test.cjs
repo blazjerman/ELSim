@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak } = require(path.join(build, 'engine/fourier.js'))
+const { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak, parseNgspiceFourierOutput } = require(path.join(build, 'engine/fourier.js'))
 
 function strongestNonzeroBin(spectrum) {
   let strongest = 1
@@ -147,4 +147,21 @@ test('transient harmonic analysis rejects invalid frequencies and intervals shor
   assert.throws(() => calculateTransientHarmonics({ axis, values }, 0), /positive finite fundamental/)
   assert.throws(() => calculateTransientHarmonics({ axis, values }, 50, { start: 0.05, end: 0.06 }), /at least one full fundamental period/)
   assert.throws(() => calculateTransientHarmonics({ axis, values }, 50, { start: -1, end: 0.06 }), /inside the trace/)
+})
+
+test('ngspice Fourier output parser reads the native table and preserves undefined normalized values', () => {
+  const output = `Fourier analysis for v(out):\n  No. Harmonics: 10, THD: 1.04422e-11 %, Gridsize: 200, Interpolation Degree: 1, No. Periods: 1\n\nHarmonic Frequency   Magnitude   Phase       Norm. Mag   Norm. Phase\n-------- ---------   ---------   -----       ---------   -----------\n 0       0           1           0           0           0          \n 1       1000        2           0           1           0          \n${Array.from({ length: 8 }, (_, index) => ` ${index + 2}       ${(index + 2) * 1000}        0           0           0           0`).join('\n')}\n\nTotal analysis time (seconds) = 0.1`
+  const report = parseNgspiceFourierOutput(output, 1000, 'v(out)')
+  assert.equal(report.traceId, 'v(out)')
+  assert.equal(report.vector, 'v(out)')
+  assert.equal(report.harmonics.length, 10)
+  assert.equal(report.harmonics[1].magnitude, 2)
+  assert.equal(report.thdPercent, 1.04422e-11)
+  const undefinedThd = output.replace('THD: 1.04422e-11', 'THD: -nan').replace('1000        2           0           1', '1000        0           0           -nan')
+  const zero = parseNgspiceFourierOutput(undefinedThd, 1000, 'v(out)')
+  assert.equal(zero.thdPercent, null)
+  assert.equal(zero.harmonics[1].normalizedMagnitude, null)
+  const current = parseNgspiceFourierOutput(output.replaceAll('v(out)', '@r1[i]'), 1000, '@r1[i]', 'i(@r1[i])')
+  assert.equal(current.traceId, 'i(@r1[i])')
+  assert.throws(() => parseNgspiceFourierOutput('missing', 1000, 'v(out)'), /did not return a Fourier table/)
 })

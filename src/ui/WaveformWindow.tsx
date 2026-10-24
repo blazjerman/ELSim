@@ -120,7 +120,7 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
   </section>
 })
 
-export const AdditionalPlotWindow = memo(function AdditionalPlotWindow({ panel, index, title, result, onUpdate, onClose, onActivate, onToggleTrace, onExport, onRangeChange }: {
+export const AdditionalPlotWindow = memo(function AdditionalPlotWindow({ panel, index, title, result, onUpdate, onClose, onActivate, onToggleTrace, onExport, onRangeChange, onRunNativeFourier }: {
   panel: PlotPanel
   index: number
   title: string
@@ -131,6 +131,7 @@ export const AdditionalPlotWindow = memo(function AdditionalPlotWindow({ panel, 
   onToggleTrace: (panelId: string, traceId: string) => void
   onExport: (traceIds: string[]) => void
   onRangeChange: (panelId: string, analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void
+  onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void
 }) {
   const onBoundsChange = useCallback((bounds: PlotPanel['bounds']) => onUpdate(panel.id, (current) => ({ ...current, bounds })), [onUpdate, panel.id])
   const close = useCallback(() => onClose(panel.id), [onClose, panel.id])
@@ -151,6 +152,6 @@ export const AdditionalPlotWindow = memo(function AdditionalPlotWindow({ panel, 
     return { ...current, secondCursorValues: Object.keys(secondCursorValues).length ? secondCursorValues : undefined }
   }), [onUpdate, panel.id])
   return <FloatingPlotPanel panel={panel} index={index} title={title} onBoundsChange={onBoundsChange} onClose={close} onActivate={activate}>
-    {result ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={result} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={toggleTrace} onExport={exportTraces} ranges={panel.ranges} onRangeChange={changeRange} valueRanges={panel.valueRanges} onValueRangeChange={changeValueRanges} secondCursorValues={panel.secondCursorValues} onSecondCursorValueChange={changeSecondCursor}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
+    {result ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={result} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={toggleTrace} onExport={exportTraces} ranges={panel.ranges} onRangeChange={changeRange} valueRanges={panel.valueRanges} onValueRangeChange={changeValueRanges} secondCursorValues={panel.secondCursorValues} onSecondCursorValueChange={changeSecondCursor} onRunNativeFourier={onRunNativeFourier}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
   </FloatingPlotPanel>
 })

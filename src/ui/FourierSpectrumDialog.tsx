@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { X } from 'lucide-react'
 import { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak } from '../engine/fourier'
 import type { SpectrumWindow } from '../engine/fourier'
+import type { NgspiceFourierAnalysis } from '../engine/fourier'
 import type { Trace } from '../engine/contract'
 import { formatTime } from './formatTime'
 
@@ -31,7 +32,7 @@ function amplitudeLabel(value: number): string {
   return `${value.toFixed(1)} dB`
 }
 
-export default function FourierSpectrumDialog({ traces, initialRange, onClose }: { traces: Trace[]; initialRange: { start: number; end: number }; onClose: () => void }) {
+export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFourier, onRunNativeFourier, onClose }: { traces: Trace[]; initialRange: { start: number; end: number }; ngspiceFourier?: NgspiceFourierAnalysis; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void; onClose: () => void }) {
   const [traceId, setTraceId] = useState(traces[0]?.id ?? '')
   const [start, setStart] = useState(initialRange.start)
   const [end, setEnd] = useState(initialRange.end)
@@ -84,6 +85,11 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
       return { result: null, error: error instanceof Error ? error.message : 'Could not calculate harmonics.' }
     }
   }, [trace, fundamentalFrequency, start, end])
+  const nativeVectorExpression = trace?.id.match(/^i\((@[^()]+\[(?:i|id|ic|ib|ie|ig|is|current)\])\)$/i)?.[1] ?? trace?.id
+  const nativeVectorSupported = Boolean(nativeVectorExpression && /^(?:[vi]\([A-Za-z0-9_.$!#-]+\)|@[A-Za-z0-9_.$!#-]+\[(?:i|id|ic|ib|ie|ig|is|current)\])$/i.test(nativeVectorExpression))
+  const nativeFrequency = Number(fundamentalFrequency)
+  const currentNativeFourier = ngspiceFourier && ngspiceFourier.traceId.toLowerCase() === trace?.id.toLowerCase()
+    && ngspiceFourier.fundamentalFrequency === Number(fundamentalFrequency) ? ngspiceFourier : undefined
   const cursorBinA = useMemo(() => {
     if (!spectrum) return 0
     return nearestFrequencyBin(spectrum, cursorA ?? plot?.peak.frequency ?? spectrum.frequencies[1])
@@ -168,6 +174,16 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
           {harmonicCalculation.result && <>
             <div className="spectrum-summary"><strong>THD: {harmonicCalculation.result.thdPercent.toPrecision(4)}%</strong><span>DC: {harmonicCalculation.result.dc.toPrecision(5)} {trace.unit}</span><span>Analyzed final cycle: {formatTime(end - 1 / harmonicCalculation.result.fundamentalFrequency, trace.axis.at(-1) ?? end)} to {formatTime(end, trace.axis.at(-1) ?? end)}</span></div>
             <div className="harmonic-table-wrap"><table className="harmonic-table"><thead><tr><th>Harmonic</th><th>Frequency</th><th>Peak amplitude</th><th>Relative to fundamental</th><th>Phase</th></tr></thead><tbody>{harmonicCalculation.result.components.map((component) => <tr key={component.order}><th>{component.order === 1 ? 'Fundamental' : `H${component.order}`}</th><td>{frequencyLabel(component.frequency)}</td><td>{component.peakAmplitude.toPrecision(5)} {trace.unit}</td><td>{harmonicCalculation.result!.components[0].peakAmplitude > 0 ? `${(component.peakAmplitude / harmonicCalculation.result!.components[0].peakAmplitude * 100).toPrecision(4)}%` : '—'}</td><td>{component.phaseDegrees.toFixed(2)}°</td></tr>)}</tbody></table></div>
+          </>}
+        </details>
+        <details className="harmonic-analysis native-fourier-analysis" open>
+          <summary>Native ngspice Fourier analysis</summary>
+          <p>Runs ngspice’s <code>fourier</code> command on the selected transient vector. Ngspice analyzes the final fundamental period and reports its native harmonic table and THD.</p>
+          <button className="plot-export" type="button" disabled={!nativeVectorSupported || !Number.isFinite(nativeFrequency) || nativeFrequency <= 0} onClick={() => { if (trace && nativeVectorExpression) onRunNativeFourier(nativeFrequency, trace.id, nativeVectorExpression) }}>{currentNativeFourier ? 'Run native Fourier again' : 'Run ngspice Fourier'}</button>
+          {!nativeVectorSupported && <small className="field-hint">This trace name is not a simple ngspice voltage/current vector, so the native command is unavailable.</small>}
+          {currentNativeFourier && <>
+            <div className="spectrum-summary"><strong>ngspice THD: {currentNativeFourier.thdPercent === null ? 'undefined (zero fundamental)' : `${currentNativeFourier.thdPercent.toPrecision(5)}%`}</strong><span>{currentNativeFourier.vector} · {frequencyLabel(currentNativeFourier.fundamentalFrequency)} fundamental</span></div>
+            <div className="harmonic-table-wrap"><table className="harmonic-table"><thead><tr><th>Harmonic</th><th>Frequency</th><th>Magnitude</th><th>Phase</th><th>Normalized magnitude</th></tr></thead><tbody>{currentNativeFourier.harmonics.map((harmonic) => <tr key={harmonic.order}><th>{harmonic.order === 0 ? 'DC' : harmonic.order === 1 ? 'Fundamental' : `H${harmonic.order}`}</th><td>{frequencyLabel(harmonic.frequency)}</td><td>{harmonic.magnitude.toPrecision(6)} {trace.unit}</td><td>{harmonic.phaseDegrees.toPrecision(5)}°</td><td>{harmonic.normalizedMagnitude === null ? '—' : `${harmonic.normalizedMagnitude.toPrecision(5)}×`}</td></tr>)}</tbody></table></div>
           </>}
         </details>
       </>}

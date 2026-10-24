@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange, type PlotValueRange } from '../domain/project'
 import { extremaIndices, plotPolylinePoints, valueRangeAtIndices } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
+import type { NgspiceFourierAnalysis } from '../engine/fourier'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { formatTime } from './formatTime'
 import { getAnalysisCursor, setAnalysisCursor, useAnalysisCursor } from './analysisCursor'
@@ -456,7 +457,7 @@ function symmetricZeroRange(range: [number, number] | undefined): [number, numbe
   return [-padded, padded]
 }
 
-function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors, secondCursorValue, onSecondCursorChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string>; secondCursorValue?: number; onSecondCursorChange: (value: number | null) => void }) {
+function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors, secondCursorValue, onSecondCursorChange, ngspiceFourier, onRunNativeFourier }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string>; secondCursorValue?: number; onSecondCursorChange: (value: number | null) => void; ngspiceFourier?: NgspiceFourierAnalysis; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void }) {
   const [spectrumOpen, setSpectrumOpen] = useState(false)
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   const [activeCursor, setActiveCursor] = useState<'A' | 'B'>('A')
@@ -588,7 +589,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={colorFor}/>
     <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors} keyboardAnnouncement={keyboardAnnouncement} secondCursorIndex={secondCursorIndex}/>
-    {spectrumOpen && <Suspense fallback={<div className="waveform-empty" role="status">Loading FFT spectrum…</div>}><FourierSpectrumDialog traces={shown.filter((trace) => trace.axis.length >= 32)} initialRange={{ start: minTime, end: maxTime }} onClose={() => setSpectrumOpen(false)}/></Suspense>}
+    {spectrumOpen && <Suspense fallback={<div className="waveform-empty" role="status">Loading FFT spectrum…</div>}><FourierSpectrumDialog traces={shown.filter((trace) => trace.axis.length >= 32)} initialRange={{ start: minTime, end: maxTime }} ngspiceFourier={ngspiceFourier} onRunNativeFourier={onRunNativeFourier} onClose={() => setSpectrumOpen(false)}/></Suspense>}
   </div>
 }
 
@@ -989,7 +990,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   </div>
 }
 
-export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, valueRanges, onValueRangeChange, traceColors = {}, secondCursorValues, onSecondCursorValueChange }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; valueRanges?: PlotPanel['valueRanges']; onValueRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, PlotValueRange> | undefined) => void; traceColors?: Record<string, string>; secondCursorValues?: PlotPanel['secondCursorValues']; onSecondCursorValueChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', value: number | null) => void }) {
+export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, valueRanges, onValueRangeChange, traceColors = {}, secondCursorValues, onSecondCursorValueChange, onRunNativeFourier }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; valueRanges?: PlotPanel['valueRanges']; onValueRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, PlotValueRange> | undefined) => void; traceColors?: Record<string, string>; secondCursorValues?: PlotPanel['secondCursorValues']; onSecondCursorValueChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', value: number | null) => void; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void }) {
   const cursorChange = (analysis: 'tran' | 'ac' | 'dc' | 'noise') => (value: number | null) => onSecondCursorValueChange(analysis, value)
   const plot = result.analysis === 'op'
     ? <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors}/>
@@ -999,7 +1000,7 @@ export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onTogg
         ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.noise} onRangeChange={(range) => onRangeChange('noise', range)} valueRanges={valueRanges?.noise} onValueRangeChange={(ranges) => onValueRangeChange('noise', ranges)} onExport={onExport} savedColors={traceColors} secondCursorValue={secondCursorValues?.noise} onSecondCursorChange={cursorChange('noise')}/>
         : result.analysis === 'dc'
           ? <DcSweepPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} valueRanges={valueRanges?.dc} onValueRangeChange={(ranges) => onValueRangeChange('dc', ranges)} onExport={onExport} savedColors={traceColors} secondCursorValue={secondCursorValues?.dc} onSecondCursorChange={cursorChange('dc')}/>
-          : <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} valueRanges={valueRanges?.tran} onValueRangeChange={(ranges) => onValueRangeChange('tran', ranges)} onExport={onExport} savedColors={traceColors} secondCursorValue={secondCursorValues?.tran} onSecondCursorChange={cursorChange('tran')}/>
+          : <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} valueRanges={valueRanges?.tran} onValueRangeChange={(ranges) => onValueRangeChange('tran', ranges)} onExport={onExport} savedColors={traceColors} secondCursorValue={secondCursorValues?.tran} onSecondCursorChange={cursorChange('tran')} ngspiceFourier={result.ngspiceFourier} onRunNativeFourier={onRunNativeFourier}/>
   return <>{plot}<MeasurementResults measurements={result.measurements}/></>
 })
 

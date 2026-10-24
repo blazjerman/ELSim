@@ -2,6 +2,7 @@ import { timeMagnitude } from '../domain/componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from '../domain/measurementSettings'
 import { isValidSpiceModelName } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression } from '../domain/behavioralExpression'
+import type { NgspiceFourierAnalysis } from './fourier'
 
 export type EngineState = 'not-integrated' | 'loading' | 'ready' | 'running' | 'error'
 
@@ -73,6 +74,20 @@ export type SimulationResult = {
   analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'
   measurements: MeasurementResult[]
   noiseSummaries?: NoiseSummary[]
+  ngspiceFourier?: NgspiceFourierAnalysis
+}
+
+function isNgspiceFourierAnalysis(value: unknown): value is NgspiceFourierAnalysis {
+  return isRecord(value) && typeof value.traceId === 'string' && value.traceId.length > 0 && typeof value.vector === 'string' && value.vector.length > 0
+    && typeof value.fundamentalFrequency === 'number' && Number.isFinite(value.fundamentalFrequency) && value.fundamentalFrequency > 0
+    && (value.thdPercent === null || (typeof value.thdPercent === 'number' && Number.isFinite(value.thdPercent) && value.thdPercent >= 0))
+    && Array.isArray(value.harmonics) && value.harmonics.length === 10
+    && value.harmonics.every((harmonic, index) => isRecord(harmonic) && harmonic.order === index
+      && typeof harmonic.frequency === 'number' && Number.isFinite(harmonic.frequency) && harmonic.frequency >= 0
+      && typeof harmonic.magnitude === 'number' && Number.isFinite(harmonic.magnitude) && harmonic.magnitude >= 0
+      && typeof harmonic.phaseDegrees === 'number' && Number.isFinite(harmonic.phaseDegrees)
+      && (harmonic.normalizedMagnitude === null || (typeof harmonic.normalizedMagnitude === 'number' && Number.isFinite(harmonic.normalizedMagnitude)))
+      && (harmonic.normalizedPhaseDegrees === null || (typeof harmonic.normalizedPhaseDegrees === 'number' && Number.isFinite(harmonic.normalizedPhaseDegrees))))
 }
 
 function isNoiseSummary(value: unknown): value is NoiseSummary {
@@ -103,7 +118,7 @@ export interface SimulationEngine {
 
 export type EngineRequest =
   | { type: 'initialize'; requestId: string }
-  | { type: 'run'; requestId: string; artifact: NetlistArtifact; metadata: Omit<RunMetadata, 'completedAt'>; parameterSweep?: import('./sweep').ParameterSweepRun[]; measurements?: import('../domain/project').TransientMeasurement[] }
+  | { type: 'run'; requestId: string; artifact: NetlistArtifact; metadata: Omit<RunMetadata, 'completedAt'>; parameterSweep?: import('./sweep').ParameterSweepRun[]; measurements?: import('../domain/project').TransientMeasurement[]; ngspiceFourier?: { fundamentalFrequency: number; traceId: string; vector: string } }
   | { type: 'cancel'; requestId: string; runId: string }
   | { type: 'dispose'; requestId: string }
 
@@ -350,6 +365,7 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
       || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
       || !['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))
       || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)
+      || (result.ngspiceFourier !== undefined && !isNgspiceFourierAnalysis(result.ngspiceFourier))
       || (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary)))) return false
     const validatedVectors = new WeakSet<Float64Array>()
     const validatedAxes = new WeakSet<Float64Array>()
@@ -396,6 +412,7 @@ export function engineResponseIssue(value: unknown): string {
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
     if (!['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))) return 'analysis type is invalid'
     if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'
+    if (result.ngspiceFourier !== undefined && !isNgspiceFourierAnalysis(result.ngspiceFourier)) return 'ngspice Fourier results are malformed'
     if (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary))) return 'integrated noise results are malformed'
     return 'result message is incomplete'
   }
@@ -415,6 +432,7 @@ export function isEngineRequest(value: unknown): value is EngineRequest {
   if (!Object.values(metadata.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))) return false
   if (value.parameterSweep !== undefined && (!Array.isArray(value.parameterSweep) || value.parameterSweep.length < 1 || value.parameterSweep.length > 10 || !value.parameterSweep.every(isParameterSweepRun))) return false
   if (value.measurements !== undefined && (!Array.isArray(value.measurements) || value.measurements.length > 12 || !value.measurements.every(isTransientMeasurement))) return false
+  if (value.ngspiceFourier !== undefined && (!isRecord(value.ngspiceFourier) || typeof value.ngspiceFourier.fundamentalFrequency !== 'number' || !Number.isFinite(value.ngspiceFourier.fundamentalFrequency) || value.ngspiceFourier.fundamentalFrequency <= 0 || typeof value.ngspiceFourier.traceId !== 'string' || !/^[vi]\([@A-Za-z0-9_.$!#\[\]-]+\)$/i.test(value.ngspiceFourier.traceId) || typeof value.ngspiceFourier.vector !== 'string' || !/^(?:[vi]\([A-Za-z0-9_.$!#-]+\)|@[A-Za-z0-9_.$!#-]+\[(?:i|id|ic|ib|ie|ig|is|current)\])$/i.test(value.ngspiceFourier.vector))) return false
   return true
 }
 

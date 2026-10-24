@@ -2399,7 +2399,7 @@ export default function App() {
     setView((view) => ({ ...view, panX: 380 - visiblePart!.x, panY: 300 - visiblePart!.y }))
     return visiblePart
   }
-  const startSimulation = async () => {
+  const startSimulation = async (fourierRequest?: { fundamentalFrequency: number; traceId: string; vector: string }) => {
     setPlaybackRunning(false)
     const firstSettingError = validateAnalysisSettings(projectRef.current)[0]
     if (firstSettingError) {
@@ -2467,6 +2467,10 @@ export default function App() {
       parameterSweep = prepareParameterSweep(snapshot)
     }
     catch (error) { setRunState('error'); setNotice(error instanceof Error ? error.message : 'Could not prepare parameter sweep.'); return }
+    if (fourierRequest && (snapshot.simulation.analysis !== 'tran' || parameterSweep.length)) {
+      setNotice('Native ngspice Fourier analysis needs a transient run without parameter stepping.')
+      return
+    }
     setPlaybackRunning(false)
     setRunState('loading')
     setNotice('Preparing simulation')
@@ -2759,7 +2763,7 @@ export default function App() {
       if (activeWorkerRef.current === worker) activeWorkerRef.current = null
     }
     try {
-      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${artifact.text}\n${JSON.stringify(parameterSweep)}`))
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${artifact.text}\n${JSON.stringify(parameterSweep)}\n${JSON.stringify(fourierRequest ?? null)}`))
       if (activeWorkerRef.current !== worker) return
       const netlistHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
       setNotice('Loading ngspice WebAssembly')
@@ -2773,6 +2777,7 @@ export default function App() {
         },
         ...(parameterSweep.length ? { parameterSweep } : {}),
         ...(measurements.length ? { measurements } : {}),
+        ...(fourierRequest ? { ngspiceFourier: fourierRequest } : {}),
       })
     } catch (error) {
       worker.terminate()
@@ -3167,7 +3172,7 @@ export default function App() {
       <div className="menu-group"><details ref={animationTuningRef} className={`animation-tuning${animationTuningAvailable ? '' : ' is-disabled'}`}><summary aria-label="Current animation settings" aria-disabled={!animationTuningAvailable} tabIndex={animationTuningAvailable ? 0 : -1} title={animationTuningAvailable ? 'Current animation options' : 'Run a transient or operating-point simulation to enable animation settings'} onClick={(event) => { if (!animationTuningAvailable) event.preventDefault() }}><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} disabled={!animationTuningAvailable} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Dot size <output>{currentDotSize}</output><input type="range" min="4" max="16" step="0.5" aria-label="Current dot size" value={currentDotSize} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentDotSize(Number(event.target.value))}/></label><label>Dot spacing <output>{currentDotSpacing}</output><input type="range" min="10" max="30" step="0.5" aria-label="Current dot spacing" value={currentDotSpacing} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentDotSpacing(Number(event.target.value))}/></label><small>Dot motion follows solved current; size sets dot diameter and spacing sets the interval.</small></div></details></div>
       <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={openGeneratedNetlist}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton><IconButton title={simulationResult ? 'Download simulation run report' : 'Run a simulation to create a report'} aria-label="Download simulation run report" onClick={downloadRunReport} disabled={!simulationResult}><Download size={14}/></IconButton></div>
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit {electricalIssues && <span>{electricalIssues.length}</span>}</button>
-      <button ref={runButtonRef} className="run-button" onClick={startSimulation} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
+      <button ref={runButtonRef} className="run-button" onClick={() => { void startSimulation() }} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
       {simulationResultStale && <span className="result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</span>}
     </div>
@@ -3323,8 +3328,8 @@ export default function App() {
               {lessonNextStep ? <div className="example-lesson-next-step">
                 <span className="eyebrow">TRY THIS NEXT</span>
                 <p>{lessonNextStep}</p>
-                {simulationResultStale && <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : 'Run this circuit again'}</button>}
-              </div> : <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : simulationResultStale ? 'Run this circuit again' : 'Run this circuit'}</button>}
+                {simulationResultStale && <button className="example-lesson-run" onClick={() => { void startSimulation() }} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : 'Run this circuit again'}</button>}
+              </div> : <button className="example-lesson-run" onClick={() => { void startSimulation() }} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : simulationResultStale ? 'Run this circuit again' : 'Run this circuit'}</button>}
               {startHereProgress && <div className="example-path-progress">
                 <span>START HERE · STEP {startHereProgress.step} OF {startHereProgress.total}</span>
                 {startHereProgress.next
@@ -3338,7 +3343,7 @@ export default function App() {
         <Suspense fallback={<div className="schematic-loading" role="status">Loading schematic editor…</div>}><MemoizedSchematic project={schematicProject} documentSessionId={projectSessionId} partsById={partsById} labelsById={labelsById} symbolsById={symbolsById} deviceModels={importedDeviceModels} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={schematicSetProject} commitView={commitView} recordViewDraft={schematicRecordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={schematicPlaceComponent} onClearPendingComponent={schematicClearPending} setNotice={setNotice} beginEdit={schematicBeginEdit} endEdit={schematicEndEdit} onProbe={schematicProbe} onProbeVoltage={schematicProbeVoltage} onSwitchChanged={schematicSwitchChanged} simulationResult={simulationResult} simulationResultIsCurrent={(simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt} currentAnimationEnabled={currentAnimationEnabled} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/></Suspense>
       </main>
 
-      {additionalPlotPanels.map((panel, index) => <Suspense key={panel.id} fallback={null}><AdditionalPlotWindow panel={panel} index={index} title={waveformWindowTitle(panel, index)} result={simulationResult} onUpdate={updatePlotPanel} onClose={closePlotPanel} onActivate={activatePlotPanel} onToggleTrace={togglePlotPanelTrace} onExport={exportWaveformCsv} onRangeChange={changePlotPanelRange}/></Suspense>)}
+      {additionalPlotPanels.map((panel, index) => <Suspense key={panel.id} fallback={null}><AdditionalPlotWindow panel={panel} index={index} title={waveformWindowTitle(panel, index)} result={simulationResult} onUpdate={updatePlotPanel} onClose={closePlotPanel} onActivate={activatePlotPanel} onToggleTrace={togglePlotPanelTrace} onExport={exportWaveformCsv} onRangeChange={changePlotPanelRange} onRunNativeFourier={(fundamentalFrequency, traceId, vector) => { void startSimulation({ fundamentalFrequency, traceId, vector }) }}/></Suspense>)}
 
       <aside aria-label="Properties inspector" className={`inspector-panel${mobilePane === 'properties' ? ' mobile-active' : ''}`}>
         <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div></div>
