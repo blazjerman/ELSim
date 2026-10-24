@@ -1,6 +1,6 @@
 import { componentMagnitude } from '../domain/componentValue'
 
-type Analysis = 'tran' | 'op' | 'ac' | 'dc' | 'noise'
+type Analysis = 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf'
 type NumericSettingProps = {
   label: string
   ariaLabel: string

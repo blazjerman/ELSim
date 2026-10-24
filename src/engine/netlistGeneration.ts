@@ -1009,7 +1009,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period}${cycleCount ? ` ${cycleCount}` : ''})`
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'tf' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
     }
     else if (part.kind === 'urcLine') {
       const nodes = [0, 1, 2].map((index) => pinNet(connectivity, part, index))
@@ -1784,7 +1784,17 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const source = generatedSheetSourceMap.get(index + 1)
     append(line, source?.sourceId ?? 'hierarchy:generated', source?.role ?? 'model', source ? { assetId: source.assetId, assetLine: source.assetLine, generatedCopy: source.generatedCopy, generatedCopyId: source.generatedCopyId } : {})
   }
-  if (project.simulation.analysis === 'op') {
+  if (project.simulation.analysis === 'tf') {
+    const settings = project.simulation.transferFunction ?? { outputNode: '', inputSource: '' }
+    const outputLabel = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const outputNet = outputLabel ? connectivity.labelNets.get(outputLabel.id) : undefined
+    const inputSource = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
+    if (!outputLabel || !outputNet || outputNet === '0' || !inputSource) {
+      const message = 'Transfer-function analysis needs a labeled non-ground output node and an existing independent voltage or current input source.'
+      append(`* ERROR: ${message}`, 'analysis:tf', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tf', line: rows.length })
+    } else append(`.tf V(${outputNet}) ${inputSource.ref}`, 'analysis:tf', 'analysis')
+  } else if (project.simulation.analysis === 'op') {
     append('.op', 'analysis:op', 'analysis')
   } else if (project.simulation.analysis === 'ac') {
     const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }

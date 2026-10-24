@@ -2425,6 +2425,18 @@ test('DC operating point emits steady DC source values and no transient directiv
   assert.deepEqual(artifact.sourceMap.find((entry) => entry.sourceId === 'analysis:op'), { line: artifact.text.split('\n').indexOf('.op') + 1, sourceId: 'analysis:op', role: 'analysis' })
 })
 
+test('transfer-function analysis emits the selected output and input source', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'tf'
+  project.simulation.transferFunction = { outputNode: 'vout', inputSource: 'V1' }
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 DC 5$/m)
+  assert.match(artifact.text, /^\.tf V\(vout\) V1$/m)
+  assert.doesNotMatch(artifact.text, /^\.tran\b|^\.op$/m)
+  assert.deepEqual(artifact.sourceMap.find((entry) => entry.sourceId === 'analysis:tf'), { line: artifact.text.split('\n').findIndex((line) => line.startsWith('.tf ')) + 1, sourceId: 'analysis:tf', role: 'analysis' })
+})
+
 test('AC analysis emits small-signal source and validated logarithmic sweep', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'

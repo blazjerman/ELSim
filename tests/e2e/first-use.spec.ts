@@ -2732,6 +2732,25 @@ test('first circuit journey edits the RC starter and inspects V(vout) without op
   expect(elapsedMs, 'First-run journey should take under five minutes including load and solve').toBeLessThan(5 * 60 * 1000)
 })
 
+test('transfer-function analysis runs in browser ngspice and reports gain and impedances', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByLabel('Analysis type').first().selectOption('tf')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await expect(page.getByLabel('Output node')).toBeVisible()
+  await page.getByLabel('Output node').selectOption('vout')
+  await page.getByLabel('Input source').selectOption('V1')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const plot = page.locator('.plot-window').first()
+  await expect(plot).toBeVisible()
+  await expect(plot.locator('.waveform-title')).toContainText('Small-signal transfer function')
+  await expect(plot.locator('.op-table')).toContainText('DC transfer gain')
+  await expect(plot.locator('.op-table')).toContainText('Output impedance')
+  await expect(plot.locator('.op-table')).toContainText('Input impedance at V1')
+})
+
 test('transient FFT dialog supports window selection and time intervals', { tag: ['@ngspice', '@engine-smoke'], timeout: 90_000 }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])

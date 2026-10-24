@@ -12,7 +12,7 @@ export type ParsedRawFile = {
   axisUnit: string
   axisVector: string
   isComplex: boolean
-  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'
+  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf'
   axis: Float64Array
   variables: RawVariable[]
 }
@@ -102,14 +102,15 @@ export function parseAsciiRawFile(text: string, tracesOnly = false): ParsedRawFi
   const isDisplayableTrace = tracesOnly ? createTraceVariablePredicate(names) : undefined
   const hasTimeAxis = variableRecords[0]?.name.toLowerCase() === 'time'
   const isOperatingPoint = /operating point/i.test(plotName)
+  const isTransferFunction = /transfer function/i.test(plotName)
   const isFrequency = /ac analysis/i.test(plotName)
   const isNoise = /noise spectral density/i.test(plotName)
   const isDcSweep = /dc transfer characteristic/i.test(plotName)
-  if (!hasTimeAxis && !isOperatingPoint && !isFrequency && !isDcSweep && !isNoise) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
+  if (!hasTimeAxis && !isOperatingPoint && !isTransferFunction && !isFrequency && !isDcSweep && !isNoise) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
   if (isComplex && !isFrequency) throw new Error(`Complex ngspice raw data is unsupported for ${plotName}.`)
   if (isFrequency && !isComplex) throw new Error('ngspice AC analysis must contain complex frequency-domain vectors.')
-  if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
-  const variables = variableRecords.map((variable, index) => tracesOnly && (!(isOperatingPoint || index > 0) || !isDisplayableTrace!(variable.name))
+  if ((isOperatingPoint || isTransferFunction) && pointCount !== 1) throw new Error(`ngspice ${isTransferFunction ? 'transfer-function' : 'operating-point'} raw data must contain exactly one sample.`)
+  const variables = variableRecords.map((variable, index) => tracesOnly && (!(isOperatingPoint || isTransferFunction || index > 0) || !isDisplayableTrace!(variable.name))
     ? undefined
     : { ...variable, values: new Float64Array(pointCount), ...(isComplex ? { imaginaryValues: new Float64Array(pointCount) } : {}) })
   const axis = new Float64Array(pointCount)
@@ -181,12 +182,12 @@ export function parseAsciiRawFile(text: string, tracesOnly = false): ParsedRawFi
     }
   }
   const axisVector = isDcSweep ? variableRecords[0].name : ''
-  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise ? 'Frequency' : isDcSweep ? axisVector : 'Operating point'
+  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise ? 'Frequency' : isDcSweep ? axisVector : isTransferFunction ? 'Transfer function' : 'Operating point'
   const sweepType = variableRecords[0].type.toLowerCase()
   const axisUnit = hasTimeAxis ? 's' : isFrequency || isNoise ? 'Hz' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
   if (isDcSweep && variables[0]) variables[0].values.set(axis)
   const retainedVariables = variables.filter((variable): variable is RawVariable => variable !== undefined)
-  return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : 'op', axis, variables: tracesOnly ? retainedVariables : retainedVariables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
+  return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : isTransferFunction ? 'tf' : 'op', axis, variables: tracesOnly ? retainedVariables : retainedVariables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
 }
 
 const binaryMarker = [66, 105, 110, 97, 114, 121, 58] // Binary:
@@ -230,14 +231,15 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
   const isDisplayableTrace = tracesOnly ? createTraceVariablePredicate(names) : undefined
   const hasTimeAxis = variableRecords[0]?.name.toLowerCase() === 'time'
   const isOperatingPoint = /operating point/i.test(plotName)
+  const isTransferFunction = /transfer function/i.test(plotName)
   const isFrequency = /ac analysis/i.test(plotName)
   const isNoise = /noise spectral density/i.test(plotName)
   const isDcSweep = /dc transfer characteristic/i.test(plotName)
-  if (!hasTimeAxis && !isOperatingPoint && !isFrequency && !isDcSweep && !isNoise) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
+  if (!hasTimeAxis && !isOperatingPoint && !isTransferFunction && !isFrequency && !isDcSweep && !isNoise) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
   if (isComplex && !isFrequency) throw new Error(`Complex ngspice raw data is unsupported for ${plotName}.`)
   if (isFrequency && !isComplex) throw new Error('ngspice AC analysis must contain complex frequency-domain vectors.')
-  if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
-  const isAxisVariable = (index: number) => index === 0 && !isOperatingPoint
+  if ((isOperatingPoint || isTransferFunction) && pointCount !== 1) throw new Error(`ngspice ${isTransferFunction ? 'transfer-function' : 'operating-point'} raw data must contain exactly one sample.`)
+  const isAxisVariable = (index: number) => index === 0 && !isOperatingPoint && !isTransferFunction
   const displayableTraces = tracesOnly ? variableRecords.map((variable, index) => !isAxisVariable(index) && isDisplayableTrace!(variable.name)) : undefined
   const hasHiddenVectors = displayableTraces?.some((displayable, index) => !isAxisVariable(index) && !displayable) ?? false
   const variables = variableRecords.map((variable, index) => tracesOnly && !displayableTraces![index]
@@ -254,9 +256,9 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
     const variableStrideBytes = (isComplex ? 2 : 1) * Float64Array.BYTES_PER_ELEMENT
     for (let point = 0; point < pointCount; point += 1) {
       const pointOffset = point * pointStrideBytes
-      if (!isOperatingPoint) axis[point] = view.getFloat64(pointOffset, true)
+      if (!isOperatingPoint && !isTransferFunction) axis[point] = view.getFloat64(pointOffset, true)
       for (const { index, variable } of retainedVariables) {
-        if (index === 0 && !isOperatingPoint) continue
+        if (index === 0 && !isOperatingPoint && !isTransferFunction) continue
         const valueOffset = pointOffset + index * variableStrideBytes
         variable.values[point] = view.getFloat64(valueOffset, true)
         if (isComplex) variable.imaginaryValues![point] = view.getFloat64(valueOffset + Float64Array.BYTES_PER_ELEMENT, true)
@@ -268,19 +270,19 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
         const valueIndex = (point * valuesPerPoint) + variable * (isComplex ? 2 : 1)
         const valueOffset = valueIndex * Float64Array.BYTES_PER_ELEMENT
         const value = view.getFloat64(valueOffset, true)
-        if (variable === 0 && !isOperatingPoint) axis[point] = value
+        if (variable === 0 && !isOperatingPoint && !isTransferFunction) axis[point] = value
         else if (variables[variable]) variables[variable]!.values[point] = value
         if (isComplex && variables[variable]) variables[variable]!.imaginaryValues![point] = view.getFloat64(valueOffset + Float64Array.BYTES_PER_ELEMENT, true)
       }
     }
   }
   const axisVector = isDcSweep ? variableRecords[0].name : ''
-  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise ? 'Frequency' : isDcSweep ? axisVector : 'Operating point'
+  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise ? 'Frequency' : isDcSweep ? axisVector : isTransferFunction ? 'Transfer function' : 'Operating point'
   const sweepType = variableRecords[0].type.toLowerCase()
   const axisUnit = hasTimeAxis ? 's' : isFrequency || isNoise ? 'Hz' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
   if (isDcSweep && variables[0]) variables[0].values.set(axis)
   const parsedVariables = variables.filter((variable): variable is RawVariable => variable !== undefined)
-  return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : 'op', axis, variables: tracesOnly ? parsedVariables : parsedVariables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
+  return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : isTransferFunction ? 'tf' : 'op', axis, variables: tracesOnly ? parsedVariables : parsedVariables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
 }
 
 export function parseRawFile(data: string | Uint8Array, tracesOnly = false): ParsedRawFile {

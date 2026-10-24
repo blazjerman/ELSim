@@ -71,7 +71,7 @@ export type SimulationResult = {
   sourceMap: NetlistSource[]
   traces: Trace[]
   diagnostics: SimulationDiagnostic[]
-  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'
+  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf'
   measurements: MeasurementResult[]
   noiseSummaries?: NoiseSummary[]
   ngspiceFourier?: NgspiceFourierAnalysis[]
@@ -372,7 +372,7 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
       || !Array.isArray(result.sourceMap) || !result.sourceMap.every(isSource)
       || !Array.isArray(result.traces) || result.traces.length === 0
       || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
-      || !['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))
+      || !['tran', 'op', 'ac', 'dc', 'noise', 'tf'].includes(String(result.analysis))
       || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)
       || (result.ngspiceFourier !== undefined && !isNgspiceFourierReports(result.ngspiceFourier))
       || (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary)))) return false
@@ -419,7 +419,7 @@ export function engineResponseIssue(value: unknown): string {
       if (!isTrace(trace, validatedVectors)) return `trace ${index + 1} metadata is malformed`
     }
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
-    if (!['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))) return 'analysis type is invalid'
+    if (!['tran', 'op', 'ac', 'dc', 'noise', 'tf'].includes(String(result.analysis))) return 'analysis type is invalid'
     if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'
     if (result.ngspiceFourier !== undefined && !isNgspiceFourierReports(result.ngspiceFourier)) return 'ngspice Fourier results are malformed'
     if (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary))) return 'integrated noise results are malformed'

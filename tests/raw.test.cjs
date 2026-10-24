@@ -44,6 +44,16 @@ Values:
  -2.500000e-03
 `
 
+test('transfer-function raw data retains gain and impedance vectors as one-point results', () => {
+  const raw = `Title: Small-signal divider\nPlotname: Transfer Function\nFlags: real\nNo. Variables: 3\nNo. Points: 1\nVariables:\n  0 v(transfer_function) voltage\n  1 v(output_impedance_at_v(out)) voltage\n  2 v(v1#input_impedance) voltage\nValues:\n 0 5.000000e-01\n  5.000000e+02\n  2.000000e+03\n`
+  const parsed = parseAsciiRawFile(raw)
+  assert.equal(parsed.analysis, 'tf')
+  assert.equal(parsed.axisLabel, 'Transfer function')
+  assert.deepEqual(parsed.variables.map((variable) => variable.name), ['v(transfer_function)', 'v(output_impedance_at_v(out))', 'v(v1#input_impedance)'])
+  assert.deepEqual(parsed.variables.map((variable) => variable.values[0]), [0.5, 500, 2000])
+  assert.deepEqual(parseRawTraces(raw).variables.map((variable) => variable.name), ['v(transfer_function)', 'v(output_impedance_at_v(out))', 'v(v1#input_impedance)'])
+})
+
 const validAcRaw = `Title: RLC AC sweep
 Plotname: AC Analysis
 Flags: complex

@@ -179,7 +179,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, modelAsset
         {!sweep.listValues && !sweep.globalParameter && <button type="button" className="secondary-button" onClick={() => onChange(index, { listValues: [sweep.start, sweep.stop], points: 2 })}>Use discrete values</button>}
       </div>
     })}
-    {!(analysis === 'dc' && sweeps.length > 0) && <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= (analysis === 'dc' ? 1 : 3) || targetCount === 0 || combinations * 2 > 10}>{analysis === 'dc' ? 'Add secondary DC source' : sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>}
+    {analysis !== 'tf' && !(analysis === 'dc' && sweeps.length > 0) && <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= (analysis === 'dc' ? 1 : 3) || targetCount === 0 || combinations * 2 > 10}>{analysis === 'dc' ? 'Add secondary DC source' : sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>}
     <div className="field-hint">{combinations} simulation case{combinations === 1 ? '' : 's'} selected · maximum 10 · each result is shown separately.</div>
   </div>
 }

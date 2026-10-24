@@ -60,7 +60,7 @@ function makeTraces(rawData: string | Uint8Array): Trace[] {
 
 async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: Extract<EngineRequest, { type: 'run' }>['ngspiceFourier']): Promise<void> {
   const configuredAnalysis = metadata.settings.analysis
-  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' ? configuredAnalysis : undefined
+  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' || configuredAnalysis === 'tf' ? configuredAnalysis : undefined
   const stdout: string[] = []
   const stderr: string[] = []
   const profileStarted = profileWorker ? performance.now() : 0
@@ -91,7 +91,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
     module.FS.writeFile('/project.cir', runDeck)
-    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'tf' ? 'small-signal transfer-function' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
     const solverStarted = profileWorker ? performance.now() : 0
     const status = module.callMain(['-b', '/project.cir'])
     if (profileWorker) solverMs = performance.now() - solverStarted
@@ -102,7 +102,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       return
     }
     const resultProcessingStarted = profileWorker ? performance.now() : 0
-    const traces = parameterSweep?.length
+    const rawTraces = parameterSweep?.length
       ? parameterSweep.flatMap((sweep, index) => makeTraces(readRawFileAndRelease(module.FS, `/result-${index}.raw`)).map((trace) => ({
         ...trace,
         id: `${trace.id}::sweep-${index}`,
@@ -111,6 +111,23 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
         sweep: { label: sweep.label, index },
       })))
       : makeTraces(readRawFileAndRelease(module.FS, '/result.raw'))
+    const rawTfSettings = metadata.settings.transferFunction
+    let tfSettings: { inputSource?: string } | undefined
+    try {
+      const parsed = typeof rawTfSettings === 'string' ? JSON.parse(rawTfSettings) as unknown : rawTfSettings
+      if (parsed && typeof parsed === 'object' && 'inputSource' in parsed && typeof parsed.inputSource === 'string') tfSettings = parsed as { inputSource: string }
+    } catch { /* Labels fall back when older or external engine clients omit this setting. */ }
+    const inputRef = typeof tfSettings?.inputSource === 'string' ? tfSettings.inputSource : 'input source'
+    const inputUnit = /^I/i.test(inputRef) ? 'A' : 'V'
+    const traces = analysis === 'tf'
+      ? rawTraces.map((trace) => {
+        const id = trace.id.toLowerCase()
+        if (id.includes('transfer_function')) return { ...trace, label: 'DC transfer gain', unit: inputUnit === 'A' ? 'V/A' : 'V/V' }
+        if (id.includes('output_impedance')) return { ...trace, label: 'Output impedance', unit: 'Ω' }
+        if (id.includes('input_impedance')) return { ...trace, label: `Input impedance at ${inputRef}`, unit: 'Ω' }
+        return trace
+      })
+      : rawTraces
     if (!traces.length) throw new Error('ngspice completed but produced no voltage or current vectors.')
     const measurementTraces = parameterSweep?.length
       ? parameterSweep.map((_, index) => traces.filter((trace) => trace.sweep?.index === index))
@@ -133,7 +150,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       sourceMap: artifact.sourceMap,
       traces,
       diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics, ...importedMeasurementOutput.diagnostics],
-      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise',
+      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf',
       measurements: [
         ...measurementOutput.results.filter((measurement) => !ambiguousProjectMeasurementIds.has(measurement.id.toLowerCase())),
         ...importedMeasurementOutput.results,

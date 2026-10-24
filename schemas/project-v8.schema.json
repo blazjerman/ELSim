@@ -1438,7 +1438,8 @@
             "op",
             "ac",
             "dc",
-            "noise"
+            "noise",
+            "tf"
           ]
         },
         "stopTime": {
@@ -1510,6 +1511,15 @@
             "points": { "type": "integer", "minimum": 1, "maximum": 10000 },
             "startFrequency": { "type": "string", "minLength": 1, "maxLength": 64 },
             "stopFrequency": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        },
+        "transferFunction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "inputSource"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" }
           }
         },
         "sourceAcMagnitude": {
