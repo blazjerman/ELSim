@@ -4,7 +4,17 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { extremaIndices, plotPolylinePoints, valueRange, valueRangeAtIndices } = require(path.join(build, 'engine/plot.js'))
+const { complexPlaneScale, extremaIndices, plotPolylinePoints, valueRange, valueRangeAtIndices } = require(path.join(build, 'engine/plot.js'))
+
+test('complex-plane plot keeps real and imaginary units at the same pixel scale', () => {
+  const scale = complexPlaneScale([-100, 0], [-25, 25], 688, 324)
+  const pixelsPerRealUnit = 688 / (2 * scale.xExtent)
+  const pixelsPerImaginaryUnit = 324 / (2 * scale.yExtent)
+  assert.ok(Math.abs(pixelsPerRealUnit - pixelsPerImaginaryUnit) < 1e-12)
+  assert.ok(scale.xExtent >= 100 * 1.12)
+  assert.ok(scale.yExtent >= 25 * 1.12)
+  assert.ok(scale.tickStep > 0)
+})
 
 test('extrema sampling remains bounded and preserves narrow peaks in large traces', () => {
   const values = new Float64Array(1_000_000).fill(0)

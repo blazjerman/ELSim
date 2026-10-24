@@ -3,6 +3,23 @@ const sampledIndices = new WeakMap<object, Map<string, number[]>>()
 const sampledRanges = new WeakMap<object, Map<string, [number, number]>>()
 const formattedPolylinePoints = new WeakMap<object, WeakMap<object, WeakMap<object, Map<string, string>>>>()
 
+export type ComplexPlaneScale = { xExtent: number; yExtent: number; tickStep: number }
+
+/** Keep complex-plane units square on screen while fitting every finite root. */
+export function complexPlaneScale(realValues: readonly number[], imaginaryValues: readonly number[], width: number, height: number): ComplexPlaneScale {
+  const aspect = Math.max(1, width) / Math.max(1, height)
+  const maxMagnitude = (values: readonly number[]) => values.reduce((maximum, value) => Number.isFinite(value) ? Math.max(maximum, Math.abs(value)) : maximum, 0)
+  const maxReal = maxMagnitude(realValues)
+  const maxImaginary = maxMagnitude(imaginaryValues)
+  const yExtent = Math.max(1, maxImaginary, maxReal / aspect) * 1.12
+  const xExtent = yExtent * aspect
+  const rawStep = yExtent / 2
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep))
+  const normalized = rawStep / magnitude
+  const tickStep = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude
+  return { xExtent, yExtent, tickStep }
+}
+
 /** Format SVG polyline coordinates once when multiple windows show the same immutable trace view. */
 export function plotPolylinePoints(
   axis: ArrayLike<number>, values: ArrayLike<number>, indices: readonly number[], coordinateKey: string,

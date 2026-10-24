@@ -2,7 +2,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange, type PlotValueRange } from '../domain/project'
-import { extremaIndices, plotPolylinePoints, valueRangeAtIndices } from '../engine/plot'
+import { complexPlaneScale, extremaIndices, plotPolylinePoints, valueRangeAtIndices } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import type { NgspiceFourierAnalysis } from '../engine/fourier'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
@@ -693,15 +693,18 @@ function PoleZeroView({ traces, selectedIds, onToggle, onExport, savedColors }: 
   const shown = traces.filter((trace) => visibility.visibleIdSet.has(trace.id))
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorById = useMemo(() => new Map(traces.map((trace, index) => [trace.id, colors[index % colors.length]])), [traces, colors])
-  const extent = Math.max(1, ...shown.flatMap((trace) => [Math.abs(trace.values[0] ?? 0), Math.abs(trace.imaginaryValues?.[0] ?? 0)])) * 1.12
   const left = 56, right = 744, top = 18, bottom = 342
-  const xFor = (value: number) => left + (value + extent) / (2 * extent) * (right - left)
-  const yFor = (value: number) => bottom - (value + extent) / (2 * extent) * (bottom - top)
+  const plane = complexPlaneScale(shown.map((trace) => trace.values[0] ?? 0), shown.map((trace) => trace.imaginaryValues?.[0] ?? 0), right - left, bottom - top)
+  const xFor = (value: number) => left + (value + plane.xExtent) / (2 * plane.xExtent) * (right - left)
+  const yFor = (value: number) => bottom - (value + plane.yExtent) / (2 * plane.yExtent) * (bottom - top)
+  const xTicks = Array.from({ length: Math.floor(plane.xExtent / plane.tickStep) * 2 + 1 }, (_, index) => (index - Math.floor(plane.xExtent / plane.tickStep)) * plane.tickStep)
+  const yTicks = Array.from({ length: Math.floor(plane.yExtent / plane.tickStep) * 2 + 1 }, (_, index) => (index - Math.floor(plane.yExtent / plane.tickStep)) * plane.tickStep)
   return <div className="waveform-view pz-view">
     <div className="waveform-title"><strong>Pole-zero map</strong><span>{shown.length} roots shown · real and imaginary frequency in rad/s</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={visibility.disabledIdSet} onToggleVisibility={visibility.toggleVisibility} onRemove={visibility.remove} ariaLabel="Pole-zero roots" colorFor={(index) => colors[index % colors.length]}/>
     <svg className="waveform-chart pz-chart" viewBox="0 0 760 380" role="img" aria-label="Complex pole-zero plane. Horizontal axis is real frequency in radians per second; vertical axis is imaginary frequency in radians per second.">
-      {[-1, -0.5, 0, 0.5, 1].map((tick) => <g key={tick}><line x1={xFor(tick * extent)} x2={xFor(tick * extent)} y1={top} y2={bottom} className={tick === 0 ? 'plot-axis' : 'plot-grid'}/><line x1={left} x2={right} y1={yFor(tick * extent)} y2={yFor(tick * extent)} className={tick === 0 ? 'plot-axis' : 'plot-grid'}/><text x={xFor(tick * extent)} y={bottom + 18} textAnchor="middle" className="plot-tick">{formatEngineeringTick(tick * extent, 'rad/s')}</text><text x={left - 7} y={yFor(tick * extent) + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(tick * extent, 'rad/s')}</text></g>)}
+      {xTicks.map((tick) => <g key={`x:${tick}`}><line x1={xFor(tick)} x2={xFor(tick)} y1={top} y2={bottom} className={tick === 0 ? 'plot-axis' : 'plot-grid'}/><text x={xFor(tick)} y={bottom + 18} textAnchor="middle" className="plot-tick">{formatEngineeringTick(tick, 'rad/s')}</text></g>)}
+      {yTicks.map((tick) => <g key={`y:${tick}`}><line x1={left} x2={right} y1={yFor(tick)} y2={yFor(tick)} className={tick === 0 ? 'plot-axis' : 'plot-grid'}/><text x={left - 7} y={yFor(tick) + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(tick, 'rad/s')}</text></g>)}
       {shown.map((trace) => { const real = trace.values[0] ?? 0, imaginary = trace.imaginaryValues?.[0] ?? 0; const zero = trace.id.startsWith('pz:zero:'); return <g key={trace.id} aria-label={`${trace.label}: ${real.toPrecision(5)} ${imaginary < 0 ? '−' : '+'} j${Math.abs(imaginary).toPrecision(5)} rad/s`}><title>{`${trace.label}: ${real.toPrecision(5)} ${imaginary < 0 ? '−' : '+'} j${Math.abs(imaginary).toPrecision(5)} rad/s`}</title>{zero ? <><line x1={xFor(real) - 7} x2={xFor(real) + 7} y1={yFor(imaginary) - 7} y2={yFor(imaginary) + 7} stroke={colorById.get(trace.id)} strokeWidth="2.5"/><line x1={xFor(real) - 7} x2={xFor(real) + 7} y1={yFor(imaginary) + 7} y2={yFor(imaginary) - 7} stroke={colorById.get(trace.id)} strokeWidth="2.5"/></> : <circle cx={xFor(real)} cy={yFor(imaginary)} r="6" fill={colorById.get(trace.id)} stroke="var(--plot-bg, #10151a)" strokeWidth="2"/>}</g>})}
       <text x={(left + right) / 2} y="375" textAnchor="middle" className="plot-tick">Real (rad/s)</text><text transform={`translate(14 ${(top + bottom) / 2}) rotate(-90)`} textAnchor="middle" className="plot-tick">Imaginary (rad/s)</text>
     </svg>
