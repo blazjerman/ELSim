@@ -32,6 +32,20 @@ function amplitudeLabel(value: number): string {
   return `${value.toFixed(1)} dB`
 }
 
+function exportCsv(filename: string, rows: (string | number | null)[][]): void {
+  const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function safeTraceFilename(traceId: string): string {
+  return traceId.replace(/[^A-Za-z0-9_-]+/g, '-')
+}
+
 export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFourier, onRunNativeFourier, onClose }: { traces: Trace[]; initialRange: { start: number; end: number }; ngspiceFourier?: NgspiceFourierAnalysis; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void; onClose: () => void }) {
   const [traceId, setTraceId] = useState(traces[0]?.id ?? '')
   const [start, setStart] = useState(initialRange.start)
@@ -173,6 +187,11 @@ export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFou
           {harmonicCalculation.error && <p className="field-error" role="alert">{harmonicCalculation.error}</p>}
           {harmonicCalculation.result && <>
             <div className="spectrum-summary"><strong>THD: {harmonicCalculation.result.thdPercent.toPrecision(4)}%</strong><span>DC: {harmonicCalculation.result.dc.toPrecision(5)} {trace.unit}</span><span>Analyzed final cycle: {formatTime(end - 1 / harmonicCalculation.result.fundamentalFrequency, trace.axis.at(-1) ?? end)} to {formatTime(end, trace.axis.at(-1) ?? end)}</span></div>
+            <button className="plot-export" type="button" onClick={() => exportCsv(`elsim-harmonics-${safeTraceFilename(trace.id)}.csv`, [
+              ['Trace', 'Unit', 'Fundamental frequency (Hz)', 'THD (%)', 'Harmonic', 'Frequency (Hz)', 'Peak amplitude', 'Phase (degrees)', 'Relative amplitude (%)'],
+              [trace.label, trace.unit, harmonicCalculation.result!.fundamentalFrequency, harmonicCalculation.result!.thdPercent, 'DC', 0, harmonicCalculation.result!.dc, null, null],
+              ...harmonicCalculation.result!.components.map((component) => [trace.label, trace.unit, harmonicCalculation.result!.fundamentalFrequency, harmonicCalculation.result!.thdPercent, component.order, component.frequency, component.peakAmplitude, component.phaseDegrees, harmonicCalculation.result!.components[0].peakAmplitude > 0 ? component.peakAmplitude / harmonicCalculation.result!.components[0].peakAmplitude * 100 : null]),
+            ])}>Export ELSim harmonics CSV</button>
             <div className="harmonic-table-wrap"><table className="harmonic-table"><thead><tr><th>Harmonic</th><th>Frequency</th><th>Peak amplitude</th><th>Relative to fundamental</th><th>Phase</th></tr></thead><tbody>{harmonicCalculation.result.components.map((component) => <tr key={component.order}><th>{component.order === 1 ? 'Fundamental' : `H${component.order}`}</th><td>{frequencyLabel(component.frequency)}</td><td>{component.peakAmplitude.toPrecision(5)} {trace.unit}</td><td>{harmonicCalculation.result!.components[0].peakAmplitude > 0 ? `${(component.peakAmplitude / harmonicCalculation.result!.components[0].peakAmplitude * 100).toPrecision(4)}%` : '—'}</td><td>{component.phaseDegrees.toFixed(2)}°</td></tr>)}</tbody></table></div>
           </>}
         </details>
@@ -183,6 +202,10 @@ export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFou
           {!nativeVectorSupported && <small className="field-hint">This trace name is not a simple ngspice voltage/current vector, so the native command is unavailable.</small>}
           {currentNativeFourier && <>
             <div className="spectrum-summary"><strong>ngspice THD: {currentNativeFourier.thdPercent === null ? 'undefined (zero fundamental)' : `${currentNativeFourier.thdPercent.toPrecision(5)}%`}</strong><span>{currentNativeFourier.vector} · {frequencyLabel(currentNativeFourier.fundamentalFrequency)} fundamental</span></div>
+            <button className="plot-export" type="button" onClick={() => exportCsv(`ngspice-harmonics-${safeTraceFilename(trace.id)}.csv`, [
+              ['Trace', 'ngspice vector', 'Unit', 'Fundamental frequency (Hz)', 'THD (%)', 'Harmonic order', 'Frequency (Hz)', 'Magnitude', 'Phase (degrees)', 'Normalized magnitude', 'Normalized phase (degrees)'],
+              ...currentNativeFourier.harmonics.map((harmonic) => [trace.label, currentNativeFourier.vector, trace.unit, currentNativeFourier.fundamentalFrequency, currentNativeFourier.thdPercent, harmonic.order, harmonic.frequency, harmonic.magnitude, harmonic.phaseDegrees, harmonic.normalizedMagnitude, harmonic.normalizedPhaseDegrees]),
+            ])}>Export ngspice harmonics CSV</button>
             <div className="harmonic-table-wrap"><table className="harmonic-table"><thead><tr><th>Harmonic</th><th>Frequency</th><th>Magnitude</th><th>Phase</th><th>Normalized magnitude</th></tr></thead><tbody>{currentNativeFourier.harmonics.map((harmonic) => <tr key={harmonic.order}><th>{harmonic.order === 0 ? 'DC' : harmonic.order === 1 ? 'Fundamental' : `H${harmonic.order}`}</th><td>{frequencyLabel(harmonic.frequency)}</td><td>{harmonic.magnitude.toPrecision(6)} {trace.unit}</td><td>{harmonic.phaseDegrees.toPrecision(5)}°</td><td>{harmonic.normalizedMagnitude === null ? '—' : `${harmonic.normalizedMagnitude.toPrecision(5)}×`}</td></tr>)}</tbody></table></div>
           </>}
         </details>
