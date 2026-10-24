@@ -359,11 +359,15 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
   return { sections, lines, logical: sourceLines, includes, includeLineNumbers }
 }
 
-/** List safe, named .LIB sections without interpreting model contents. */
-export function listModelLibrarySections(source: string): string[] {
+function inspectLibrarySource(source: string): ReturnType<typeof inspectLibrarySections> {
   if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
   if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
-  return inspectLibrarySections(source).sections
+  return inspectLibrarySections(source)
+}
+
+/** List safe, named .LIB sections without interpreting model contents. */
+export function listModelLibrarySections(source: string): string[] {
+  return inspectLibrarySource(source).sections
 }
 
 export function withoutInlineComment(line: string): string {
@@ -557,9 +561,14 @@ function functionAritiesForScopes(globalFunctions: ReadonlyMap<string, number>, 
  * references to functions declared in another imported library.
  */
 export function parseModelFunctionSignatures(source: string, selectedSections?: string[]): Map<string, number> {
-  if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
-  if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
-  const inspected = inspectLibrarySections(source)
+  const inspected = inspectLibrarySource(source)
+  return parseModelFunctionSignaturesFromInspection(inspected, selectedSections)
+}
+
+function parseModelFunctionSignaturesFromInspection(
+  inspected: ReturnType<typeof inspectLibrarySections>,
+  selectedSections?: string[],
+): Map<string, number> {
   let selected = selectedSections
   if (inspected.sections.length > 1 && !selected) throw new Error('This model library contains multiple .LIB sections. Select the section or sections referenced by your schematic before importing it.')
   if (inspected.sections.length === 1 && !selected) selected = inspected.sections
@@ -575,9 +584,16 @@ export function parseModelFunctionSignatures(source: string, selectedSections?: 
 
 /** Collect unambiguous function signatures across project libraries for parsing. */
 export function modelFunctionSignaturesForLibraries<T extends Pick<ModelLibraryInput, 'content' | 'selectedSections'>>(assets: readonly T[]): Map<string, number> {
+  const inspectedAssets = assets.map((asset) => ({ asset, inspected: inspectLibrarySource(asset.content) }))
+  return modelFunctionSignaturesForInspectedLibraries(inspectedAssets)
+}
+
+function modelFunctionSignaturesForInspectedLibraries<T extends Pick<ModelLibraryInput, 'selectedSections'>>(
+  assets: readonly { asset: T; inspected: ReturnType<typeof inspectLibrarySections> }[],
+): Map<string, number> {
   const signatures = new Map<string, number>()
   const ambiguous = new Set<string>()
-  for (const asset of assets) for (const [name, arity] of parseModelFunctionSignatures(asset.content, asset.selectedSections)) {
+  for (const { asset, inspected } of assets) for (const [name, arity] of parseModelFunctionSignaturesFromInspection(inspected, asset.selectedSections)) {
     if (ambiguous.has(name)) continue
     const previous = signatures.get(name)
     if (previous !== undefined && previous !== arity) {
@@ -1117,9 +1133,17 @@ export function needsLtspiceFullDeckTranslation(source: string): boolean {
 
 /** Parse self-contained SPICE model libraries without executing file directives. */
 export function parseSubcircuitLibrary(source: string, selectedSections?: string[], availableFunctions: ReadonlyMap<string, number> = new Map(), options: { allowGroundPins?: boolean } = {}): ParsedSubcircuitLibrary {
-  if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
-  if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
-  const inspected = inspectLibrarySections(source)
+  const inspected = inspectLibrarySource(source)
+  return parseSubcircuitLibraryFromInspection(source, inspected, selectedSections, availableFunctions, options)
+}
+
+function parseSubcircuitLibraryFromInspection(
+  source: string,
+  inspected: ReturnType<typeof inspectLibrarySections>,
+  selectedSections?: string[],
+  availableFunctions: ReadonlyMap<string, number> = new Map(),
+  options: { allowGroundPins?: boolean } = {},
+): ParsedSubcircuitLibrary {
   const logical = inspected.logical
   if (logical.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
   let selected = selectedSections
@@ -1563,8 +1587,12 @@ export function analyzeModelLibraries<T extends ModelLibraryInput>(assets: T[]):
   // First collect declarations so PARAMS defaults can refer to a .FUNC in
   // another project library. Later project validation still checks that each
   // placed model can actually reach that function through its include chain.
-  const availableFunctions = modelFunctionSignaturesForLibraries(assets)
-  const parsedAssets = assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections, availableFunctions) }))
+  const inspectedAssets = assets.map((asset) => ({ asset, inspected: inspectLibrarySource(asset.content) }))
+  const availableFunctions = modelFunctionSignaturesForInspectedLibraries(inspectedAssets)
+  const parsedAssets = inspectedAssets.map(({ asset, inspected }) => ({
+    asset,
+    parsed: parseSubcircuitLibraryFromInspection(asset.content, inspected, asset.selectedSections, availableFunctions),
+  }))
   return { assets: parsedAssets, dependencies: analyzeParsedModelDependencies(parsedAssets) }
 }
 
