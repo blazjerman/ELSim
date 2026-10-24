@@ -909,6 +909,20 @@ test('ngspice DC source stepping is optional, validated, and source mapped', () 
   }
 })
 
+test('ngspice GMIN stepping exposes its three documented modes', () => {
+  const project = createStarterProject()
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options gminsteps=/mi)
+  for (const mode of ['0', '1', '2']) {
+    project.simulation.dcGminStepping = mode
+    const artifact = createNetlistArtifact(validateProject(project))
+    assert.match(artifact.text, new RegExp(`^\\.options gminsteps=${mode}$`, 'mi'))
+    assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:dcGminStepping' && source.role === 'generated'))
+  }
+  project.simulation.dcGminStepping = '3'
+  assert.throws(() => validateProject(project), /GMIN stepping mode must be 0, 1, or 2/i)
+  assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:dcGminStepping'))
+})
+
 test('transient truncation-error tolerance is validated and only emitted for transient analysis', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options trtol=/mi)

@@ -42,6 +42,7 @@ export default function SolverConditioningEditor({
   dcIterationLimit,
   dcTransferIterationLimit,
   dcSourceSteppingSteps,
+  dcGminStepping,
   transientLowerIterationLimit,
   transientIterationLimit,
   transientTotalIterationLimit,
@@ -61,6 +62,7 @@ export default function SolverConditioningEditor({
   onDcIterationLimitChange,
   onDcTransferIterationLimitChange,
   onDcSourceSteppingStepsChange,
+  onDcGminSteppingChange,
   onTransientLowerIterationLimitChange,
   onTransientIterationLimitChange,
   onTransientTotalIterationLimitChange,
@@ -80,6 +82,7 @@ export default function SolverConditioningEditor({
   dcIterationLimit?: string
   dcTransferIterationLimit?: string
   dcSourceSteppingSteps?: string
+  dcGminStepping?: '0' | '1' | '2'
   transientLowerIterationLimit?: string
   transientIterationLimit?: string
   transientTotalIterationLimit?: string
@@ -99,6 +102,7 @@ export default function SolverConditioningEditor({
   onDcIterationLimitChange: (value?: string) => void
   onDcTransferIterationLimitChange: (value?: string) => void
   onDcSourceSteppingStepsChange: (value?: string) => void
+  onDcGminSteppingChange: (value?: '0' | '1' | '2') => void
   onTransientLowerIterationLimitChange: (value?: string) => void
   onTransientIterationLimitChange: (value?: string) => void
   onTransientTotalIterationLimitChange: (value?: string) => void
@@ -155,6 +159,12 @@ export default function SolverConditioningEditor({
       <p className="field-hint">Raising a limit can let a difficult circuit continue iterating longer, but may increase run time. Blank keeps ngspice defaults.</p>
       <NumericSetting label="DC solution iterations (ITL1)" ariaLabel="DC solution iteration limit" dataSetting="dcIterationLimit" value={dcIterationLimit} example="100" integer hint="Maximum iterations for each operating-point/DC solution. Ngspice default: 100." onChange={onDcIterationLimitChange} />
       <NumericSetting label="DC source-stepping steps (SRCSTEPS)" ariaLabel="DC source-stepping steps" dataSetting="dcSourceSteppingSteps" value={dcSourceSteppingSteps} example="10" integer integerMinimum={0} invalidMessage="Enter a whole number from 0 to 1000000, or leave blank for ngspice’s default." hint="When a DC operating-point solve is difficult, ngspice can ramp independent sources from zero to their final values. A positive number enables source stepping; 0 disables it. This can help some nonlinear circuits converge but may take longer." onChange={onDcSourceSteppingStepsChange} />
+      <label className="field-label">GMIN stepping
+        <select aria-label="GMIN stepping mode" data-analysis-setting="dcGminStepping" value={dcGminStepping ?? ''} onChange={(event) => onDcGminSteppingChange((event.target.value || undefined) as '0' | '1' | '2' | undefined)}>
+          <option value="">Ngspice default</option><option value="0">Disabled (0)</option><option value="1">Standard ngspice method (1)</option><option value="2">Original SPICE 3 method (2)</option>
+        </select>
+        <small className="field-hint">GMIN stepping temporarily adds conductance to help find a DC operating point. Mode 1 is ngspice’s default; mode 2 uses the original SPICE 3 sequence. Leave blank to keep the default.</small>
+      </label>
       {analysis === 'dc' && <NumericSetting label="DC transfer-curve iterations (ITL2)" ariaLabel="DC transfer-curve iteration limit" dataSetting="dcTransferIterationLimit" value={dcTransferIterationLimit} example="50" integer hint="Maximum iterations at each point in a DC source sweep. Ngspice default: 50." onChange={onDcTransferIterationLimitChange} />}
       {analysis === 'tran' && <NumericSetting label="Transient lower iteration limit (ITL3)" ariaLabel="Transient lower iteration limit" dataSetting="transientLowerIterationLimit" value={transientLowerIterationLimit} example="4" integer hint="Ngspice’s lower transient-analysis iteration limit. Default: 4. Leave blank to keep the default." onChange={onTransientLowerIterationLimitChange} />}
       {analysis === 'tran' && <NumericSetting label="Transient timepoint iterations (ITL4)" ariaLabel="Transient timepoint iteration limit" dataSetting="transientIterationLimit" value={transientIterationLimit} example="10" integer hint="Maximum iterations when solving each transient timepoint. Ngspice default: 10." onChange={onTransientIterationLimitChange} />}

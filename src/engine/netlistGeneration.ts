@@ -1672,6 +1672,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:dcSourceSteppingSteps', line: rows.length })
     } else append(`.options srcsteps=${Number(value)}`, 'analysis:dcSourceSteppingSteps', 'generated')
   }
+  if (includeHierarchyProbes && project.simulation.dcGminStepping !== undefined) {
+    const value = project.simulation.dcGminStepping
+    if (!['0', '1', '2'].includes(value)) {
+      const message = 'Ngspice GMIN stepping mode must be 0, 1, or 2.'
+      append(`* ERROR: ${cleanComment(message)}`, 'analysis:dcGminStepping', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:dcGminStepping', line: rows.length })
+    } else append(`.options gminsteps=${value}`, 'analysis:dcGminStepping', 'generated')
+  }
   if (includeHierarchyProbes && project.simulation.transientTotalIterationLimit !== undefined) {
     const value = project.simulation.transientTotalIterationLimit
     if (!/^\d+$/.test(value.trim()) || !Number.isSafeInteger(Number(value)) || Number(value) < 0 || Number(value) > 1_000_000) {
