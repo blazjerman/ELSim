@@ -859,11 +859,12 @@ export default function App() {
   const importedBsim3BinModels = useMemo<ImportedBsim3BinFamily[]>(() => ngspiceBsim3BinFamilies(importedDeviceModels).map((family) => ({
     ...family.models[0],
     name: family.displayName,
-    parameters: [],
+    parameters: family.models[0].parameters.filter((parameter) => family.models.every((model) => model.parameters.some((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase()))),
     filename: [...new Set(family.models.map((model) => model.filename))].join(', '),
     binCount: family.binCount,
     binModels: family.models,
   })), [importedDeviceModels])
+  const importedModelsForSweepEditor = useMemo(() => [...importedDeviceModels, ...importedBsim3BinModels], [importedBsim3BinModels, importedDeviceModels])
   const importedBsim3BinModelsByName = useMemo(() => new Map(importedBsim3BinModels.map((family) => [family.name.toLowerCase(), family])), [importedBsim3BinModels])
   const importedNmosBsim3BinModels = useMemo(() => importedBsim3BinModels.filter((model) => model.type.toLowerCase() === 'nmos'), [importedBsim3BinModels])
   const importedPmosBsim3BinModels = useMemo(() => importedBsim3BinModels.filter((model) => model.type.toLowerCase() === 'pmos'), [importedBsim3BinModels])
@@ -2877,22 +2878,7 @@ export default function App() {
         return parameters ? { ...model, parameters } : model
       })
     }
-    const bsim3Families = ngspiceBsim3BinFamilies(modelLibraryAnalysis.assets.flatMap(({ parsed }) => parsed.models.filter((model) => !model.scope)))
-    sweepModels = [
-      ...sweepModels,
-      ...bsim3Families.map((family) => {
-        const first = family.models[0]
-        const commonParameters = first.parameters.filter((parameter) => family.models.every((model) => model.parameters.some((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase())))
-        return {
-          ...first,
-          name: family.name,
-          parameters: commonParameters,
-          binModels: family.models.map((model) => model.name),
-          assetId: modelLibraryAnalysis.assets.find(({ parsed }) => parsed.models.includes(first))?.asset.id ?? first.name,
-          filename: [...new Set(family.models.map((model) => modelLibraryAnalysis.assets.find(({ parsed }) => parsed.models.includes(model))?.asset.filename).filter((filename): filename is string => Boolean(filename)))].join(', '),
-        }
-      }),
-    ]
+    sweepModels = [...sweepModels, ...importedBsim3BinModels]
     const eligibleParts = eligibleParameterSweepParts({ parts: project.parts, analysis: project.simulation.analysis, dcSweepSource: project.simulation.dcSweep?.source, models: sweepModels, subcircuits: importedModels, sheets: project.sheets })
     const parts = unusedSweepTargets(eligibleParts, configured, sweepModels, importedModels, project.sheets)
     const availableInstanceParameters = (part: Part) => subcircuitSweepParameters(part, importedModels, project.sheets).filter((parameter) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase() && sweep.instanceParameter && sweep.parameter?.toLowerCase() === parameter.name.toLowerCase()))
@@ -3474,7 +3460,7 @@ export default function App() {
             </>}
           </div>
     {(project.simulation.parameterSweeps?.length ?? 0) > 0
-      ? <Suspense fallback={<div className="field-hint">Loading parameter controls…</div>}><ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedDeviceModels} modelAssets={project.modelAssets ?? []} subcircuits={importedModels.map((model) => ({ name: model.name, parameters: model.parameters }))} sheets={project.sheets} parameters={project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []} analysis={project.simulation.analysis} dcSweepSource={project.simulation.dcSweep?.source} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/></Suspense>
+      ? <Suspense fallback={<div className="field-hint">Loading parameter controls…</div>}><ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedModelsForSweepEditor} modelAssets={project.modelAssets ?? []} subcircuits={importedModels.map((model) => ({ name: model.name, parameters: model.parameters }))} sheets={project.sheets} parameters={project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []} analysis={project.simulation.analysis} dcSweepSource={project.simulation.dcSweep?.source} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/></Suspense>
       : <div className="form-section parameter-sweep-section"><div className="form-section-title">PARAMETER STEPPING</div><p className="field-hint">{project.simulation.analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : project.simulation.analysis === 'ac' ? 'Compare up to 10 AC response curves while varying supported circuit or model parameters.' : project.simulation.analysis === 'noise' ? 'Compare up to 10 noise spectra while varying supported circuit or model parameters.' : project.simulation.analysis === 'op' ? 'Compare up to 10 DC operating points while varying supported circuit or model parameters.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models.'}</p><button type="button" className="add-parameter-sweep" onClick={addParameterSweep}>{project.simulation.analysis === 'dc' ? 'Add secondary DC source' : 'Add parameter stepping'}</button><div className="field-hint">1 simulation case selected · maximum 10 · each result is plotted as a separate trace.</div></div>}
     {project.simulation.analysis === 'tran' && ((project.simulation.transientMeasurements?.length ?? 0) > 0 || (project.simulation.initialConditions?.length ?? 0) > 0
       ? <Suspense fallback={<div className="field-hint">Loading transient analysis controls…</div>}><TransientEditors project={project} measurements={project.simulation.transientMeasurements ?? []} conditions={project.simulation.initialConditions ?? []} nodes={labeledNodeNames} inductors={inductorParts.map((part) => part.ref)} capacitors={capacitorParts.map((part) => part.ref)} diodes={diodeParts.map((part) => ({ ref: part.ref, kind: part.kind as 'diode' | 'led' | 'zener' }))} transistors={bjtParts.map((part) => part.ref)} fets={fetParts.map((part) => ({ ref: part.ref, kind: part.kind as 'nmos' | 'pmos' | 'njfet' | 'pjfet' | 'nmesfet' | 'pmesfet' | 'nvdmos' | 'pvdmos' }))} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAddMeasurement={addMeasurement} onChangeMeasurement={updateMeasurement} onRemoveMeasurement={removeMeasurement} onAddCondition={addInitialCondition} onAddInductorCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onAddDiodeInitialCondition={addDiodeInitialCondition} onAddBjtInitialCondition={addBjtInitialCondition} onAddFetInitialCondition={addFetInitialCondition} onChangeCondition={updateInitialCondition} onRemoveCondition={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/></Suspense>

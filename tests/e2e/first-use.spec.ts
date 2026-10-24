@@ -2589,6 +2589,12 @@ test('standalone MOSFET can select an imported BSIM3 bin family by its base name
   await expect(checks).toContainText('M1 dimensions are outside the imported BSIM3 bins')
   await expect(checks).toContainText('do not fall within any complete L/W range')
   await expect(checks).toContainText('NCH.1: L 0.5u–2u, W 0.5u–20u')
+  await page.keyboard.press('Escape')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('M1')
+  const familySweepParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
+  await expect(familySweepParameter.locator('option[value="VTH0"]')).toContainText('default 0.7')
 })
 
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
