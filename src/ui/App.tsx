@@ -60,6 +60,11 @@ function sameOrderedIds(left: readonly string[], right: readonly string[]): bool
   return left === right || (left.length === right.length && left.every((id, index) => id === right[index]))
 }
 
+function projectArchiveFilename(projectName: string): string {
+  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return `${slug || 'elsim-project'}.elsim`
+}
+
 function fetThresholdValue(part: Part | undefined, thresholdsByModelName: ReadonlyMap<string, string | undefined>, fallback: string): string {
   if (!part?.deviceModel) return fallback
   const override = Object.entries(part.modelParameters ?? {}).find(([name]) => name.toLowerCase() === 'vto')?.[1]
@@ -1593,7 +1598,7 @@ export default function App() {
     try {
       const { createProjectArchive } = await import('../domain/projectArchive')
       const bytes = await createProjectArchive(projectRef.current)
-      const filename = `${projectRef.current.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.elsim`
+      const filename = projectArchiveFilename(projectRef.current.name)
       const { saveDesktopProject } = await import('./desktopProjectFiles')
       const desktopSave = await saveDesktopProject(bytes, filename)
       if (desktopSave === 'saved') { setNotice(`Saved ${filename}`); return }

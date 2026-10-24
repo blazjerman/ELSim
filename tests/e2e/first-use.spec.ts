@@ -433,6 +433,18 @@ test('Ctrl/Meta+S saves the current project from the editor', { tag: '@ui-smoke'
   }
 })
 
+test('project names without ASCII letters still get a usable archive filename', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  page.once('dialog', (dialog) => dialog.accept('🔌'))
+  await page.getByRole('button', { name: /RC step response/ }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.keyboard.press('Control+s')
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('elsim-project.elsim')
+})
+
 test('project inspector reports the current project format version', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
   await page.goto('/')
