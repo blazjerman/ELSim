@@ -281,9 +281,18 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const temperatureCoefficientValues = passiveTemperatureCoefficients.map((coefficient) => coefficient === undefined ? null : spiceScalar(coefficient, ''))
     const temperatureCoefficientInvalid = passiveTemperatureCoefficients.some((coefficient) => coefficient !== undefined && (spiceSignedScalarMagnitude(coefficient) === null || spiceScalar(coefficient, '') === null))
     const temperatureCoefficientSuffix = temperatureCoefficientValues.map((coefficient, index) => coefficient ? ` TC${index + 1}=${coefficient}` : '').join('')
+    const exponentialTemperatureCoefficient = part.tce === undefined ? null : spiceScalar(part.tce, '')
+    const exponentialTemperatureCoefficientInvalid = part.tce !== undefined && (spiceSignedScalarMagnitude(part.tce) === null || !exponentialTemperatureCoefficient)
+    const exponentialTemperatureCoefficientSuffix = exponentialTemperatureCoefficient ? ` TCE=${exponentialTemperatureCoefficient}` : ''
     const initialOffSuffix = part.initialOff ? ' OFF' : ''
     if (temperatureCoefficientInvalid) {
       const message = `${part.ref} TC1 and TC2 must be finite numeric temperature coefficients.`
+      append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+      diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+      continue
+    }
+    if (exponentialTemperatureCoefficientInvalid || part.tce !== undefined && !['resistor', 'lamp', 'potentiometer'].includes(part.kind)) {
+      const message = `${part.ref} TCE must be a finite numeric exponential temperature coefficient on a resistor-based part.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
       continue
@@ -720,8 +729,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
       const multiplierSuffix = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
       const noiseSuffix = part.noiseEnabled === false ? ' NOISY=0' : ''
-      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${noiseSuffix}${temperatureCoefficientSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
-      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${noiseSuffix}${temperatureCoefficientSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
+      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${noiseSuffix}${temperatureCoefficientSuffix}${exponentialTemperatureCoefficientSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
+      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${noiseSuffix}${temperatureCoefficientSuffix}${exponentialTemperatureCoefficientSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const elementCondition = part.kind === 'inductor' || part.kind === 'capacitor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
@@ -772,7 +781,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       const acResistanceSuffix = acResistanceValue ? ` AC=${acResistanceValue}` : ''
       const noiseSuffix = (part.kind === 'resistor' || part.kind === 'lamp') && part.noiseEnabled === false ? ' NOISY=0' : ''
-      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${acResistanceSuffix}${noiseSuffix}${temperatureCoefficientSuffix}${deviceTemperatureSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
+      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${acResistanceSuffix}${noiseSuffix}${temperatureCoefficientSuffix}${exponentialTemperatureCoefficientSuffix}${deviceTemperatureSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined

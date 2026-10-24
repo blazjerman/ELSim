@@ -212,6 +212,12 @@
           "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
           "description": "Optional signed ngspice second-order passive temperature coefficient (TC2)."
         },
+        "tce": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional signed ngspice exponential temperature coefficient (TCE) for resistor-based parts."
+        },
         "noiseEnabled": {
           "type": "boolean",
           "description": "Whether this resistor-based component contributes thermal and flicker noise; omitted means enabled."

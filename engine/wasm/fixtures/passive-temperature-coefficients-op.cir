@@ -4,11 +4,14 @@ R1 in out 1k TC1=0.01
 R2 out 0 1k
 R3 in fixed_temp 1k TC1=0.01 TEMP=27
 R4 fixed_temp 0 1k
+R5 in tce_out 1k TCE=1
+R6 tce_out 0 1k
 .temp 127
 .control
 op
 let tc1_divider = v(out)
 let fixed_temp_divider = v(fixed_temp)
-print tc1_divider fixed_temp_divider
+let tce_divider = v(tce_out)
+print tc1_divider fixed_temp_divider tce_divider
 .endc
 .end

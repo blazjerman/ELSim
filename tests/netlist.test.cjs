@@ -68,18 +68,20 @@ test('passive temperature coefficients emit native TC1 and TC2 options', () => {
   const potentiometer = { ...resistor, id: 'tc-pot', kind: 'potentiometer', ref: 'POT1', x: 800, y: 500, componentDefinitionId: 'elsim.potentiometer', wiperPosition: '0.5' }
   resistor.tc1 = '0.01'
   resistor.tc2 = '-2e-5'
+  resistor.tce = '0.7'
   capacitor.tc1 = '250u'
   inductor.tc2 = '-1e-6'
   lamp.tc1 = '0.02'
+  lamp.tce = '0.5'
   potentiometer.tc1 = '0.001'
   project.parts.push(inductor, lamp, potentiometer)
   project.sheets[0].parts = project.parts
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [], artifact.text)
-  assert.match(artifact.text, /^R1 vin vout 1k TC1=0.01 TC2=-2e-5$/m)
+  assert.match(artifact.text, /^R1 vin vout 1k TC1=0.01 TC2=-2e-5 TCE=0.7$/m)
   assert.match(artifact.text, /^C1 vout 0 10u TC1=250u$/m)
   assert.match(artifact.text, /^L1 vout 0 10m TC2=-1e-6$/m)
-  assert.match(artifact.text, /^RLP1 \S+ \S+ 1k TC1=0.02$/m)
+  assert.match(artifact.text, /^RLP1 \S+ \S+ 1k TC1=0.02 TCE=0.5$/m)
   assert.match(artifact.text, /^RPOT1_A \S+ \S+ 500\.000000000 TC1=0.001$/m)
   assert.match(artifact.text, /^RPOT1_B \S+ \S+ 500\.000000000 TC1=0.001$/m)
 })
@@ -88,12 +90,18 @@ test('passive temperature coefficients reject units, nonnumeric values, and unsu
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')
   resistor.tc1 = '1 V'
-  assert.throws(() => validateProject(project), /TC1 must be a finite numeric temperature coefficient/i)
+  assert.throws(() => validateProject(project), /invalid TC1/i)
   resistor.tc1 = '1e999'
-  assert.throws(() => validateProject(project), /TC1 must be a finite numeric temperature coefficient/i)
+  assert.throws(() => validateProject(project), /invalid TC1/i)
   delete resistor.tc1
+  resistor.tce = '1 V'
+  assert.throws(() => validateProject(project), /invalid TCE/i)
+  delete resistor.tce
   project.parts.find((part) => part.kind === 'source').tc2 = '0.01'
-  assert.throws(() => validateProject(project), /TC2 must be a finite numeric temperature coefficient/i)
+  assert.throws(() => validateProject(project), /invalid TC2/i)
+  delete project.parts.find((part) => part.kind === 'source').tc2
+  project.parts.find((part) => part.kind === 'capacitor').tce = '0.5'
+  assert.throws(() => validateProject(project), /invalid TCE/i)
 })
 
 test('resistor noise is enabled by default and can be disabled with the native ngspice option', () => {

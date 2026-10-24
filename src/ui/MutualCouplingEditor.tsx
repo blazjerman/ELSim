@@ -14,16 +14,19 @@ export function DeviceTemperatureEditor({ part, circuitTemperature, onChange }: 
   </>
 }
 
-export function PassiveTemperatureCoefficientsEditor({ part, onChange }: { part: Part; onChange: (patch: Pick<Part, 'tc1' | 'tc2'>) => void }) {
+export function PassiveTemperatureCoefficientsEditor({ part, onChange }: { part: Part; onChange: (patch: Pick<Part, 'tc1' | 'tc2' | 'tce'>) => void }) {
   return <details className="passive-temperature-coefficients">
     <summary>Temperature coefficients (advanced)</summary>
-    <div className="field-hint">Model how this part’s value changes with temperature. TC1 is the linear coefficient; TC2 is the quadratic coefficient. Leave either blank to use the selected model’s value or ngspice default.</div>
+    <div className="field-hint">Model how this part’s value changes with temperature. TC1 and TC2 provide the polynomial model. Resistor-based parts also support TCE, the exponential model; ngspice uses that model when TCE is present. Leave fields blank to use the selected model’s values or ngspice defaults.</div>
     <label className="field-label">TC1 (per °C)
       <input aria-label={`TC1 temperature coefficient for ${part.ref}`} inputMode="decimal" placeholder="Model default" value={part.tc1 ?? ''} onChange={(event) => onChange({ tc1: event.target.value || undefined })}/>
     </label>
     <label className="field-label">TC2 (per °C²)
       <input aria-label={`TC2 temperature coefficient for ${part.ref}`} inputMode="decimal" placeholder="Model default" value={part.tc2 ?? ''} onChange={(event) => onChange({ tc2: event.target.value || undefined })}/>
     </label>
+    {['resistor', 'lamp', 'potentiometer'].includes(part.kind) && <label className="field-label">TCE (exponential)
+      <input aria-label={`TCE exponential temperature coefficient for ${part.ref}`} inputMode="decimal" placeholder="Model default" value={part.tce ?? ''} onChange={(event) => onChange({ tce: event.target.value || undefined })}/>
+    </label>}
   </details>
 }
 

@@ -318,6 +318,11 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
     for (const value of ['1', '2.5', '1e-3', '2u', '1MEG']) assert.equal(scalePattern.test(value), true, `v8 ${field} ${value}`)
     for (const value of ['-1', '1 Ω', '1e', 'NaN']) assert.equal(scalePattern.test(value), false, `v8 ${field} ${value}`)
   }
+  const tce = schema.$defs.part.properties.tce
+  assert.equal(tce.maxLength, 64)
+  const tcePattern = new RegExp(tce.pattern, 'u')
+  for (const value of ['0', '0.7', '-2e-5', '250u']) assert.equal(tcePattern.test(value), true, `v8 TCE ${value}`)
+  for (const value of ['1 V', 'NaN', '1e', '']) assert.equal(tcePattern.test(value), false, `v8 TCE ${value}`)
   const deviceTemperatureDelta = schema.$defs.part.properties.deviceTemperatureDelta
   assert.equal(deviceTemperatureDelta.maxLength, 64)
   const deviceTemperaturePattern = new RegExp(deviceTemperatureDelta.pattern, 'u')
