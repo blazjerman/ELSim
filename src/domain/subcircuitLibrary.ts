@@ -142,6 +142,14 @@ function compatibilityScalar(value: string): number | null {
   return Number.isFinite(number) ? number : null
 }
 
+export function ngspiceModelValuesEquivalent(left: string, right: string): boolean {
+  const leftScalar = compatibilityScalar(left)
+  const rightScalar = compatibilityScalar(right)
+  return leftScalar !== null && rightScalar !== null
+    ? leftScalar === rightScalar
+    : left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
 function isBoundedNumericStep(directive: string): boolean {
   const match = directive.match(/^\.step\s+(?:(dec|oct|lin)\s+)?param\s+[A-Za-z_][A-Za-z0-9_]*\s+(.+)$/i)
   if (!match) return false
@@ -731,24 +739,14 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   previous.model.parameters = previous.model.parameters.filter((parameter) => {
     const candidate = candidateParameters.get(parameter.name.toLowerCase())
     if (!candidate) return false
-    const priorValue = compatibilityScalar(parameter.defaultValue)
-    const nextValue = compatibilityScalar(candidate.defaultValue)
-    const sameDefault = priorValue !== null && nextValue !== null
-      ? priorValue === nextValue
-      : parameter.defaultValue.trim().toLowerCase() === candidate.defaultValue.trim().toLowerCase()
+    const sameDefault = ngspiceModelValuesEquivalent(parameter.defaultValue, candidate.defaultValue)
     if (!sameDefault) parameter.defaultVariesByCondition = true
     const conditionalValues = previous.assignmentVariants.flatMap(({ model: variant, parameters }) => {
       const value = parameters.find((item) => item.name.toLowerCase() === parameter.name.toLowerCase())
       return value ? [{ sourceLine: variant.startLine, defaultValue: value.defaultValue }] : []
     })
     const firstConditionalValue = conditionalValues[0]?.defaultValue ?? ''
-    const firstScalar = compatibilityScalar(firstConditionalValue)
-    const valuesDiffer = conditionalValues.some(({ defaultValue }) => {
-      const nextScalar = compatibilityScalar(defaultValue)
-      return firstScalar !== null && nextScalar !== null
-        ? firstScalar !== nextScalar
-        : defaultValue.trim().toLowerCase() !== firstConditionalValue.trim().toLowerCase()
-    })
+    const valuesDiffer = conditionalValues.some(({ defaultValue }) => !ngspiceModelValuesEquivalent(firstConditionalValue, defaultValue))
     if (valuesDiffer) parameter.conditionalDefaultValues = conditionalValues
     else delete parameter.conditionalDefaultValues
     return true

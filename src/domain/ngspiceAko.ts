@@ -1,3 +1,4 @@
+import { ngspiceModelValuesEquivalent } from './subcircuitLibrary'
 import type { ConditionalModelVariant, ModelConditionFrame, ModelLibraryInput, ParsedSubcircuitLibrary, SpiceModelDefinition, SubcircuitParameter } from './subcircuitLibrary'
 
 export type NgspiceAkoExpansion = {
@@ -21,20 +22,32 @@ function modelEntries<T extends ModelLibraryInput>(asset: T, model: SpiceModelDe
   ]
 }
 
+function modelEntryParameters(model: SpiceModelDefinition): SubcircuitParameter[] {
+  if (!model.conditionalVariants?.length) return model.parameters
+  return model.parameters.map((parameter) => {
+    const effectiveParameter = { ...parameter }
+    delete effectiveParameter.defaultVariesByCondition
+    delete effectiveParameter.conditionalDefaultValues
+    return effectiveParameter
+  })
+}
+
 function mergeConditionalParameters(parameterSets: SubcircuitParameter[][], sourceLines: number[]): SubcircuitParameter[] {
   const first = parameterSets[0] ?? []
   const byName = parameterSets.map((parameters) => new Map(parameters.map((parameter) => [parameter.name.toLowerCase(), parameter])))
   return first.flatMap((parameter) => {
     const variants = byName.map((parameters) => parameters.get(parameter.name.toLowerCase()))
     if (variants.some((variant) => !variant)) return []
-    const defaults = variants.map((variant) => variant!.defaultValue.trim().toLowerCase())
-    const defaultsDiffer = defaults.some((value) => value !== defaults[0])
+    const defaultsDiffer = variants.slice(1).some((variant) => !ngspiceModelValuesEquivalent(variants[0]!.defaultValue, variant!.defaultValue))
     const conditionalDefaultValues = defaultsDiffer
       ? variants.flatMap((variant, index) => variant ? [{ sourceLine: sourceLines[index], defaultValue: variant.defaultValue }] : [])
-      : parameter.conditionalDefaultValues
+      : undefined
+    const effectiveParameter = { ...parameter }
+    delete effectiveParameter.defaultVariesByCondition
+    delete effectiveParameter.conditionalDefaultValues
     return [{
-      ...parameter,
-      defaultVariesByCondition: variants.some((variant) => variant!.defaultVariesByCondition) || defaultsDiffer || undefined,
+      ...effectiveParameter,
+      defaultVariesByCondition: defaultsDiffer || undefined,
       ...(conditionalDefaultValues ? { conditionalDefaultValues } : {}),
     }]
   })
@@ -116,7 +129,7 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
       const resolved = cache.get(key)
       if (resolved) { inherited = resolved; inheritedChannel = effectiveChannelsByModel.get(key) ?? currentModel.channel; break }
       const baseName = currentModel.akoBaseName
-      if (!baseName) { inherited = currentModel.parameters; inheritedChannel = currentModel.channel; break }
+      if (!baseName) { inherited = modelEntryParameters(currentModel); inheritedChannel = currentModel.channel; break }
       if (!currentModel.akoSafeToExpand) { report(currentAsset, currentModel, `AKO model ${currentModel.name} contains parameters or flags outside the supported assignment-only expansion form.`); return null }
       if (visiting.has(key)) { report(currentAsset, currentModel, `AKO inheritance cycle detected while resolving ${currentModel.name}.`); return null }
       visiting.add(key)
@@ -138,7 +151,7 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
       const { model: child, key } = chain[index]
       const merged = inherited.map((parameter) => ({ ...parameter }))
       const positions = new Map(merged.map((parameter, parameterIndex) => [parameter.name.toLowerCase(), parameterIndex]))
-      for (const parameter of child.parameters) {
+      for (const parameter of modelEntryParameters(child)) {
         const position = positions.get(parameter.name.toLowerCase())
         if (position === undefined) { positions.set(parameter.name.toLowerCase(), merged.length); merged.push({ ...parameter }) }
         else merged[position] = { ...parameter }

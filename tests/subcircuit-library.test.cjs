@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelProvenanceForReplacement, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelProvenanceForReplacement, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, ngspiceModelValuesEquivalent, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { analyzeLtspiceModelDialect } = require(path.join(build, 'domain/modelDialectDiagnostics.js'))
 const { expandNgspiceAkoModels } = require(path.join(build, 'domain/ngspiceAko.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
@@ -1184,6 +1184,32 @@ test('expands each conditional AKO child against the base in the matching branch
     { sourceLine: 3, defaultValue: '1' },
     { sourceLine: 6, defaultValue: '2' },
   ])
+})
+
+test('AKO branch metadata uses effective values and strips the base summary from a single matching branch', () => {
+  const numericContent = [
+    '.IF (SELECT=1)',
+    '.MODEL BASE D(IS=1n N=1)',
+    '.MODEL CHILD AKO:BASE D(IS=2n)',
+    '.ELSE',
+    '.MODEL BASE D(IS=1n N=1.0)',
+    '.MODEL CHILD AKO:BASE D(IS=2n)',
+    '.ENDIF',
+  ].join('\n')
+  const numericAsset = { id: 'ako-numeric', filename: 'ako-numeric.lib', content: numericContent }
+  const numericResult = expandNgspiceAkoModels([{ asset: numericAsset, parsed: parseSubcircuitLibrary(numericContent) }])
+  const numericParameters = numericResult.parameters.get('ako-numeric:3')
+  assert.equal(numericParameters.find(({ name }) => name === 'N').defaultVariesByCondition, undefined)
+  assert.equal(numericParameters.find(({ name }) => name === 'N').conditionalDefaultValues, undefined)
+  assert.equal(ngspiceModelValuesEquivalent('1', '1.0'), true)
+
+  const singleBranchContent = '.IF (SELECT=1)\n.MODEL BASE D(IS=1n N=1)\n.MODEL CHILD AKO:BASE D()\n.ELSE\n.MODEL BASE D(IS=1n N=2)\n.ENDIF'
+  const singleBranchAsset = { id: 'ako-single-branch', filename: 'ako-single-branch.lib', content: singleBranchContent }
+  const singleBranchResult = expandNgspiceAkoModels([{ asset: singleBranchAsset, parsed: parseSubcircuitLibrary(singleBranchContent) }])
+  const inherited = singleBranchResult.parameters.get('ako-single-branch:3').find(({ name }) => name === 'N')
+  assert.equal(inherited.defaultValue, '1')
+  assert.equal(inherited.defaultVariesByCondition, undefined)
+  assert.equal(inherited.conditionalDefaultValues, undefined)
 })
 
 test('matches conditional AKO bases across imported libraries by normalized numeric branch conditions', () => {
