@@ -409,6 +409,7 @@ test('keyboard shortcut reference matches editor controls and restores focus', {
   const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByText('Draw a wire by dragging')).toBeVisible()
+  await expect(dialog.getByText('Ctrl/⌘ + O', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Ctrl/⌘ + S', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Ctrl/⌘ + Enter')).toBeVisible()
   await expect(dialog.getByText('Resistor', { exact: true })).toBeVisible()
@@ -443,6 +444,25 @@ test('project names without ASCII letters still get a usable archive filename', 
   await page.keyboard.press('Control+s')
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe('elsim-project.elsim')
+})
+
+test('Ctrl/Meta+O opens a project through the normal validated file flow', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  const project = await page.evaluate(() => {
+    const value = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    value.name = 'Shortcut-open project'
+    return value
+  })
+  const file = { name: 'shortcut-open.elsim.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(project)) }
+  for (const modifier of ['Control', 'Meta']) {
+    const chooserPromise = page.waitForEvent('filechooser')
+    await page.keyboard.press(`${modifier}+o`)
+    const chooser = await chooserPromise
+    page.once('dialog', (dialog) => dialog.accept())
+    await chooser.setFiles(file)
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)).toBe('Shortcut-open project')
+  }
 })
 
 test('project inspector reports the current project format version', { tag: '@ui-smoke' }, async ({ page }) => {
