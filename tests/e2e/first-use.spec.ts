@@ -10117,6 +10117,28 @@ test('current-source SINE waveform edits and simulates in the browser ngspice en
   await expect(page.locator('.netlist-modal pre')).toContainText(/I1 0 OUT SIN\(1m 2m 1k 0 0 0\)/)
 })
 
+test('current-source AM waveform lazy-loads and simulates in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: /^I1, Current source/ }).click()
+  await page.getByLabel('Analysis type').selectOption('tran')
+  await page.getByRole('combobox', { name: 'Current source waveform' }).selectOption('am')
+  await page.getByLabel('Overall offset (A)').fill('0')
+  await page.getByLabel('Modulation offset (A)').fill('5m')
+  await page.getByLabel('Modulation amplitude (A)').fill('2m')
+  await page.getByLabel('Modulating frequency').fill('100')
+  await page.getByLabel('Carrier frequency').fill('1k')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/I1 0 OUT AM\(0 5m 2m 100 1k 0 0 0\)/)
+})
+
 test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
