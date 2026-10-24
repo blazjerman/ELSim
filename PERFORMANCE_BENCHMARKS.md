@@ -917,3 +917,7 @@ After the October 23 native component and transient-analysis additions, the prod
 ### Startup budget reallocation (2026-10-24)
 
 The ngspice `RSHUNT` simulation setting adds a small amount of eager project validation and toolbar UI. The build measured 235.2 KiB startup JavaScript, 13.7 KiB CSS, and 248.9 KiB combined gzip. To keep the same 250 KiB total transfer cap, the JavaScript sub-budget is reallocated from 235 KiB to 236 KiB using unused CSS headroom; the CSS cap remains 15 KiB. This records artifact size only and does not claim a browser startup-latency change. No WASM rebuild or Pages workflow ran.
+
+### Firefox eight-window process-memory spot check (2026-10-24)
+
+The phase-aware Linux sampler completed one Firefox run with eight plot windows and 32 traces over 1,000,130 transient samples, reusing the existing local ngspice WASM. Results became ready in 10.09 s; the worker reported 9.52 s in ngspice, 40 ms in result processing, and 185,794,560 bytes (177.2 MiB) of WASM linear-memory capacity. Firefox process-tree PSS/RSS peaks were 611.3/962.0 MiB at startup, 1,004.2/1,361.9 MiB during solve/result transfer, 630.9/989.0 MiB during validation/transfer, and 675.0/1,034.8 MiB during plot interaction. All required phase markers were observed across 160 samples at 100 ms intervals. The solve-phase PSS is within the earlier one-host observations; the peak is process-wide and does not attribute memory to ELSim, ngspice, or plot count. This is one spot check, not a repeat distribution or portable budget. No WASM rebuild or Pages workflow ran.
