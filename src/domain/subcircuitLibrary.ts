@@ -263,7 +263,7 @@ function logicalLines(source: string): LogicalLine[] {
   return result
 }
 
-function hasNgspiceBackslashContinuation(line: string): boolean {
+export function hasNgspiceBackslashContinuation(line: string): boolean {
   if (/^\s*\*/.test(line) || !line.endsWith('\\\\')) return false
   let quote = ''
   for (let index = 0; index < line.length - 2; index += 1) {

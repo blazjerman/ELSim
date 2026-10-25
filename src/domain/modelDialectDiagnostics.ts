@@ -1,5 +1,5 @@
 import { translateVoltageSwitchModel } from './voltageSwitchModel'
-import { listModelLibrarySections, parseModelCard, withoutInlineComment, type ModelDialectWarning } from './subcircuitLibrary'
+import { hasNgspiceBackslashContinuation, listModelLibrarySections, parseModelCard, withoutInlineComment, type ModelDialectWarning } from './subcircuitLibrary'
 
 type LogicalSourceLine = { sourceLine: number; text: string; segments: { start: number; end: number; physicalLine: number }[] }
 export type ModelDialectLibrarySource = { assetId: string; content: string; selectedSections?: string[] }
@@ -34,13 +34,19 @@ function unsupportedDialectFunction(expression: string, onlyName?: string): { in
 
 function logicalSourceLines(source: string): LogicalSourceLine[] {
   const lines: LogicalSourceLine[] = []
+  let backslashContinuation = false
   for (const [index, physicalLine] of source.replace(/^\uFEFF/, '').split(/\r?\n/).entries()) {
-    if (/^\s*\+/.test(physicalLine) && lines.length) {
-      const continuation = physicalLine.replace(/^\s*\+\s?/, '').trim()
+    const uncommented = withoutInlineComment(physicalLine).trimEnd()
+    const hasBackslashContinuation = hasNgspiceBackslashContinuation(uncommented)
+    const content = hasBackslashContinuation ? uncommented.slice(0, -2) : uncommented
+    if ((/^\s*\+/.test(content) || backslashContinuation) && lines.length) {
+      const continuation = content.replace(/^\s*\+\s?/, '').trim()
       const current = lines.at(-1)!
+      const start = current.text.length + 1
       current.text += ` ${continuation}`
-      current.segments.push({ start: current.text.length - continuation.length, end: current.text.length, physicalLine: index + 1 })
-    } else lines.push({ sourceLine: index + 1, text: physicalLine, segments: [{ start: 0, end: physicalLine.length, physicalLine: index + 1 }] })
+      current.segments.push({ start, end: current.text.length, physicalLine: index + 1 })
+    } else lines.push({ sourceLine: index + 1, text: content, segments: [{ start: 0, end: content.length, physicalLine: index + 1 }] })
+    backslashContinuation = hasBackslashContinuation
   }
   return lines
 }
@@ -196,7 +202,16 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
           if (translateVoltageSwitchModel(parsedModel)) return []
         } catch { /* Preserve the diagnostic for any model card that is not in the safe translation subset. */ }
       }
-      const featureOffset = match.index
+      const sourceToken = name === 'Imported B-source sqr()' ? /\bsqr\s*\(/i
+        : name === 'B-source int()' ? /\bint\s*\(/i
+          : name.includes('table()') ? /\btable\s*\(/i
+            : name.includes('u() step') ? /\bu\s*\(/i
+              : name.includes('integration function') ? /\b(?:idt|idtmod|sdt)\s*\(/i
+                : name === 'LTspice behavioral Laplace option' ? /\blaplace\s*=/i
+                  : name === 'LTspice behavioral-source option' ? /\b(?:tripdv|tripdt|nfft|window|mtol)\s*=/i
+                    : name === 'LTspice behavioral resistor/power source' ? /\b[RP]\s*=/i
+                      : undefined
+      const featureOffset = sourceToken ? line.search(sourceToken) : match.index
       const featureLine = segments.find(({ start, end }) => featureOffset >= start && featureOffset < end)?.physicalLine ?? sourceLine
       return [{ sourceLine: featureLine, feature: name, excerpt: line.slice(0, 160), impact, suggestion }]
     })

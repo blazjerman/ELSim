@@ -1686,6 +1686,17 @@ test('pinpoints LTspice behavioral forms and options, including continuation rec
   assert.equal(source.includes('Laplace=1/(1+s)'), true)
 })
 
+test('compatibility diagnostics follow ngspice backslash continuations and point to the physical source line', () => {
+  const source = String.raw`.SUBCKT compat IN OUT
+B1 OUT 0 V=V(IN) \\
++ + sqr(V(IN))
+.ENDS compat`
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.equal(warning.feature, 'Imported B-source sqr()')
+  assert.equal(warning.sourceLine, 3)
+  assert.match(warning.excerpt, /V\(IN\).*sqr\(V\(IN\)\)/)
+})
+
 test('flags raw LTspice table() expressions in imported model libraries that ELSim does not rewrite', () => {
   const source = '.SUBCKT lookup IN OUT\nB1 OUT 0 V=table(V(IN),0,0,1,5)\n.ENDS lookup'
   const [warning] = analyzeLtspiceModelDialect(source)
