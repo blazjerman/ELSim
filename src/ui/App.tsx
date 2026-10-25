@@ -1245,44 +1245,47 @@ export default function App() {
   }
   const sheetsById = useMemo(() => new Map(project.sheets.map((sheet) => [sheet.id, sheet])), [project.sheets])
   const activeSheet = sheetsById.get(project.activeSheetId)
+  const sheetInstanceOwnersByChild = useMemo(() => {
+    const ownersByChild = new Map<string, Set<string>>()
+    for (const owner of project.sheets) for (const part of owner.parts) {
+      if (!part.sheetId) continue
+      let owners = ownersByChild.get(part.sheetId)
+      if (!owners) ownersByChild.set(part.sheetId, owners = new Set())
+      owners.add(owner.id)
+    }
+    return ownersByChild
+  }, [project.sheets])
   const availableSheetPortNodeNames = useMemo(() => {
     if (!activeSheet) return []
     const existingPorts = new Set(activeSheet.ports.map((port) => port.name.toLowerCase()))
     return [...new Set(activeSheet.netLabels.map((label) => label.name).filter((name) => !existingPorts.has(name.toLowerCase())))]
   }, [activeSheet?.netLabels, activeSheet?.ports])
   const sheetsContainingActive = useMemo(() => {
-    const ownersByChild = new Map<string, string[]>()
-    for (const owner of project.sheets) for (const part of owner.parts) {
-      if (!part.sheetId) continue
-      const owners = ownersByChild.get(part.sheetId)
-      if (owners) owners.push(owner.id)
-      else ownersByChild.set(part.sheetId, [owner.id])
-    }
     const containing = new Set<string>([project.activeSheetId])
     const pending = [project.activeSheetId]
     for (let index = 0; index < pending.length; index += 1) {
-      for (const ownerId of ownersByChild.get(pending[index]) ?? []) {
+      for (const ownerId of sheetInstanceOwnersByChild.get(pending[index]) ?? []) {
         if (containing.has(ownerId)) continue
         containing.add(ownerId)
         pending.push(ownerId)
       }
     }
     return containing
-  }, [project.activeSheetId, project.sheets])
+  }, [project.activeSheetId, sheetInstanceOwnersByChild])
   const availableSheetBlocks = useMemo(() => project.sheets.filter((sheet) =>
     sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetsContainingActive.has(sheet.id)),
   [project.activeSheetId, project.sheets, sheetsContainingActive])
-  const activeSheetHasInstances = useMemo(() => Boolean(activeSheet && project.sheets.some((sheet) => sheet.parts.some((part) => part.sheetId === activeSheet.id))), [activeSheet?.id, project.sheets])
+  const activeSheetHasInstances = Boolean(activeSheet && (sheetInstanceOwnersByChild.get(activeSheet.id)?.size ?? 0) > 0)
   const activeSheetDeleteReason = useMemo(() => !activeSheet || activeSheet.parentSheetId === null
     ? 'The root circuit cannot be deleted.'
     : activeSheetHasInstances
       ? 'Remove every placed instance of this block before deleting its sheet.'
       : (() => {
           const subtree = sheetDefinitionSubtreeIds(project, activeSheet.id)
-          return project.sheets.some((sheet) => !subtree.has(sheet.id) && sheet.parts.some((part) => part.sheetId && subtree.has(part.sheetId)))
+          return [...subtree].some((childId) => [...(sheetInstanceOwnersByChild.get(childId) ?? [])].some((ownerId) => !subtree.has(ownerId)))
             ? 'Remove uses of nested blocks outside this sheet before deleting its subtree.'
             : null
-        })(), [activeSheet, activeSheetHasInstances, project.sheets])
+        })(), [activeSheet, activeSheetHasInstances, project.sheets, sheetInstanceOwnersByChild])
   const addSheetPort = (name: string) => {
     if (!activeSheet || activeSheet.parentSheetId === null) { setNotice('The root circuit cannot be used as a reusable block. Add ports to a child sheet.'); return }
     if (activeSheet.ports.some((port) => port.name.toLowerCase() === name.toLowerCase())) return
