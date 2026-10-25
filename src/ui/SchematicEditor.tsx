@@ -479,21 +479,27 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
     // reconcile their full SVG subtree on every cursor frame. Keep their
     // nodes in React, but apply only the changing power/polarity attributes
     // from one shared frame listener using the same exact sampled values.
+    // Resolve the SVG nodes once per mounted viewport. The visible resistor
+    // set changes only when the effect dependencies change; querying each
+    // group and marker on every cursor tick was avoidable frame work.
+    const groups = document.querySelectorAll<SVGGElement>('svg.schematic .circuit-part[data-animation-kind="resistor-power"]')
+    const animatedResistors = Array.from(groups, (group) => ({
+      group,
+      part: partsById.get(group.dataset.partId ?? ''),
+      glow: group.querySelector<SVGCircleElement>('[data-resistor-power-glow]'),
+      markers: Array.from(group.querySelectorAll<SVGTextElement>('[data-live-current-polarity]')),
+    })).filter((entry): entry is typeof entry & { part: Part } => entry.part !== undefined)
     const updateResistorAnimation = () => {
       const sampleIndex = getSimulationCursor()
-      const groups = document.querySelectorAll<SVGGElement>('svg.schematic .circuit-part[data-animation-kind="resistor-power"]')
-      for (const group of groups) {
-        const part = partsById.get(group.dataset.partId ?? '')
-        if (!part) continue
+      for (const { part, glow, markers } of animatedResistors) {
         const { voltage, current } = componentSample(part, sampleIndex)
         const power = Math.abs((voltage ?? 0) * (current ?? 0))
         const glowOpacity = Math.min(1, Math.sqrt(power / (part.animationNominalPower ?? 0.25))) * 0.34
-        const glow = group.querySelector<SVGCircleElement>('[data-resistor-power-glow]')
         if (glow && glow.getAttribute('opacity') !== String(glowOpacity)) glow.setAttribute('opacity', String(glowOpacity))
         const hasCurrent = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
         const pin1Polarity = current !== undefined && current < 0 ? '+' : '−'
         const pin2Polarity = pin1Polarity === '+' ? '−' : '+'
-        for (const marker of group.querySelectorAll<SVGTextElement>('[data-live-current-polarity]')) {
+        for (const marker of markers) {
           const pin1 = marker.getAttribute('data-pin') === '1'
           const polarity = pin1 ? pin1Polarity : pin2Polarity
           if (marker.getAttribute('data-polarity') !== polarity) marker.setAttribute('data-polarity', polarity)
