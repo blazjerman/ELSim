@@ -31,7 +31,7 @@ const MUTUAL_INDUCTOR_DOT_GEOMETRY = [{ kind: 'circle', cx: -42, cy: -7, r: 3.5,
 const LOGIC_OUTPUT_PART_KINDS: ReadonlySet<PartKind> = new Set(['inverter', 'logicGate'])
 const TRANSISTOR_CHANNEL_PART_KINDS: ReadonlySet<PartKind> = new Set(['nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet'])
 const CURRENT_POLARITY_MARKER_PART_KINDS: ReadonlySet<PartKind> = new Set(['resistor', 'capacitor', 'lamp', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'currentSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral'])
-const SHARED_FRAME_ANIMATION_PART_KINDS: ReadonlySet<PartKind> = new Set(['resistor', 'capacitor', 'inductor', 'transformer', 'lamp', 'led', 'currentSource', 'diode', 'zener', 'switch', 'voltageSwitch', 'currentSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', ...TRANSISTOR_CHANNEL_PART_KINDS])
+const SHARED_FRAME_ANIMATION_PART_KINDS: ReadonlySet<PartKind> = new Set(['resistor', 'capacitor', 'inductor', 'transformer', 'lamp', 'led', 'currentSource', 'diode', 'zener', 'switch', 'voltageSwitch', 'currentSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'inverter', 'logicGate', 'npn', 'pnp', ...TRANSISTOR_CHANNEL_PART_KINDS])
 
 const CanvasConnectionDotLayer = memo(function CanvasConnectionDotLayer({ dots, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
   dots: { x: number; y: number }[]
@@ -226,7 +226,7 @@ const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView(
     const chargePlate = primitive.className?.includes('capacitor-charge-glow') ?? false
     const positivePlate = primitive.className?.includes('capacitor-charge-positive-plate') ?? false
     const wiper = primitive.className === 'potentiometer-wiper'
-    return <line className={primitive.className} x1={primitive.x1} y1={chargePlate ? -16 - 7 * sample.capacitorChargeLevel : primitive.y1} x2={primitive.x2} y2={chargePlate ? 16 + 7 * sample.capacitorChargeLevel : wiper ? sample.potentiometerWiperY : primitive.y2} data-charge-level={chargePlate ? sample.capacitorChargeLevel : undefined} data-wiper-position={wiper ? sample.potentiometerPosition : undefined} {...common} stroke={chargePlate ? ((sample.capacitorVoltage ?? sample.voltage ?? 0) < 0) === positivePlate ? '#74bdf2' : '#f18484' : primitive.className === 'logic-output-lead' && sample.logicOutput !== undefined ? sample.logicOutputStroke : common.stroke} strokeWidth={chargePlate ? 2 + sample.capacitorChargeLevel * 6 : primitive.className === 'logic-output-lead' ? 3.2 : common.strokeWidth} opacity={chargePlate ? sample.capacitorChargeLevel * .8 : undefined} pointerEvents={chargePlate ? 'none' : undefined} style={primitive.className === 'logic-output-lead' ? { filter: sample.logicState === 'high' ? 'drop-shadow(0 0 5px #83e6ad)' : undefined } : undefined}/>
+    return <line className={primitive.className} data-logic-output-lead={primitive.className === 'logic-output-lead' ? true : undefined} x1={primitive.x1} y1={chargePlate ? -16 - 7 * sample.capacitorChargeLevel : primitive.y1} x2={chargePlate ? 16 + 7 * sample.capacitorChargeLevel : wiper ? sample.potentiometerWiperY : primitive.x2} data-charge-level={chargePlate ? sample.capacitorChargeLevel : undefined} data-wiper-position={wiper ? sample.potentiometerPosition : undefined} {...common} stroke={chargePlate ? ((sample.capacitorVoltage ?? sample.voltage ?? 0) < 0) === positivePlate ? '#74bdf2' : '#f18484' : primitive.className === 'logic-output-lead' && sample.logicOutput !== undefined ? sample.logicOutputStroke : common.stroke} strokeWidth={chargePlate ? 2 + sample.capacitorChargeLevel * 6 : primitive.className === 'logic-output-lead' ? 3.2 : common.strokeWidth} opacity={chargePlate ? sample.capacitorChargeLevel * .8 : undefined} pointerEvents={chargePlate ? 'none' : undefined} style={primitive.className === 'logic-output-lead' ? { filter: sample.logicState === 'high' ? 'drop-shadow(0 0 5px #83e6ad)' : undefined } : undefined}/>
   }
   if (primitive.kind === 'rect') return <rect x={primitive.x} y={primitive.y} width={primitive.width} height={primitive.height} rx={primitive.rx ?? 0} {...common}/>
   if (primitive.kind === 'circle') {
@@ -502,6 +502,9 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         currentSwitchSymbol: group.querySelector<SVGGElement>('.current-switch-symbol'),
         currentSwitchLever: group.querySelector<SVGPathElement>('[data-current-switch-lever]'),
         transistorCurrentIndicator: group.querySelector<SVGPathElement>('[data-transistor-current]'),
+        logicOutputLead: group.querySelector<SVGLineElement>('[data-logic-output-lead]'),
+        logicLow: LOGIC_OUTPUT_PART_KINDS.has(part?.kind ?? 'source') ? componentMagnitude(part?.logicLow ?? '0 V', 'source') ?? 0 : 0,
+        logicHigh: LOGIC_OUTPUT_PART_KINDS.has(part?.kind ?? 'source') ? componentMagnitude(part?.logicHigh ?? '5 V', 'source') ?? 5 : 5,
         ledGlow: group.querySelector<SVGCircleElement>('[data-led-glow]'),
         ledRays: group.querySelector<SVGPathElement>('[data-led-rays]'),
         lampGlow: group.querySelector<SVGCircleElement>('[data-lamp-glow]'),
@@ -519,8 +522,8 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
     const updateSharedComponentAnimation = () => {
       const profileStartedAt = profileAnimation ? performance.now() : 0
       const sampleIndex = getSimulationCursor()
-      for (const { group, part, kind, currentSourceArrow, voltageSwitchSymbol, voltageSwitchLever, currentSwitchSymbol, currentSwitchLever, transistorCurrentIndicator, ledGlow, ledRays, lampGlow, lampFilament, powerGlow, inductorGlow, transformerPrimaryGlow, transformerSecondaryGlow, capacitorPlates, capacitance, seriesResistance, markers } of animatedParts) {
-        const { voltage, current, secondaryCurrent, capacitorCharge, switchClosed } = componentSample(part, sampleIndex)
+      for (const { group, part, kind, currentSourceArrow, voltageSwitchSymbol, voltageSwitchLever, currentSwitchSymbol, currentSwitchLever, transistorCurrentIndicator, logicOutputLead, logicLow, logicHigh, ledGlow, ledRays, lampGlow, lampFilament, powerGlow, inductorGlow, transformerPrimaryGlow, transformerSecondaryGlow, capacitorPlates, capacitance, seriesResistance, markers } of animatedParts) {
+        const { voltage, current, secondaryCurrent, capacitorCharge, switchClosed, logicOutput } = componentSample(part, sampleIndex)
         if (kind === 'currentSource-result') {
           const active = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
           const reverse = active && current! < 0
@@ -551,6 +554,15 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
             ? switchClosed ? 'M-12 -2L12 0' : 'M-12 -2L9 -12'
             : switchClosed ? 'M-12 -2L12 1' : 'M-12 -2L10 -15'
           if (lever && lever.getAttribute('d') !== path) lever.setAttribute('d', path)
+        }
+        if (logicOutputLead) {
+          const logicState = logicOutput === undefined ? undefined : logicOutput >= (logicLow + logicHigh) / 2 ? 'high' : 'low'
+          if (logicState) group.dataset.logicState = logicState
+          else delete group.dataset.logicState
+          const selected = (partUiState(part.id) & 1) !== 0
+          group.setAttribute('aria-label', `${part.ref}, ${kindNames[part.kind]}, ${part.value || 'no value'}${logicState ? `, output ${logicState}` : ''}${selected ? ', selected' : ''}`)
+          logicOutputLead.setAttribute('stroke', logicState === 'high' ? '#83e6ad' : logicState === 'low' ? '#78847c' : selected ? '#86e3b7' : '#c6cec7')
+          logicOutputLead.style.filter = logicState === 'high' ? 'drop-shadow(0 0 5px #83e6ad)' : ''
         }
         if (kind === 'lamp-result') {
           const power = Math.abs((voltage ?? 0) * (current ?? 0))
