@@ -137,12 +137,13 @@ function spiceAm(part: Part, parameters: Project['sheets'][number]['parameters']
 }
 
 function spiceTransientNoise(part: Part, parameters: Project['sheets'][number]['parameters'] = []): string | null {
-  if (part.kind !== 'source') return null
+  if (part.kind !== 'source' && part.kind !== 'currentSource') return null
+  const quantity = part.kind === 'currentSource' ? 'currentSource' : 'source'
   const noise = { gaussianRms: '10n', timeStep: '1u', flickerExponent: '0', flickerAmplitude: '0', rtsAmplitude: '0', rtsCaptureTime: '1u', rtsEmissionTime: '1u', ...part.trnoise }
-  const gaussian = spiceSheetValue(noise.gaussianRms, 'source', parameters)
+  const gaussian = spiceSheetValue(noise.gaussianRms, quantity, parameters)
   const timeStep = spiceSheetTime(noise.timeStep, parameters)
-  const flickerAmplitude = spiceSheetValue(noise.flickerAmplitude, 'source', parameters)
-  const rtsAmplitude = spiceSheetValue(noise.rtsAmplitude, 'source', parameters)
+  const flickerAmplitude = spiceSheetValue(noise.flickerAmplitude, quantity, parameters)
+  const rtsAmplitude = spiceSheetValue(noise.rtsAmplitude, quantity, parameters)
   const flickerExponent = spiceSheetScalar(noise.flickerExponent, parameters)
   const captureTime = spiceSheetTime(noise.rtsCaptureTime, parameters)
   const emissionTime = spiceSheetTime(noise.rtsEmissionTime, parameters)
@@ -1064,12 +1065,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     if (part.kind === 'currentSource') {
       let transientValue = value
       if (project.simulation.analysis === 'tran' && part.sourceMode === 'trnoise') {
-        const message = `${part.ref} TRNOISE is available only on voltage sources in ngspice 47; current-source transient noise is not implemented by the solver.`
-        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
-        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
-        continue
-      }
-      if (project.simulation.analysis === 'tran' && part.sourceMode === 'pulse') {
+        const waveform = spiceTransientNoise(part, sheetParameters)
+        if (!waveform) {
+          const message = `${part.ref} TRNOISE amplitudes must be nonnegative currents; use a positive noise time step when noise is enabled, a flicker exponent between 0 and 2 when flicker noise is enabled, and positive capture/emission times when RTS noise is enabled.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `DC ${value} ${waveform}`
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'pulse') {
         const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
         const initial = spiceSheetValue(pulse.initial, 'currentSource', sheetParameters)
         const delay = spiceSheetTime(pulse.delay, sheetParameters)
@@ -1215,7 +1219,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'trnoise') {
         const waveform = spiceTransientNoise(part, sheetParameters)
         if (!waveform) {
-          const message = `${part.ref} TRNOISE values must be nonnegative; use a positive noise time step when noise is enabled, a flicker exponent between 0 and 2 when flicker noise is enabled, and positive capture/emission times when RTS noise is enabled.`
+          const message = `${part.ref} TRNOISE amplitudes must be nonnegative voltages; use a positive noise time step when noise is enabled, a flicker exponent between 0 and 2 when flicker noise is enabled, and positive capture/emission times when RTS noise is enabled.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue

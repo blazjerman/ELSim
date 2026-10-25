@@ -47,8 +47,8 @@ export function AdvancedSourceWaveformEditor({ part, mode, onChange, analysisSet
 
   if (mode === 'trnoise') {
     const noise = { gaussianRms: '10n', timeStep: '1u', flickerExponent: '0', flickerAmplitude: '0', rtsAmplitude: '0', rtsCaptureTime: '1u', rtsEmissionTime: '1u', ...part.trnoise }
-    const fields = [['gaussianRms', 'Gaussian RMS voltage (V)'], ['timeStep', 'Noise sample interval (s)'], ['flickerExponent', '1/f noise exponent'], ['flickerAmplitude', '1/f noise amplitude (V)'], ['rtsAmplitude', 'RTS amplitude (V)'], ['rtsCaptureTime', 'RTS mean capture time (s)'], ['rtsEmissionTime', 'RTS mean emission time (s)']] as const
-    return <div className="sine-source-fields"><div className="field-hint">Experimental ngspice transient noise. It is available for voltage sources only; current-source TRNOISE is not implemented. The source's Voltage field sets the DC level. Noise is random and adds solver breakpoints at the sample interval.</div>{fields.map(([key, label]) => {
+    const fields = [['gaussianRms', `Gaussian RMS ${quantity} (${unit})`], ['timeStep', 'Noise sample interval (s)'], ['flickerExponent', '1/f noise exponent'], ['flickerAmplitude', `1/f noise amplitude (${unit})`], ['rtsAmplitude', `RTS amplitude (${unit})`], ['rtsCaptureTime', 'RTS mean capture time (s)'], ['rtsEmissionTime', 'RTS mean emission time (s)']] as const
+    return <div className="sine-source-fields"><div className="field-hint">Experimental ngspice transient noise. The source's {quantity === 'current' ? 'Current' : 'Voltage'} field sets its DC level. Noise is random and adds solver breakpoints at the sample interval.</div>{fields.map(([key, label]) => {
       const field = `trnoise.${key}` as AnalysisSettingField
       const error = analysisSettingError(field, part.id)
       const errorId = `analysis-error-${part.id}-${key}`

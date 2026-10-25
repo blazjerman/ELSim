@@ -11537,6 +11537,26 @@ test('experimental TRNOISE voltage source simulates through browser ngspice', { 
   await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 DC 0 TRNOISE\(20m 1m 1\.1 1m 5m 2m 3m\)/)
 })
 
+test('experimental TRNOISE current source simulates through browser ngspice', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: /^I1, Current source/ }).click()
+  await page.getByLabel('Analysis type').selectOption('tran')
+  await page.getByRole('combobox', { name: 'Current source waveform' }).selectOption('trnoise')
+  await page.getByLabel('Current (A)').fill('1m')
+  await page.getByLabel('Gaussian RMS current (A)').fill('100u')
+  await page.getByLabel('Noise sample interval (s)').fill('100u')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/I1 .* DC 1m TRNOISE\(100u 100u 0 0 0 1u 1u\)/)
+})
+
 test('TRNOISE Gaussian RMS can be stepped in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])

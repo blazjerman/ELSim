@@ -96,16 +96,14 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       }
     }
     for (const part of independentSources.filter((item) => item.sourceMode === 'trnoise')) {
-      if (part.kind !== 'source') {
-        add('trnoise.gaussianRms', `${part.ref} transient TRNOISE is supported only on voltage sources by ngspice.`, part.id, 'trnoise.gaussianRms')
-        continue
-      }
+      const quantity = part.kind === 'currentSource' ? 'currentSource' : 'source'
+      const unit = part.kind === 'currentSource' ? 'current' : 'voltage'
       const settings = { gaussianRms: '10n', timeStep: '1u', flickerExponent: '0', flickerAmplitude: '0', rtsAmplitude: '0', rtsCaptureTime: '1u', rtsEmissionTime: '1u', ...part.trnoise }
       const amplitudeValues = ['gaussianRms', 'flickerAmplitude', 'rtsAmplitude'] as const
       const amplitudes = Object.fromEntries(amplitudeValues.map((field) => {
-        const token = spiceSheetValue(settings[field], 'source', sourceParameters)
+        const token = spiceSheetValue(settings[field], quantity, sourceParameters)
         const magnitude = token === null ? null : spiceValueMagnitude(token)
-        if (magnitude === null || magnitude < 0) add(`trnoise.${field}`, `${part.ref} ${field === 'gaussianRms' ? 'Gaussian RMS' : field === 'flickerAmplitude' ? 'flicker' : 'RTS'} noise amplitude must be a nonnegative voltage.`, part.id, `trnoise.${field}`)
+        if (magnitude === null || magnitude < 0) add(`trnoise.${field}`, `${part.ref} ${field === 'gaussianRms' ? 'Gaussian RMS' : field === 'flickerAmplitude' ? 'flicker' : 'RTS'} noise amplitude must be a nonnegative ${unit}.`, part.id, `trnoise.${field}`)
         return [field, magnitude]
       })) as Record<(typeof amplitudeValues)[number], number | null>
       const timeStep = spiceSheetTimeMagnitude(settings.timeStep, sourceParameters)

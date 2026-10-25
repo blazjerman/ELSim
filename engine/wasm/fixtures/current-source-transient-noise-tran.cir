@@ -1,0 +1,11 @@
+ngspice independent current-source transient-noise fixture
+I1 out 0 DC 1m TRNOISE(100u 100u 0 0)
+R1 out 0 1k
+.control
+set filetype=ascii
+save all
+tran 10u 1m
+write /result.raw all
+quit
+.endc
+.end

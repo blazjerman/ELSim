@@ -3607,7 +3607,7 @@ test('AM transient sources emit ngspice field order and validate both source qua
   assert.ok(validateAnalysisSettings(project).some((error) => error.field === 'am.carrierFrequency'))
 })
 
-test('experimental TRNOISE emits all seven ngspice fields on voltage sources only', () => {
+test('experimental TRNOISE emits all seven ngspice fields on voltage and current sources', () => {
   const project = createStarterProject()
   const voltage = project.parts.find((part) => part.kind === 'source')
   voltage.value = '0 V'
@@ -3617,12 +3617,19 @@ test('experimental TRNOISE emits all seven ngspice fields on voltage sources onl
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^V1 vin 0 DC 0 TRNOISE\(20m 1m 1\.1 12m 15m 22u 50u\)$/m)
+  const currentProject = createCurrentSourceExampleProject()
+  const current = currentProject.parts.find((part) => part.kind === 'currentSource')
+  currentProject.simulation.analysis = 'tran'
+  current.sourceMode = 'trnoise'
+  current.trnoise = { gaussianRms: '20 uA', timeStep: '1 ms', flickerExponent: '1.1', flickerAmplitude: '12 uA', rtsAmplitude: '15 uA', rtsCaptureTime: '22 us', rtsEmissionTime: '50 us' }
+  const withCurrent = createNetlistArtifact(validateProject(currentProject))
+  assert.deepEqual(withCurrent.diagnostics, [])
+  assert.match(withCurrent.text, /^I1 .* DC 1m TRNOISE\(20u 1m 1\.1 12u 15u 22u 50u\)$/m)
   voltage.trnoise.flickerExponent = '2'
   assert.ok(validateAnalysisSettings(project).some((error) => error.field === 'trnoise.flickerExponent'))
   voltage.trnoise.flickerExponent = '1.1'
   voltage.trnoise.rtsCaptureTime = '0'
   assert.ok(validateAnalysisSettings(project).some((error) => error.field === 'trnoise.rtsCaptureTime'))
-  assert.throws(() => validateProject({ ...project, parts: [...project.parts, { id: 'unsupported-trnoise-i', kind: 'currentSource', ref: 'I1', value: '1m', sourceMode: 'trnoise', x: 700, y: 500, rotation: 0 }] }), /TRNOISE is supported only on voltage sources/)
 })
 
 
