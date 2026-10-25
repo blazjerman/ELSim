@@ -112,6 +112,43 @@ function makeWireGrid(createStarterProject, componentPins, count) {
   return project
 }
 
+function makeLongCurrentBus(createStarterProject, componentPins, count) {
+  const project = createStarterProject()
+  const loads = Array.from({ length: count }, (_, index) => ({
+    id: `current-bus-r-${index + 1}`,
+    kind: 'resistor',
+    ref: `R${index + 1}`,
+    value: '1k',
+    x: 100 + index * 120,
+    y: 400,
+    rotation: 90,
+  }))
+  const source = { id: 'current-bus-i1', kind: 'currentSource', ref: 'I1', value: '-5', x: 40, y: 400, rotation: 90 }
+  const loadPins = loads.map((part) => componentPins(part))
+  const sourcePins = componentPins(source)
+  const wires = []
+  for (let pinIndex = 0; pinIndex < 2; pinIndex += 1) {
+    const chain = [sourcePins[pinIndex], ...loadPins.map((pins) => pins[pinIndex])]
+    for (let index = 0; index < chain.length - 1; index += 1) {
+      wires.push({ id: `current-bus-wire-${pinIndex}-${index}`, points: [
+        [chain[index].x, chain[index].y], [chain[index + 1].x, chain[index + 1].y],
+      ] })
+    }
+  }
+  const parts = [source, ...loads]
+  project.name = `Benchmark long connected current buses (${count} loads)`
+  project.parts = parts
+  project.wires = wires
+  project.junctions = []
+  project.netLabels = []
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.sheets = project.sheets.map((sheet) => sheet.id === project.rootSheetId
+    ? { ...sheet, parts, wires, junctions: [], netLabels: [] }
+    : sheet)
+  project.activeSheetId = project.rootSheetId
+  return project
+}
+
 function makeHierarchy(createHierarchicalExampleProject, componentPins, count) {
   const project = createHierarchicalExampleProject()
   const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)
@@ -632,6 +669,32 @@ try {
     })
   }
 
+  const longCurrentBusProject = makeLongCurrentBus(createStarterProject, componentPins, 5_000)
+  const longCurrentBusConnectivity = measure(() => analyzeConnectivity(longCurrentBusProject))
+  if (longCurrentBusConnectivity.value.pinNets.size !== longCurrentBusProject.parts.length * 2) throw new Error('Long current-bus fixture lost a component pin in connectivity analysis.')
+  const longCurrentBusSampler = createWireCurrentFlowSampler(longCurrentBusProject, longCurrentBusConnectivity.value)
+  const visibleBusWireIds = new Set(longCurrentBusProject.wires.slice(0, 20).map((wire) => wire.id))
+  const busCurrentForPart = (part) => part.kind === 'currentSource' ? -5 : part.kind === 'resistor' ? 0.001 : undefined
+  const fullBusFlow = measure(() => longCurrentBusSampler(busCurrentForPart), 1, 3)
+  const visibleBusFlow = measure(() => longCurrentBusSampler(busCurrentForPart, undefined, visibleBusWireIds), 3, 31)
+  if (visibleBusFlow.value.size !== visibleBusWireIds.size) throw new Error('Long current-bus animation omitted visible wire results.')
+  for (const id of visibleBusWireIds) {
+    if (JSON.stringify(visibleBusFlow.value.get(id)) !== JSON.stringify(fullBusFlow.value.get(id))) throw new Error(`Visible long current-bus result changed for ${id}.`)
+  }
+  const firstBusFlow = fullBusFlow.value.get('current-bus-wire-0-0')?.[0]
+  const lastBusFlow = fullBusFlow.value.get('current-bus-wire-0-4999')?.[0]
+  if (!firstBusFlow?.forward || Math.abs(firstBusFlow.magnitude - 5) > 1e-9) throw new Error('Long current-bus fixture must carry 5 A at the source end.')
+  if (!lastBusFlow?.forward || Math.abs(lastBusFlow.magnitude - 0.001) > 1e-9) throw new Error('Long current-bus fixture must carry 1 mA after the final load tap.')
+  const longCurrentBusAnimation = {
+    loads: longCurrentBusProject.parts.length - 1,
+    wireSegments: longCurrentBusProject.wires.length,
+    connectedWireNetworks: new Set(longCurrentBusConnectivity.value.wireNets.values()).size,
+    requestedWires: visibleBusWireIds.size,
+    connectivity: { medianMs: longCurrentBusConnectivity.medianMs, p95Ms: longCurrentBusConnectivity.p95Ms },
+    fullNetworkSample: { medianMs: fullBusFlow.medianMs, p95Ms: fullBusFlow.p95Ms },
+    visibleNetworkSample: { medianMs: visibleBusFlow.medianMs, p95Ms: visibleBusFlow.p95Ms },
+  }
+
   const plotResults = []
   for (const sampleCount of [100_000, 1_000_000]) {
     const values = Float64Array.from({ length: sampleCount }, (_, index) => Math.sin(index * 0.013) + (index % 100_003 === 17 ? 10 : 0))
@@ -771,6 +834,7 @@ try {
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
     wireResults,
+    longCurrentBusAnimation,
     hierarchyResults,
     importedModelResults,
     importedLibraryAnalysisResults,
