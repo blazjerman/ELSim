@@ -144,9 +144,12 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   const importedDeviceModels = new Map<string, ImportedDeviceModel>()
   const importedDeviceModelCards = []
   const parsedModelAssets = []
+  const parsedModelAssetsById = new Map<string, ReturnType<typeof parseSubcircuitLibrary>>()
   for (const asset of project.modelAssets ?? []) {
     try {
-      parsedModelAssets.push({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) })
+      const parsed = parseSubcircuitLibrary(asset.content, asset.selectedSections)
+      parsedModelAssets.push({ asset, parsed })
+      parsedModelAssetsById.set(asset.id, parsed)
     } catch {
       // Invalid library syntax has its own importer diagnostic.
     }
@@ -608,23 +611,11 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
           }
         }
       }
-      const parsedTxlModelsByAsset = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['models']>()
       const reportedTxlLengthIssues = new Set<string>()
       for (const dependency of dependencies.resolved) {
         if (dependency.kind !== 'device' || dependency.targetModelType?.toLowerCase() !== 'txl') continue
-        let models = parsedTxlModelsByAsset.get(dependency.targetAssetId)
-        if (!models) {
-          const asset = project.modelAssets.find((candidate) => candidate.id === dependency.targetAssetId)
-          if (!asset) continue
-          try {
-            models = parseSubcircuitLibrary(asset.content, asset.selectedSections).models
-            parsedTxlModelsByAsset.set(asset.id, models)
-          } catch {
-            // The library parser reports syntax errors separately; do not mask them
-            // with a secondary diagnostic from a partial model parse.
-            continue
-          }
-        }
+        const models = parsedModelAssetsById.get(dependency.targetAssetId)?.models
+        if (!models) continue // The library parser reports syntax errors separately.
         const model = models.find((candidate) => !candidate.scope && candidate.name.toLowerCase() === dependency.modelName.toLowerCase())
         if (!model) continue
         const variants = [model, ...(model.conditionalVariants ?? []).map(({ model: variant }) => variant)]
