@@ -6942,6 +6942,9 @@ test('behavioral resistor mode saves its expression and generates a native ngspi
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1')?.behavioralResistance)).toBe('V(vin) < 1 ? 1k : 2k')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText(/^R1 vin vout R=\{V\(vin\) < 1 \? 1k : 2k\}$/m)
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
 })
 
 test('resistor AC value is editable, saved, and generated as an AC-only override @ui-smoke', async ({ page }) => {
