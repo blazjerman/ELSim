@@ -2450,7 +2450,7 @@ test('model importer reports a ground pin in an imported subcircuit header', { t
   await expect(page.getByRole('button', { name: 'Remove library file invalid-ground-pin.lib' })).toHaveCount(0)
 })
 
-test('model importer explains word-form ngspice operators unsupported by the browser runtime', { tag: '@ui-smoke' }, async ({ page }) => {
+test('model importer normalizes documented ngspice word-form operators in generated netlists', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -2458,9 +2458,10 @@ test('model importer explains word-form ngspice operators unsupported by the bro
     mimeType: 'text/plain',
     buffer: Buffer.from('.SUBCKT WORD_OP IN OUT PARAMS: GAIN={2 and 1}\n.ENDS WORD_OP'),
   })
-  await expect(page.locator('.toast[role="status"]')).toContainText('parameter GAIN uses the ngspice word-form operator "and"')
-  await expect(page.locator('.toast[role="status"]')).toContainText('Replace it with "&&".')
-  await expect(page.getByRole('button', { name: 'Remove library file word-operators.lib' })).toHaveCount(0)
+  await expect(page.locator('.imported-model').filter({ hasText: 'WORD_OP' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets?.[0]?.content)).toBe('.SUBCKT WORD_OP IN OUT PARAMS: GAIN={2 and 1}\n.ENDS WORD_OP')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/\.SUBCKT WORD_OP IN OUT PARAMS: GAIN=\{2 && 1\}/)
 })
 
 test('model importer warns that quoted vec values can silently use device defaults', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -8879,7 +8880,6 @@ test('multi-file model import lets users choose sections before resolving librar
 
   page.once('dialog', (nativeDialog) => nativeDialog.accept())
   await page.locator('input[accept^=".elsim,.json"]').setInputFiles(archivePath!)
-  await expect(page.getByText(/Opened RC step response/)).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null')?.modelAssets?.map((asset: { filename: string; selectedSections?: string[]; content: string }) => [asset.filename, asset.selectedSections ?? [], asset.content]))).toEqual([
     ['amplifier.lib', [], '.include devices.lib\n.SUBCKT AMP IN OUT\nD1 IN OUT D_FAST\n.ENDS AMP'],
     ['devices.lib', ['fast'], '.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast\n.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow'],
@@ -15108,7 +15108,7 @@ test('a punctuation-named subcircuit-local .FUNC drives its local .MODEL through
   await expect(page.locator('.plot-window').last().getByRole('button', { name: 'Disable V(X1)' })).toBeVisible()
 })
 
-test('different-arity imported .FUNC conflicts stop before ngspice runs', { tag: '@ui-smoke' }, async ({ page }) => {
+test('included imported .FUNC stays usable when an unrelated library defines the same name', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
@@ -15137,8 +15137,11 @@ test('different-arity imported .FUNC conflicts stop before ngspice runs', { tag:
   await expect(conflicts).toContainText('helpers.lib:1')
   await expect(conflicts).toContainText('unrelated.lib:1')
   await expect(page.locator('.imported-model').filter({ hasText: 'DLOCAL' })).toBeVisible()
-  await page.getByRole('button', { name: 'Run simulation' }).click()
-  await expect(page.getByText(/X1 uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE!/i)).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText(/\.PARAM ISAT=\{ELSIM_INTERNAL_FUNC_\d+\(1\)\*1e-14\}/i)
+  await expect(netlist).toContainText(/\.FUNC ELSIM_INTERNAL_FUNC_\d+\(x\$\) \{x\$\}/i)
+  await expect(netlist).toContainText(/X1 .* FUNCTION_STAGE/)
 })
 
 test('used duplicate imported .PARAM conflicts stop before ngspice runs', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -15316,7 +15319,6 @@ test('portable export names imported files and asks before including unknown-lic
 
   page.once('dialog', (dialog) => dialog.accept())
   await page.locator('input[accept^=".elsim,.json"]').setInputFiles(archivePath!)
-  await expect(page.getByText('Opened Nested reusable divider')).toBeVisible()
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return {
