@@ -863,6 +863,7 @@ test('examples can be browsed by topic and combined with search', { tag: '@ui-sm
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await expect(page.locator('#examples-description')).toContainText('Browse 68 editable circuit examples')
   await expect(page.locator('#examples-description')).toContainText('Start here to see all 9')
   const topicFilters = dialog.getByRole('group', { name: 'Filter examples by topic' })
   const cards = dialog.locator('.example-list article')
