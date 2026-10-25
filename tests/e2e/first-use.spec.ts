@@ -6934,6 +6934,8 @@ test('behavioral resistor mode saves its expression and generates a native ngspi
   const mode = page.getByLabel('Use behavioral resistance for R1')
   await expect(mode).toBeVisible()
   await mode.check()
+  await expect(page.getByLabel('Device model for R1')).toBeDisabled()
+  await expect(page.getByLabel('AC resistance for R1')).toBeDisabled()
   const expression = page.getByRole('textbox', { name: 'Behavioral resistance for R1' })
   await expression.fill('V(vin) < 1 ? 1k : 2k')
   await waitForProjectAutosave(page)
