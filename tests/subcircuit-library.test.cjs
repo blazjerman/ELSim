@@ -2340,6 +2340,7 @@ test('tracks both ngspice digital U-device model dependencies without confusing 
       'U8 AO $G_DPWR $G_DGND A B C Y TM IO IO_LEVEL=0',
       'U9 DFF $G_DPWR $G_DGND CLK D Q QB TM IO',
       'U10 LOGICEXP $G_DPWR $G_DGND A B Y TM IO',
+      'U11 CONSTRAINT $G_DPWR $G_DGND A B',
       '.ENDS DIGITAL',
     ].join('\n') },
     { id: 'models', filename: 'digital-models.lib', content: '.MODEL TM UGATE()\n.MODEL IO UIO()\n.MODEL URCMOD URC(CPERL=1p RPERL=1k)' },

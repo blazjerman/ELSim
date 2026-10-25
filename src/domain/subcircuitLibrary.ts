@@ -970,6 +970,12 @@ function isNgspiceDigitalUDevice(tokens: string[]): boolean {
   return /^u\S*$/i.test(tokens[0] ?? '') && ngspiceDigitalUPrimitiveFields(tokens) !== null
 }
 
+function isNgspiceIgnoredUDevice(tokens: string[]): boolean {
+  // The ngspice manual says CONSTRAINT primitives are ignored in PS mode.
+  // They are still U-device records, so do not parse their nodes as a URC card.
+  return /^u\S*$/i.test(tokens[0] ?? '') && /^CONSTRAINT$/i.test(tokens[1] ?? '')
+}
+
 function digitalUModelDependencies(tokens: string[], owner: string, sourceLine: number): ModelDependency[] {
   if (!ngspiceDigitalUPrimitiveFields(tokens) || !/^u\S*$/i.test(tokens[0] ?? '')) return []
   const optionAt = tokens.findIndex((token, index) => index >= 2 && (
@@ -1028,7 +1034,7 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
   else if (prefix === 'u') {
     // Native digital U cards have two trailing model references; they are
     // tracked separately so they cannot be mistaken for URC node names.
-    if (isNgspiceDigitalUDevice(tokens)) return null
+    if (isNgspiceDigitalUDevice(tokens) || isNgspiceIgnoredUDevice(tokens)) return null
     index = 4 // U distributed RC lines use a URC model after three nodes.
   }
   else if (prefix === 'y') index = 5 // Y single-lossy lines use a TXL model after four port nodes.
