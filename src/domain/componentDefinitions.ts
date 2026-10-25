@@ -102,9 +102,21 @@ const transformerFieldAnimation = {
     active: [{ kind: 'path', className: 'transformer-current-glow transformer-secondary-current-glow', d: 'M32 -24C14 -24 14 -12 32 -12C14 -12 14 0 32 0C14 0 14 12 32 12C14 12 14 24 32 24' }],
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, readonly ComponentSymbolPrimitive[]>>>>
-const bjtCurrentPaths = { forward: 'M31 -46L20 -32M20 -32L20 -39M20 -32L27 -34', reverse: 'M20 -32L31 -46M31 -46L24 -44M31 -46L30 -39' }
-const mosfetCurrentPaths = { forward: 'M28 -43V-27M28 -27L24 -34M28 -27L32 -34', reverse: 'M28 -27V-43M28 -43L24 -36M28 -43L32 -36' }
-const jfetCurrentPaths = { forward: 'M15 -37V-25M15 -25L12 -30M15 -25L18 -30', reverse: 'M15 -25V-37M15 -37L12 -32M15 -37L18 -32' }
+export const TRANSISTOR_CURRENT_INDICATOR_PATHS: Partial<Record<PartKind, Readonly<{ forward: string; reverse: string }>>> = {
+  npn: { forward: 'M31 -46L20 -32M20 -32L20 -39M20 -32L27 -34', reverse: 'M20 -32L31 -46M31 -46L24 -44M31 -46L30 -39' },
+  pnp: { forward: 'M31 -46L20 -32M20 -32L20 -39M20 -32L27 -34', reverse: 'M20 -32L31 -46M31 -46L24 -44M31 -46L30 -39' },
+  nmos: { forward: 'M28 -43V-27M28 -27L24 -34M28 -27L32 -34', reverse: 'M28 -27V-43M28 -43L24 -36M28 -43L32 -36' },
+  pmos: { forward: 'M28 -43V-27M28 -27L24 -34M28 -27L32 -34', reverse: 'M28 -27V-43M28 -43L24 -36M28 -43L32 -36' },
+  nvdmos: { forward: 'M28 -43V-27M28 -27L24 -34M28 -27L32 -34', reverse: 'M28 -27V-43M28 -43L24 -36M28 -43L32 -36' },
+  pvdmos: { forward: 'M28 -43V-27M28 -27L24 -34M28 -27L32 -34', reverse: 'M28 -27V-43M28 -43L24 -36M28 -43L32 -36' },
+  njfet: { forward: 'M15 -37V-25M15 -25L12 -30M15 -25L18 -30', reverse: 'M15 -25V-37M15 -37L12 -32M15 -37L18 -32' },
+  pjfet: { forward: 'M15 -37V-25M15 -25L12 -30M15 -25L18 -30', reverse: 'M15 -25V-37M15 -37L12 -32M15 -37L18 -32' },
+  nmesfet: { forward: 'M15 -37V-25M15 -25L12 -30M15 -25L18 -30', reverse: 'M15 -25V-37M15 -37L12 -32M15 -37L18 -32' },
+  pmesfet: { forward: 'M15 -37V-25M15 -25L12 -30M15 -25L18 -30', reverse: 'M15 -25V-37M15 -37L12 -32M15 -37L18 -32' },
+}
+const bjtCurrentPaths = TRANSISTOR_CURRENT_INDICATOR_PATHS.npn!
+const mosfetCurrentPaths = TRANSISTOR_CURRENT_INDICATOR_PATHS.nmos!
+const jfetCurrentPaths = TRANSISTOR_CURRENT_INDICATOR_PATHS.njfet!
 const bjtCurrentVariants = currentDirectionVariants(npnSymbol, 'transistor-current-indicator', bjtCurrentPaths.forward, bjtCurrentPaths.reverse)
 const mosfetCurrentVariants = currentDirectionVariants(nmosSymbol, 'transistor-current-indicator', mosfetCurrentPaths.forward, mosfetCurrentPaths.reverse)
 const jfetCurrentVariants = currentDirectionVariants(njfetSymbol, 'transistor-current-indicator', jfetCurrentPaths.forward, jfetCurrentPaths.reverse)
