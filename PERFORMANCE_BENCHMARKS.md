@@ -1,5 +1,9 @@
 # ELSim performance benchmarks
 
+## Repeated Firefox memory profile (2026-10-25)
+
+The focused Linux Firefox process-tree memory harness was run three times with the existing ngspice WASM runtime, simulating 1,000,130 samples and displaying 32 traces across eight waveform windows. All three runs passed and reported the same WASM linear-memory capacity: 154,796,032 bytes (147.6 MiB). Across the three runs, the peak summed process-tree PSS median/range was 1,052.4 MiB / 1,013.3–1,054.9 MiB and RSS was 1,399.9 MiB / 1,360.1–1,400.5 MiB; these peaks occurred during the combined solver/result-transfer phase. Plot-interaction phase peaks were 775.0 MiB PSS and 1,122.7 MiB RSS median. Process values sum Firefox and its descendants and are not ELSim-only allocation; RSS may count shared pages multiple times. Firefox heap APIs were unavailable. This establishes same-host repeatability only; second-hardware measurements remain open.
+
 ## Reuse connectivity for repeated sheet instances (2026-10-25)
 
 When building the explicit `.save` vectors for hierarchical schematic node voltages, netlisting now caches connectivity by sheet definition. Each instance path still gets its own saved vectors, while repeated instances no longer repeat the same sheet connectivity analysis. A unit regression verifies internal voltage vectors are emitted with distinct paths for two instances of the same nested sheet.
