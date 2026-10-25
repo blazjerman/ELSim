@@ -2334,17 +2334,19 @@ test('tracks both ngspice digital U-device model dependencies without confusing 
       'U2 INV $G_DPWR $G_DGND Y Z TM IO',
       'U3 IN OUT 0 URCMOD L=50u',
       'U4 NAND( 2 ) $G_DPWR $G_DGND A B Y TM IO',
+      'U5 AND3(2) $G_DPWR $G_DGND A B EN Z TM IO',
+      'U6 BUF3 $G_DPWR $G_DGND IN EN OUT TM IO',
       '.ENDS DIGITAL',
     ].join('\n') },
     { id: 'models', filename: 'digital-models.lib', content: '.MODEL TM UGATE()\n.MODEL IO UIO()\n.MODEL URCMOD URC(CPERL=1p RPERL=1k)' },
   ]
   const analysis = analyzeModelLibraries(assets)
   assert.deepEqual(analysis.assets[0].parsed.dependencies.map(({ reference, modelName }) => [reference, modelName]), [
-    ['U1', 'TM'], ['U1', 'IO'], ['U2', 'TM'], ['U2', 'IO'], ['U3', 'URCMOD'], ['U4', 'TM'], ['U4', 'IO'],
+    ['U1', 'TM'], ['U1', 'IO'], ['U2', 'TM'], ['U2', 'IO'], ['U3', 'URCMOD'], ['U4', 'TM'], ['U4', 'IO'], ['U5', 'TM'], ['U5', 'IO'], ['U6', 'TM'], ['U6', 'IO'],
   ])
   assert.deepEqual(analysis.dependencies.missing, [])
   assert.deepEqual(analysis.dependencies.resolved.filter(({ reference }) => reference.startsWith('U')).map(({ reference, modelName, targetAssetId }) => [reference, modelName, targetAssetId]), [
-    ['U1', 'TM', 'models'], ['U1', 'IO', 'models'], ['U2', 'TM', 'models'], ['U2', 'IO', 'models'], ['U3', 'URCMOD', 'models'], ['U4', 'TM', 'models'], ['U4', 'IO', 'models'],
+    ['U1', 'TM', 'models'], ['U1', 'IO', 'models'], ['U2', 'TM', 'models'], ['U2', 'IO', 'models'], ['U3', 'URCMOD', 'models'], ['U4', 'TM', 'models'], ['U4', 'IO', 'models'], ['U5', 'TM', 'models'], ['U5', 'IO', 'models'], ['U6', 'TM', 'models'], ['U6', 'IO', 'models'],
   ])
   assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'DIGITAL' }])].sort(), ['digital-ic', 'models'])
 

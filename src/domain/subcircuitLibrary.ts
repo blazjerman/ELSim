@@ -959,7 +959,7 @@ const ngspiceDigitalUPrimitive = /^(?:BUF|INV|AND|NAND|OR|NOR|XOR|NXOR)(?:3)?A?(
 
 function ngspiceDigitalUPrimitiveFields(tokens: string[]): { primitive: string; fieldCount: number } | null {
   const first = tokens[1] ?? ''
-  if (/^(?:AND|NAND|OR|NOR|XOR|NXOR)\($/i.test(first) && /^\d+$/.test(tokens[2] ?? '') && tokens[3] === ')') {
+  if (/^(?:AND|NAND|OR|NOR|XOR|NXOR)3?\($/i.test(first) && /^\d+$/.test(tokens[2] ?? '') && tokens[3] === ')') {
     return { primitive: `${first}${tokens[2]})`, fieldCount: 3 }
   }
   const primitive = first.replace(/\s+/g, '')
@@ -974,10 +974,17 @@ function digitalUModelDependencies(tokens: string[], owner: string, sourceLine: 
   const primitiveFields = ngspiceDigitalUPrimitiveFields(tokens)
   if (!primitiveFields || !/^u\S*$/i.test(tokens[0] ?? '')) return []
   const primitive = primitiveFields.primitive.toUpperCase()
-  const declaredInputs = primitive.match(/^(?:AND|NAND|OR|NOR|XOR|NXOR)\((\d+)\)$/)?.[1]
+  const declaredInputs = primitive.match(/^(?:AND|NAND|OR|NOR|XOR|NXOR)3?\((\d+)\)$/)?.[1]
+  const tristatePrimitive = primitive.match(/^(BUF|INV|AND|NAND|OR|NOR|XOR|NXOR)3/)
   const signalPinCount = /^(?:BUF|INV)$/.test(primitive)
     ? 2
-    : declaredInputs ? Number(declaredInputs) + 1 : undefined
+    : /^(?:BUF|INV)3$/.test(primitive)
+      ? 3
+      : declaredInputs && tristatePrimitive
+        ? Number(declaredInputs) + 2
+        : declaredInputs
+          ? Number(declaredInputs) + 1
+          : undefined
   // Complex gates, state elements, and function-backed U devices have
   // primitive-specific pin lists; do not guess at their model field offsets.
   if (!signalPinCount || !Number.isInteger(signalPinCount) || signalPinCount < 2 || signalPinCount > 64) return []
