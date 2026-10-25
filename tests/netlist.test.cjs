@@ -2760,6 +2760,17 @@ test('behavioral inductors inside reusable sheets emit local expressions', () =>
   assert.match(artifact.text, /^\.save i\(x2\.xcore\.lvar\)$/m)
 })
 
+test('schematic voltage saves reuse sheet connectivity and keep each instance path', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.parts.push({ id: 'core-rinternal', kind: 'resistor', ref: 'RINTERNAL', value: '2k', x: 700, y: 500, rotation: 0 })
+
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.ok(artifact.text.includes('v(X1.XCORE.n1)'), artifact.text)
+  assert.ok(artifact.text.includes('v(X2.XCORE.n1)'), artifact.text)
+})
+
 test('current-dependent inductor example generates its smooth native L= model', () => {
   const project = createBehavioralInductorExampleProject()
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))

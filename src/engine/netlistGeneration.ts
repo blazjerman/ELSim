@@ -273,21 +273,26 @@ function hierarchicalSaveVectors(project: Project): string[] {
 /** Save every schematic node explicitly without retaining every ngspice vector. */
 function schematicVoltageSaveVectors(project: Project, rootConnectivity: ReturnType<typeof analyzeConnectivity>): string[] {
   const sheetsById = new Map(project.sheets.map((sheet) => [sheet.id, sheet]))
+  const connectivityBySheetId = new Map<string, ReturnType<typeof analyzeConnectivity>>([[project.activeSheetId, rootConnectivity]])
   const nodesToSave = new Set<string>()
   const visit = (sheetId: string, path: string[], ancestry: Set<string>): void => {
     if (ancestry.has(sheetId)) return
     const sheet = sheetsById.get(sheetId)
     if (!sheet) return
-    const scene: Project = path.length ? {
-      ...project,
-      activeSheetId: sheet.id,
-      parts: sheet.parts,
-      wires: sheet.wires,
-      junctions: sheet.junctions,
-      netLabels: sheet.netLabels,
-      view: sheet.view,
-    } : project
-    const connectivity = path.length ? analyzeConnectivity(scene) : rootConnectivity
+    let connectivity = connectivityBySheetId.get(sheetId)
+    if (!connectivity) {
+      const scene: Project = {
+        ...project,
+        activeSheetId: sheet.id,
+        parts: sheet.parts,
+        wires: sheet.wires,
+        junctions: sheet.junctions,
+        netLabels: sheet.netLabels,
+        view: sheet.view,
+      }
+      connectivity = analyzeConnectivity(scene)
+      connectivityBySheetId.set(sheetId, connectivity)
+    }
     const ports = new Set(path.length ? sheet.ports.map((port) => port.name.toLowerCase()) : [])
     for (const node of connectivity.pinNets.values()) {
       if (node === '0' || ports.has(node.toLowerCase())) continue

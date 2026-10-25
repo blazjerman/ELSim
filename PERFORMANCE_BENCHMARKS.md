@@ -1,5 +1,11 @@
 # ELSim performance benchmarks
 
+## Reuse connectivity for repeated sheet instances (2026-10-25)
+
+When building the explicit `.save` vectors for hierarchical schematic node voltages, netlisting now caches connectivity by sheet definition. Each instance path still gets its own saved vectors, while repeated instances no longer repeat the same sheet connectivity analysis. A unit regression verifies internal voltage vectors are emitted with distinct paths for two instances of the same nested sheet.
+
+On the documented i7-12700F host, version 15 of `npm run benchmark:performance:quick` measured the 5,000-instance hierarchy netlist at 189.258 ms median / 223.005 ms p95 before the cache. Two post-change snapshots measured 116.218 / 144.215 ms and 118.276 / 142.502 ms. Connectivity was 69.362 / 82.451 ms before and 68.905 / 82.484 ms in the latest run, as expected because root connectivity is unchanged. These are local run snapshots and timings vary; treat them as evidence of reduced work in this case, not a portable performance guarantee. The existing local ngspice runtime was reused; no WASM rebuild or Pages workflow ran.
+
 ## Cached animation marker metadata (2026-10-25)
 
 Mounted animated parts now cache the `data-pin` identity for each live polarity marker and the positive/negative role of each capacitor plate. In the 501-part R/L/transformer fixture, this avoids 950 repeated marker-pin attribute reads per sample. The focused capacitor workflow passes, and the benchmark verifies every expected glow plus the checked inductor marker polarities. One run measured a 2 ms shared callback, 467.05 ms full-canvas Playwright scrub, and 638 DOM mutations. The callback measurement remains in the previous 2–3 ms range and full scrub time overlaps earlier runs, so no timing gain is established. No WASM rebuild or Pages workflow ran.
