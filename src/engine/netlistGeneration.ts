@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit } from '../domain/subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit, withoutInlineComment } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
@@ -45,6 +45,48 @@ function reserveUniqueName(base: string, used: Set<string>): string {
   while (used.has(name.toLowerCase())) name = `${base}_${suffix++}`
   used.add(name.toLowerCase())
   return name
+}
+
+function rewriteImportedFunctionNames(line: string, aliases: ReadonlyMap<string, string>, shadowedFunctions: ReadonlySet<string> = new Set()): string {
+  if (!aliases.size || line.trimStart().startsWith('*')) return line
+  const activeAliases = shadowedFunctions.size
+    ? new Map([...aliases].filter(([name]) => !shadowedFunctions.has(name)))
+    : aliases
+  if (!activeAliases.size) return line
+  const code = withoutInlineComment(line)
+  if (!code) return line
+  const codeStart = line.indexOf(code)
+  let output = ''
+  let quote = ''
+  for (let index = 0; index < code.length;) {
+    const character = code[index]
+    if (quote) {
+      output += character
+      if (character === '\\' && index + 1 < code.length) output += code[++index]
+      else if (character === quote) quote = ''
+      index += 1
+      continue
+    }
+    if (character === '"' || character === "'") {
+      quote = character
+      output += character
+      index += 1
+      continue
+    }
+    if (/[A-Za-z]/.test(character)) {
+      const start = index
+      index += 1
+      while (index < code.length && /[A-Za-z0-9!#$%_\[\].]/.test(code[index])) index += 1
+      const name = code.slice(start, index)
+      let next = index
+      while (next < code.length && /\s/.test(code[next])) next += 1
+      output += next < code.length && code[next] === '(' ? activeAliases.get(name.toLowerCase()) ?? name : name
+      continue
+    }
+    output += character
+    index += 1
+  }
+  return line.slice(0, codeStart) + output + line.slice(codeStart + code.length)
 }
 
 function spiceExponential(part: Part, parameters: Project['sheets'][number]['parameters'] = []): string | null {
@@ -275,8 +317,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     models.push(model)
     globalDeviceModelsByName.set(key, models)
   }
-  const globalFunctionDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
+  const globalFunctionDefinitions = new Map<string, { assetId: string; filename: string; sourceLine: number }[]>()
   const globalFunctionBodies = new Map<string, string[]>()
+  const libraryFunctionBodies = new Map<string, Map<string, string>>()
   const globalParameterExpressions = new Map<string, string[]>()
   const globalParameterDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
   const globalParameterDisplayNames = new Map<string, string>()
@@ -311,7 +354,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       if (!name) continue
       const key = name.toLowerCase()
       const definitions = globalFunctionDefinitions.get(key) ?? []
-      definitions.push({ filename: asset.filename, sourceLine: record.sourceLine })
+      definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: record.sourceLine })
       globalFunctionDefinitions.set(key, definitions)
       const functionLines = [text]
       for (let nextIndex = recordIndex + 1; nextIndex < parsed.modelRecords.length; nextIndex += 1) {
@@ -323,13 +366,47 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const openBrace = functionText.indexOf('{')
       const closeBrace = functionText.lastIndexOf('}')
       if (openBrace >= 0 && closeBrace > openBrace) {
+        const body = functionText.slice(openBrace + 1, closeBrace)
         const bodies = globalFunctionBodies.get(key) ?? []
-        bodies.push(functionText.slice(openBrace + 1, closeBrace))
+        bodies.push(body)
         globalFunctionBodies.set(key, bodies)
+        const assetBodies = libraryFunctionBodies.get(asset.id) ?? new Map<string, string>()
+        assetBodies.set(key, body)
+        libraryFunctionBodies.set(asset.id, assetBodies)
       }
     }
   }
   const ambiguousGlobalFunctionNames = [...globalFunctionDefinitions].filter(([, definitions]) => definitions.length > 1).map(([name]) => name)
+  const functionAliasesByAssetId = new Map<string, Map<string, string>>()
+  const localAmbiguousFunctionBodiesByAssetId = new Map<string, Map<string, string>>()
+  const usedFunctionNames = new Set(globalFunctionDefinitions.keys())
+  const reserveFunctionReferences = (text: string) => {
+    for (const [, name] of text.matchAll(/([A-Za-z][A-Za-z0-9!#$%_\[\].]*)\s*\(/g)) usedFunctionNames.add(name.toLowerCase())
+  }
+  for (const { parsed } of parsedModelLibraryEntries) {
+    for (const subcircuit of parsed.subcircuits) for (const definition of subcircuit.functions ?? []) usedFunctionNames.add(definition.name.toLowerCase())
+    for (const record of parsed.modelRecords) reserveFunctionReferences(record.text)
+  }
+  for (const part of project.parts) if (part.kind === 'behavioral') reserveFunctionReferences(part.value)
+  let generatedFunctionIndex = 0
+  for (const functionName of ambiguousGlobalFunctionNames) {
+    const definitions = globalFunctionDefinitions.get(functionName) ?? []
+    const assetIds = definitions.map(({ assetId }) => assetId)
+    // Repeated declarations in one file (for example, in conditional blocks)
+    // still need source-level branch resolution, so leave those explicit errors.
+    if (new Set(assetIds).size !== assetIds.length) continue
+    for (const assetId of assetIds) {
+      const body = libraryFunctionBodies.get(assetId)?.get(functionName)
+      if (body === undefined) continue
+      const alias = reserveUniqueName(`ELSIM_INTERNAL_FUNC_${generatedFunctionIndex++}`, usedFunctionNames)
+      const aliases = functionAliasesByAssetId.get(assetId) ?? new Map<string, string>()
+      aliases.set(functionName, alias)
+      functionAliasesByAssetId.set(assetId, aliases)
+      const bodies = localAmbiguousFunctionBodiesByAssetId.get(assetId) ?? new Map<string, string>()
+      bodies.set(functionName, body)
+      localAmbiguousFunctionBodiesByAssetId.set(assetId, bodies)
+    }
+  }
   const withoutQuotedStrings = (text: string) => {
     const characters = text.split('')
     let quote = ''
@@ -361,7 +438,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const escapedName = parameterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     return new RegExp(`(?:^|[^A-Za-z0-9!#$%_\\[\\]])${escapedName}(?![A-Za-z0-9!#$%_\\[\\]])`, 'i').test(withoutQuotedStrings(text))
   })
-  const ambiguousGlobalParametersInText = (text: string, shadowedParameters: ReadonlySet<string> = new Set(), shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map()) => {
+  const ambiguousGlobalParametersInText = (text: string, shadowedParameters: ReadonlySet<string> = new Set(), shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map(), localFunctionBodies?: ReadonlyMap<string, string>) => {
     const ambiguous = new Set<string>()
     const pendingTexts = [text]
     const pendingFunctions: string[] = []
@@ -384,13 +461,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const localBodies = scopedBodies.get(functionName)
       if (localBodies) { pendingTexts.push(...localBodies); continue }
       if (shadowedFunctions.has(functionName)) continue
+      const libraryBody = localFunctionBodies?.get(functionName)
+      if (libraryBody !== undefined) { pendingTexts.push(libraryBody); continue }
       const definitions = globalFunctionDefinitions.get(functionName) ?? []
       const bodies = globalFunctionBodies.get(functionName) ?? []
       if (definitions.length === 1 && bodies.length === 1) pendingTexts.push(bodies[0])
     }
     return [...ambiguous].map((name) => globalParameterDisplayNames.get(name) ?? name)
   }
-  const ambiguousFunctionCallsInText = (text: string, shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map(), followGlobalParameters = false) => {
+  const ambiguousFunctionCallsInText = (text: string, shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map(), followGlobalParameters = false, localFunctionBodies?: ReadonlyMap<string, string>) => {
     const ambiguous = new Set<string>()
     const pendingTexts = [text]
     const pendingFunctions: string[] = []
@@ -415,6 +494,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const scopedFunctionBodies = scopedBodies.get(functionName)
       if (scopedFunctionBodies) { pendingTexts.push(...scopedFunctionBodies); continue }
       if (shadowedFunctions.has(functionName)) continue
+      const libraryBody = localFunctionBodies?.get(functionName)
+      if (libraryBody !== undefined) { pendingTexts.push(libraryBody); continue }
       const definitions = globalFunctionDefinitions.get(functionName) ?? []
       if (definitions.length > 1) { ambiguous.add(functionName); continue }
       const bodies = globalFunctionBodies.get(functionName) ?? []
@@ -422,8 +503,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     return ambiguousGlobalFunctionNames.filter((functionName) => ambiguous.has(functionName))
   }
-  const modelCallsAmbiguousGlobalName = (model: typeof parsedModelAssets[number]['models'][number]) =>
-    model.parameters.some((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue, new Set(), new Map(), true).length > 0 || ambiguousGlobalParametersInText(parameter.defaultValue).length > 0)
+  const modelAssetIdByDefinition = new Map<typeof parsedModelAssets[number]['models'][number], string>()
+  for (const { asset, parsed } of parsedModelLibraryEntries) for (const model of parsed.models) modelAssetIdByDefinition.set(model, asset.id)
+  const modelCallsAmbiguousGlobalName = (model: typeof parsedModelAssets[number]['models'][number]) => {
+    const localFunctionBodies = localAmbiguousFunctionBodiesByAssetId.get(modelAssetIdByDefinition.get(model) ?? '')
+    return model.parameters.some((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue, new Set(), new Map(), true, localFunctionBodies).length > 0 || ambiguousGlobalParametersInText(parameter.defaultValue, new Set(), new Set(), new Map(), localFunctionBodies).length > 0)
+  }
   const importedSubcircuitsByName = new Map<string, { assetId: string; definition: ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number] }[]>()
   const importedSubcircuitsByAssetAndName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
   const nestedSubcircuitRangesByParent = new Map<string, (readonly [number, number])[]>()
@@ -485,11 +570,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const reportAmbiguousModelReferences = (part: Part, modelName: string) => {
     const models = globalDeviceModelsByName.get(modelName.toLowerCase()) ?? []
     for (const model of models) {
+      const localFunctionBodies = localAmbiguousFunctionBodiesByAssetId.get(modelAssetIdByDefinition.get(model) ?? '')
       for (const parameter of model.parameters) {
-        for (const functionName of ambiguousFunctionCallsInText(parameter.defaultValue, new Set(), new Map(), true)) {
+        for (const functionName of ambiguousFunctionCallsInText(parameter.defaultValue, new Set(), new Map(), true, localFunctionBodies)) {
           reportAmbiguousFunctionCall(part, functionName, `imported model ${modelName} parameter that calls`)
         }
-        for (const parameterName of ambiguousGlobalParametersInText(parameter.defaultValue)) {
+        for (const parameterName of ambiguousGlobalParametersInText(parameter.defaultValue, new Set(), new Set(), new Map(), localFunctionBodies)) {
           reportAmbiguousGlobalParameter(part, parameterName, `imported model ${modelName} parameter that references`)
         }
       }
@@ -555,6 +641,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           .filter(({ sourceLine }) => sourceLine > current.definition.startLine && sourceLine < current.definition.endLine)
           .filter(({ sourceLine }) => !nestedRanges.some(([start, end]) => sourceLine >= start && sourceLine <= end))
         const scopedFunctionBodies = new Map<string, string[]>()
+        const localFunctionBodies = localAmbiguousFunctionBodiesByAssetId.get(current.assetId)
         const bodyRecords: string[] = []
         for (let recordIndex = 0; recordIndex < records.length; recordIndex += 1) {
           const text = records[recordIndex].text.trim()
@@ -582,14 +669,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           }
           bodyRecords.push(text.replace(/\s(?:\$|;|\/\/).*$/, '').trim())
         }
-        const parameterFunctions = [...new Set(current.definition.parameters.flatMap((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue, shadowedFunctions, scopedFunctionBodies)))]
+        const parameterFunctions = [...new Set(current.definition.parameters.flatMap((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue, shadowedFunctions, scopedFunctionBodies, false, localFunctionBodies)))]
         if (parameterFunctions.length) subcircuitsCallingAmbiguousFunctions.push({ name: current.definition.name, usage: 'parameter', functions: parameterFunctions })
-        const parameterNames = [...new Set(current.definition.parameters.flatMap((parameter) => ambiguousGlobalParametersInText(parameter.defaultValue, shadowedParameters, shadowedFunctions, scopedFunctionBodies)))]
+        const parameterNames = [...new Set(current.definition.parameters.flatMap((parameter) => ambiguousGlobalParametersInText(parameter.defaultValue, shadowedParameters, shadowedFunctions, scopedFunctionBodies, localFunctionBodies)))]
         if (parameterNames.length) subcircuitsReferencingAmbiguousParameters.push({ name: current.definition.name, usage: 'parameter', parameters: parameterNames })
         const bodyText = bodyRecords.join(' ')
-        const functions = ambiguousFunctionCallsInText(bodyText, shadowedFunctions, scopedFunctionBodies)
+        const functions = ambiguousFunctionCallsInText(bodyText, shadowedFunctions, scopedFunctionBodies, false, localFunctionBodies)
         if (functions.length) subcircuitsCallingAmbiguousFunctions.push({ name: current.definition.name, usage: 'body', functions })
-        const bodyParameters = ambiguousGlobalParametersInText(bodyText, shadowedParameters, shadowedFunctions, scopedFunctionBodies)
+        const bodyParameters = ambiguousGlobalParametersInText(bodyText, shadowedParameters, shadowedFunctions, scopedFunctionBodies, localFunctionBodies)
         if (bodyParameters.length) subcircuitsReferencingAmbiguousParameters.push({ name: current.definition.name, usage: 'body', parameters: bodyParameters })
       }
       for (const dependency of current.definition.dependencies) {
@@ -1624,6 +1711,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   for (let assetIndex = 0; assetIndex < modelAssets.length; assetIndex += 1) {
     const asset = modelAssets[assetIndex]
     const parsed = parsedModelAssets[assetIndex]
+    const functionAliases = functionAliasesByAssetId.get(asset.id)
     const translatedModelsByLine = new Map(parsed.models.flatMap((model) => {
       const translation = translateVoltageSwitchModel(model)
       return translation ? [[model.startLine, { model, translation }] as const] : []
@@ -1658,7 +1746,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         skipModelThroughLine = model.endLine
         continue
       }
-      if (record.text.trim()) append(record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
+      if (record.text.trim()) {
+        const scopedFunctions = functionAliases
+          ? parsed.subcircuits
+            .filter((definition) => record.sourceLine > definition.startLine && record.sourceLine < definition.endLine)
+            .flatMap((definition) => (definition.functions ?? []).map((definition) => definition.name.toLowerCase()))
+          : []
+        append(functionAliases ? rewriteImportedFunctionNames(record.text, functionAliases, new Set(scopedFunctions)) : record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
+      }
       if (directive === '.if') conditionalDepth += 1
     }
   }

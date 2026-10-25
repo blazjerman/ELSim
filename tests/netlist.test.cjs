@@ -270,6 +270,27 @@ test('a placed IC cannot call an imported model with an ambiguous global functio
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
 })
 
+test('same-named helper functions in separate imported libraries are namespaced locally', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'function-stage-a', kind: 'subcircuit', ref: 'XSTAGEA', modelName: 'FUNCTION_STAGE_A', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE_A', x: 800, y: 600, rotation: 0 },
+    { id: 'function-stage-b', kind: 'subcircuit', ref: 'XSTAGEB', modelName: 'FUNCTION_STAGE_B', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE_B', x: 1000, y: 600, rotation: 0 },
+  )
+  project.modelAssets = [
+    { id: 'function-library-a', filename: 'stage-a.lib', content: '.FUNC SCALE(x) {x}\n.MODEL DLOCAL_A D(IS={SCALE(1)*1e-14} N=1)\n.SUBCKT FUNCTION_STAGE_A IN OUT\n.FUNC SCALE(x) {x*3}\nB1 OUT 0 V={SCALE(2)}\nD1 IN OUT DLOCAL_A\n.ENDS FUNCTION_STAGE_A\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'function-library-b', filename: 'stage-b.lib', content: '.FUNC SCALE(x) {x*2}\n.MODEL DLOCAL_B D(IS={SCALE(1)*1e-14} N=1)\n.SUBCKT FUNCTION_STAGE_B IN OUT\nD1 IN OUT DLOCAL_B\n.ENDS FUNCTION_STAGE_B\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  const aliases = [...artifact.text.matchAll(/^\.func\s+(ELSIM_INTERNAL_FUNC_\d+)\(/gim)].map((match) => match[1])
+  assert.equal(aliases.length, 2)
+  assert.notEqual(aliases[0], aliases[1])
+  assert.match(artifact.text, new RegExp(`^\\.model DLOCAL_A D\\(IS=\\{${aliases[0]}\\(1\\)\\*1e-14\\} N=1\\)`, 'im'))
+  assert.match(artifact.text, new RegExp(`^\\.model DLOCAL_B D\\(IS=\\{${aliases[1]}\\(1\\)\\*1e-14\\} N=1\\)`, 'im'))
+  assert.match(artifact.text, /^\.FUNC SCALE\(x\) \{x\*3\}$/im)
+  assert.match(artifact.text, /^B1 OUT 0 V=\{SCALE\(2\)\}$/im)
+})
+
 test('same-arity duplicate functions in one imported library are preflighted when used', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })

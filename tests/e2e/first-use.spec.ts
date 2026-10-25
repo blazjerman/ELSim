@@ -7852,6 +7852,58 @@ test('native ngspice subcircuit parameter expressions solve with comparisons, lo
   await expect(page.locator('.netlist-modal pre')).toContainText('DATAFILE="selected table.csv"')
 })
 
+test('separate imported libraries can use same-named global helper functions independently', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createStarterProject()
+  const libraryA = '.FUNC SCALE(x) {x}\n.SUBCKT FUNCTION_STAGE_A IN OUT\nB1 OUT 0 V={SCALE(2)}\n.ENDS FUNCTION_STAGE_A\n'
+  const libraryB = '.FUNC SCALE(x) {x*2}\n.SUBCKT FUNCTION_STAGE_B IN OUT\nB1 OUT 0 V={SCALE(2)}\n.ENDS FUNCTION_STAGE_B\n'
+  const parts = [
+    { id: 'function-source-a', kind: 'subcircuit' as const, ref: 'XSTAGEA', value: 'FUNCTION_STAGE_A', modelName: 'FUNCTION_STAGE_A', modelPins: ['IN', 'OUT'], x: 300, y: 300, rotation: 0 as const },
+    { id: 'function-load-a', kind: 'resistor' as const, ref: 'RLOADA', value: '1 kΩ', x: 500, y: 300, rotation: 0 as const },
+    { id: 'function-source-b', kind: 'subcircuit' as const, ref: 'XSTAGEB', value: 'FUNCTION_STAGE_B', modelName: 'FUNCTION_STAGE_B', modelPins: ['IN', 'OUT'], x: 300, y: 600, rotation: 0 as const },
+    { id: 'function-load-b', kind: 'resistor' as const, ref: 'RLOADB', value: '1 kΩ', x: 500, y: 600, rotation: 0 as const },
+  ]
+  const nodeForPin = (partId: string, pin: number) => partId === 'function-source-a' ? (pin === 0 ? '0' : 'VOUTA')
+    : partId === 'function-load-a' ? (pin === 0 ? 'VOUTA' : '0')
+      : partId === 'function-source-b' ? (pin === 0 ? '0' : 'VOUTB') : (pin === 0 ? 'VOUTB' : '0')
+  const netLabels = parts.flatMap((part) => componentPins(part).map((pin) => ({
+    id: `${part.id}-net-${pin.index}`, name: nodeForPin(part.id, pin.index), x: pin.x, y: pin.y, visible: false,
+  })))
+  project.name = 'Independent imported helper functions'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [
+    { id: 'function-library-a', filename: 'stage-a.lib', content: libraryA, sha256: createHash('sha256').update(libraryA).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'function-library-b', filename: 'stage-b.lib', content: libraryB, sha256: createHash('sha256').update(libraryB).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { ...project.plotSettings, selectedTraceIds: ['v(vouta)', 'v(voutb)'] }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openComponentVoltagePlot(page, 'RLOADA')
+  const operatingPoint = plot.locator('.op-table')
+  await expect(operatingPoint.getByRole('row', { name: /V\(RLOADA\).*2\.000000 V/i })).toBeVisible()
+  const secondLoad = page.locator('.circuit-part[aria-label^="RLOADB,"]')
+  await secondLoad.focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: /Plot (?:pin-to-pin voltage|voltage across (?:pin1|terminal 1))/ }).click()
+  const secondTraceChooser = page.getByRole('dialog', { name: /V\(/ })
+  await secondTraceChooser.getByRole('button', { name: /Add to current window/ }).click()
+  await expect(operatingPoint.getByRole('row', { name: /V\(RLOADB\).*4\.000000 V/i })).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText(/^\.FUNC ELSIM_INTERNAL_FUNC_\d+\(x\) \{x\}$/m)
+  await expect(netlist).toContainText(/^\.FUNC ELSIM_INTERNAL_FUNC_\d+\(x\) \{x\*2\}$/m)
+  await expect(netlist).toContainText(/^B1 OUT 0 V=\{ELSIM_INTERNAL_FUNC_\d+\(2\)\}$/m)
+})
+
 test('native ngspice Monte Carlo subcircuit parameter defaults import and solve', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
