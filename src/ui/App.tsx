@@ -2478,6 +2478,26 @@ export default function App() {
       : { kind: 'part-current', partId: target.id, sheetId: projectRef.current.activeSheetId, scopeSheetId, instancePath: activePath, ...(target.winding ? { winding: target.winding } : {}), ...(currentPort ? { port: currentPort } : {}) }
     setPendingWaveformTrace({ traceIds: relatedIds, label: trace.label, reference })
   }
+  const addBehavioralChargeProbe = (partId: string) => {
+    const part = projectRef.current.parts.find((item) => item.id === partId)
+    if (!part || part.kind !== 'capacitor' || part.behavioralCharge === undefined || !simulationResult) {
+      setNotice('This capacitor has no solved behavioral-charge trace. Run the circuit first, then try again.')
+      return
+    }
+    if (simulationResult.metadata.settings.projectUpdatedAt !== projectRef.current.updatedAt) {
+      setNotice('The circuit changed after this run. Run again to refresh the solved charge.')
+      return
+    }
+    const vector = `elsim_q_${part.ref.replace(/[^A-Za-z0-9_]/g, '_')}`.toLowerCase()
+    const trace = simulationResult.traces.find((candidate) => candidate.id.toLowerCase() === vector || candidate.baseId?.toLowerCase() === vector)
+    if (!trace) {
+      setNotice(`No stored-charge vector is available for ${part.ref}. Run the transient again and try the probe.`)
+      return
+    }
+    waveformReturnFocusRef.current = document.querySelector<SVGElement>(`[data-part-id="${CSS.escape(partId)}"]`)
+    setPendingWaveformTrace({ traceIds: [trace.id], label: trace.label })
+    setNotice('Stored charge is measured in coulombs from pin 1 to pin 2.')
+  }
   const addComponentVoltageProbe = (partId: string, positivePin = 0, negativePin = 1) => {
     const currentProject = projectRef.current
     const part = currentProject.parts.find((item) => item.id === partId)
@@ -3166,7 +3186,7 @@ export default function App() {
           led: examples.createLedExampleProject, 'led-current-limiter': examples.createLedCurrentLimiterExampleProject,
           'led-parallel': examples.createParallelLedExampleProject,
           'capacitor-discharge': examples.createCapacitorDischargeExampleProject,
-          rlc: examples.createRlcExampleProject, 'lc-energy': examples.createLcEnergyExampleProject, 'behavioral-inductor': examples.createBehavioralInductorExampleProject, 'rl-step': examples.createRlStepExampleProject, flyback: examples.createFlybackDiodeExampleProject, controlled: examples.createControlledSourceExampleProject,
+          rlc: examples.createRlcExampleProject, 'lc-energy': examples.createLcEnergyExampleProject, 'behavioral-inductor': examples.createBehavioralInductorExampleProject, 'behavioral-capacitor': examples.createBehavioralCapacitorExampleProject, 'rl-step': examples.createRlStepExampleProject, flyback: examples.createFlybackDiodeExampleProject, controlled: examples.createControlledSourceExampleProject,
           'current-controlled': examples.createCurrentControlledSourcesExampleProject, transistor: examples.createTransistorSwitchExampleProject,
           'voltage-switch': examples.createVoltageSwitchExampleProject,
           'current-switch': examples.createCurrentSwitchExampleProject,
@@ -3512,7 +3532,7 @@ export default function App() {
             <button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button>
           </aside>
         )}
-        <Suspense fallback={<div className="schematic-loading" role="status">Loading schematic editor…</div>}><MemoizedSchematic project={schematicProject} documentSessionId={projectSessionId} partsById={partsById} labelsById={labelsById} symbolsById={symbolsById} deviceModels={importedDeviceModels} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={schematicSetProject} commitView={commitView} recordViewDraft={schematicRecordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={schematicPlaceComponent} onClearPendingComponent={schematicClearPending} setNotice={setNotice} beginEdit={schematicBeginEdit} endEdit={schematicEndEdit} onProbe={schematicProbe} onProbeVoltage={schematicProbeVoltage} onSwitchChanged={schematicSwitchChanged} simulationResult={simulationResult} simulationResultIsCurrent={(simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt} currentAnimationEnabled={currentAnimationEnabled} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/></Suspense>
+        <Suspense fallback={<div className="schematic-loading" role="status">Loading schematic editor…</div>}><MemoizedSchematic project={schematicProject} documentSessionId={projectSessionId} partsById={partsById} labelsById={labelsById} symbolsById={symbolsById} deviceModels={importedDeviceModels} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={schematicSetProject} commitView={commitView} recordViewDraft={schematicRecordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={schematicPlaceComponent} onClearPendingComponent={schematicClearPending} setNotice={setNotice} beginEdit={schematicBeginEdit} endEdit={schematicEndEdit} onProbe={schematicProbe} onProbeVoltage={schematicProbeVoltage} onProbeCharge={addBehavioralChargeProbe} onSwitchChanged={schematicSwitchChanged} simulationResult={simulationResult} simulationResultIsCurrent={(simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt} currentAnimationEnabled={currentAnimationEnabled} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/></Suspense>
       </main>
 
       {additionalPlotPanels.map((panel, index) => <Suspense key={panel.id} fallback={null}><AdditionalPlotWindow panel={panel} index={index} title={waveformWindowTitle(panel, index)} result={simulationResult} onUpdate={updatePlotPanel} onClose={closePlotPanel} onActivate={activatePlotPanel} onToggleTrace={togglePlotPanelTrace} onExport={exportWaveformCsv} onRangeChange={changePlotPanelRange} onRunNativeFourier={(fundamentalFrequency, traceId, vector) => { void startSimulation({ fundamentalFrequency, traceId, vector }) }}/></Suspense>)}

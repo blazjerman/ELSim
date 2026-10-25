@@ -1766,6 +1766,50 @@ export function createBehavioralInductorExampleProject(): Project {
   return project
 }
 
+/** A teaching model shows how a nonlinear Q(V) law changes capacitor charging. */
+export function createBehavioralCapacitorExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = {
+    id: 'behavioral-capacitor-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'pulse',
+    pulse: { initial: '0 V', delay: '0', rise: '1 µs', fall: '1 µs', width: '100 ms', period: '200 ms' },
+    x: 220, y: 360, rotation: 0,
+  }
+  const resistor: Part = { id: 'behavioral-capacitor-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 460, y: 300, rotation: 0 }
+  const capacitor: Part = {
+    id: 'behavioral-capacitor-c1', kind: 'capacitor', ref: 'C1', value: '10 µF',
+    behavioralCharge: '10u*V(VOUT) + 1u*V(VOUT)*V(VOUT)*V(VOUT)', x: 700, y: 300, rotation: 0,
+  }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Voltage-dependent capacitor charge'
+  project.parts = [source, resistor, capacitor]
+  project.wires = [
+    { id: 'behavioral-capacitor-feed-rise', points: [[220, 310], [220, 260]] },
+    { id: 'behavioral-capacitor-feed-top', points: [[220, 260], [410, 260]] },
+    { id: 'behavioral-capacitor-feed-drop', points: [[410, 260], [410, 300]] },
+    { id: 'behavioral-capacitor-resistor-capacitor', points: [[510, 300], [650, 300]] },
+    { id: 'behavioral-capacitor-vout-label-stub', points: [[650, 300], [650, 240]] },
+    { id: 'behavioral-capacitor-return-right', points: [[750, 300], [800, 300]] },
+    { id: 'behavioral-capacitor-return-drop', points: [[800, 300], [800, 460]] },
+    { id: 'behavioral-capacitor-return-bottom', points: [[800, 460], [220, 460]] },
+    { id: 'behavioral-capacitor-return-source', points: [[220, 460], [220, 410]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    labelAt('behavioral-capacitor-vin', 'VIN', source, 0),
+    { id: 'behavioral-capacitor-vout', name: 'VOUT', x: 650, y: 240, visible: true },
+    labelAt('behavioral-capacitor-ground', '0', source, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VOUT)', 'elsim_q_c1'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -15, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A capacitor-only transient lesson showing exponential discharge from an initial voltage. */
 export function createCapacitorDischargeExampleProject(): Project {
   const project = createStarterProject()

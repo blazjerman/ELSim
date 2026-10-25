@@ -18,6 +18,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'intermodulation', title: 'Diode two-tone intermodulation', description: 'Apply two small signals to a forward-biased diode and inspect the third-order product 2F1−F2 in ngspice.' },
   { id: 'lc-energy', title: 'LC energy exchange', description: 'Start with a charged capacitor and watch stored electric energy move into inductor current and back.' },
   { id: 'behavioral-inductor', title: 'Inductance changes with current', description: 'Use a smooth ngspice L= expression to model a saturation-style effect: inductance falls as current rises, so the current ramp steepens. This is an illustrative model, not a device core model.' },
+  { id: 'behavioral-capacitor', title: 'Voltage-dependent capacitor charge', description: 'Use an ngspice Q= expression where charge is nonlinear with voltage; rising differential capacitance slows the voltage ramp. This is an illustrative charge law, not a dielectric or device model.' },
   { id: 'rc', title: 'RC step response', description: 'Watch a capacitor charge through a resistor and explore the time constant.' },
   { id: 'pwl', title: 'PWL waveform response', description: 'Drive an RC circuit with a custom three-level source and see how the capacitor follows each change.' },
   { id: 'current-source', title: 'Current source and load', description: 'See a 1 mA source drive a 1 kΩ load and produce a 1 V operating point.' },
@@ -82,7 +83,7 @@ const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, readonly ExampleId[]
   diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'sine-wave', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'current-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
-  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'transient-noise', 'transient-noise-sweep', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'common-source', 'cmos-inverter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'transfer-function', 'current-transresistance', 'pole-zero', 'intermodulation', 'behavioral-inductor', 'bridge-rectifier', 'transmission-line', 'urc-line', 'urc-line-native', 'coupled-crosstalk'],
+  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'transient-noise', 'transient-noise-sweep', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'common-source', 'cmos-inverter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'transfer-function', 'current-transresistance', 'pole-zero', 'intermodulation', 'behavioral-inductor', 'behavioral-capacitor', 'bridge-rectifier', 'transmission-line', 'urc-line', 'urc-line-native', 'coupled-crosstalk'],
 }
 const startOrder = new Map(exampleTopicIds.start.map((id, index) => [id, index]))
 
