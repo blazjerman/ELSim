@@ -657,7 +657,12 @@ for (const fixture of selectedFixtures) {
     if (fixture === 'imported-subckt-scale-suffixes-op') assert.match(wasmResult.stdout, /out\s+5\.000000e\+00/i, 'ngspice mil, atto, and ignored unit suffixes should resolve to a unity gain')
     if (fixture === 'numeric-leading-subckt-name-pins-op') assert.match(wasmResult.stdout, /out\s+1\.000000e\+01/i, 'ngspice should expand a 74HC-style subcircuit with numeric-leading pin names')
     if (fixture === 'slash-subckt-pin-identifiers-op') assert.match(wasmResult.stdout, /out\s+1\.000000e\+01/i, 'ngspice should expand an imported subcircuit with slash-delimited pin names')
-  if (fixture === 'punctuated-subckt-pin-names-op') assert.match(wasmResult.stdout, /out\s+5\.000000e\+00/i, 'ngspice should map punctuation-rich formal pin names to external circuit nodes')
+  if (fixture === 'punctuated-subckt-pin-names-op') {
+    for (const node of ['out', 'out3', 'out4', 'out5', 'out6', 'out7', 'out8', 'out9']) {
+      const expected = node === 'out' ? '5.000000e+00' : '2.500000e+00'
+      assert.match(wasmResult.stdout, new RegExp(`${node}\\s+${expected.replaceAll('.', '\\.').replace('+', '\\+')}`, 'i'), `ngspice should map punctuation-rich formal pin names to ${node}`)
+    }
+  }
     if (fixture === 'imported-subckt-bare-params-op') assert.match(wasmResult.stdout, /out\s+1\.500000e\+01/i, 'imported-subckt-bare-params-op: GAIN=3 override without PARAMS: did not produce the expected 15 V output')
     if (fixture === 'imported-subckt-local-param-shadow-op') assert.match(wasmResult.stdout, /out\s+2\.000000e\+00/i, 'imported-subckt-local-param-shadow-op: local SCALE=2 must shadow global SCALE=10 and produce 2 V')
     if (fixture === 'conditional-device-model-op') assert.match(wasmResult.stdout, /out\s+4\.602852e\+00/i, 'conditional model branch should select DSEL Is=1n and solve the expected 4.603 V output')

@@ -323,25 +323,25 @@ test('rejects ground node zero as an imported subcircuit external pin', () => {
 })
 
 test('accepts native ngspice punctuation-rich batch node names as ordered subcircuit pins', () => {
-  const names = ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+']
+  const names = ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+', 'IN[1]', 'IN%2', 'IN<3>', 'IN~4', 'IN\\5', 'IN`6', 'IN]7']
   for (const name of names) {
     assert.equal(isValidSpiceNodeName(name), true, name)
     assert.equal(isValidSpiceSubcircuitPinName(name), true, name)
   }
-  for (const name of ['A B', 'A=B', 'A%B', 'A(B', 'A)B', 'A,B', '[A]', '<A>', 'A~B', '{A}', "A'B", 'A’B', 'A\u0000B', 'A'.repeat(65)]) {
+  for (const name of ['A B', 'A=B', 'A(B', 'A)B', 'A,B', '{A}', "A'B", 'A"B', 'A’B', 'A\u0000B', 'A'.repeat(65)]) {
     assert.equal(isValidSpiceNodeName(name), false, JSON.stringify(name))
     assert.equal(isValidSpiceSubcircuitPinName(name), false, JSON.stringify(name))
   }
   assert.equal(isValidSpiceSubcircuitPinName('0'), false)
   assert.equal(isValidSpiceSubcircuitPinName('gNd'), false)
 
-  const content = '.SUBCKT PUNCTUATED IN! IN:1 OUT#1\nE1 OUT#1 0 IN! IN:1 2\n.ENDS PUNCTUATED'
+  const content = '.SUBCKT PUNCTUATED IN! IN:1 OUT#1 IN[1] IN%2 IN<3> IN~4 IN\\5 IN`6 IN]7\nE1 OUT#1 0 IN! IN:1 2\n.ENDS PUNCTUATED'
   const parsed = parseSubcircuitLibrary(content)
-  assert.deepEqual(parsed.subcircuits[0].pins, ['IN!', 'IN:1', 'OUT#1'])
+  assert.deepEqual(parsed.subcircuits[0].pins, ['IN!', 'IN:1', 'OUT#1', 'IN[1]', 'IN%2', 'IN<3>', 'IN~4', 'IN\\5', 'IN`6', 'IN]7'])
   const project = createStarterProject()
   project.modelAssets = [{ id: 'punctuated', filename: 'punctuated.lib', content, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push({ id: 'punctuated-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: 'PUNCTUATED', modelPins: parsed.subcircuits[0].pins })
-  assert.deepEqual(validateProject(project).parts.at(-1).modelPins, ['IN!', 'IN:1', 'OUT#1'])
+  assert.deepEqual(validateProject(project).parts.at(-1).modelPins, ['IN!', 'IN:1', 'OUT#1', 'IN[1]', 'IN%2', 'IN<3>', 'IN~4', 'IN\\5', 'IN`6', 'IN]7'])
 })
 
 test('accepts ngspice polarity characters in imported subcircuit pin names', () => {

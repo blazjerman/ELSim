@@ -3669,7 +3669,7 @@ test('native ngspice slash-named subcircuit imports and generates a valid instan
 
 test('native ngspice punctuation-rich subcircuit pins import and remain ordered in project and netlist', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
-  const modelLibrary = '.SUBCKT PUNCTUATED IN! IN:1 OUT#1\nE1 OUT#1 0 IN! IN:1 2\n.ENDS PUNCTUATED\n'
+  const modelLibrary = '.SUBCKT PUNCTUATED IN! IN:1 OUT#1 IN[1] IN%2 IN<3> IN~4 IN\\5 IN`6 IN]7\nE1 OUT#1 0 IN! IN:1 2\n.ENDS PUNCTUATED\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'punctuated-pins.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
@@ -3679,15 +3679,16 @@ test('native ngspice punctuation-rich subcircuit pins import and remain ordered 
   await expect(importedModel).toContainText('IN!')
   await expect(importedModel).toContainText('IN:1')
   await expect(importedModel).toContainText('OUT#1')
+  for (const pin of ['IN[1]', 'IN%2', 'IN<3>', 'IN~4', 'IN\\5', 'IN`6', 'IN]7']) await expect(importedModel).toContainText(pin)
   await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
   await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
   await waitForProjectAutosave(page)
   await expect.poll(() => page.evaluate(() => {
     const part = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
     return { modelName: part?.modelName, modelPins: part?.modelPins }
-  })).toEqual({ modelName: 'PUNCTUATED', modelPins: ['IN!', 'IN:1', 'OUT#1'] })
+  })).toEqual({ modelName: 'PUNCTUATED', modelPins: ['IN!', 'IN:1', 'OUT#1', 'IN[1]', 'IN%2', 'IN<3>', 'IN~4', 'IN\\5', 'IN`6', 'IN]7'] })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT PUNCTUATED IN! IN:1 OUT#1')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT PUNCTUATED IN! IN:1 OUT#1 IN[1] IN%2 IN<3> IN~4 IN\\5 IN`6 IN]7')
   await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* PUNCTUATED/)
 })
 

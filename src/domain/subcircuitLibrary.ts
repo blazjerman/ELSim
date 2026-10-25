@@ -101,7 +101,7 @@ export function isValidSpiceLibrarySectionName(value: string): boolean {
 }
 // ngspice batch-mode node names are tokens, not C-style identifiers. Keep
 // this separate from ELSim's stricter user-facing net-label syntax.
-const forbiddenNodeNameCharacter = /[\s=%(),\[\]<>~{}'\u2019\x00-\x1f\x7f]/u
+const forbiddenNodeNameCharacter = /[\s=(),{}'"\u2019\x00-\x1f\x7f]/u
 export function isValidSpiceNodeName(value: string): boolean {
   return value.length > 0 && value.length <= 64 && !forbiddenNodeNameCharacter.test(value)
 }
