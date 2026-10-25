@@ -8881,6 +8881,35 @@ test('native ngspice AKO models import and simulate after cross-library expansio
   await expect(netlist).not.toContainText(/AKO:/i)
 })
 
+test('selected diode runs with an imported AKO model whose base and child names contain punctuation', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const project = createDiodePolarityExampleProject()
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'ako-punctuation-base.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL D#BASE D(IS=1n N=1)\n'),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from ako-punctuation-base\.lib/)).toBeVisible()
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'ako-punctuation-child.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL D!CHILD AKO:D#BASE D(IS=2n)\n'),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from ako-punctuation-child\.lib/)).toBeVisible()
+  await page.locator('.circuit-part[data-part-id="diode-polarity-d1"]').click()
+  const modelPicker = page.getByLabel('Device model for D1')
+  await expect(modelPicker.locator('option', { hasText: 'D!CHILD (D)' })).toHaveCount(1)
+  await modelPicker.selectOption('D!CHILD')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(ANODE)')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText(/^D1 .* D!CHILD$/m)
+  await expect(netlist).toContainText(/\.model D!CHILD D\(IS=2n N=1\)/i)
+  await expect(netlist).not.toContainText(/AKO:/i)
+})
+
 test('native ngspice BSIM3 model bins are not reported as unsupported LTspice bins', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
