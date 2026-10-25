@@ -11555,6 +11555,8 @@ test('native stochastic B-source example opens and runs in browser ngspice', { t
   await expect.poll(async () => Number((await secondComplete.innerText().catch(() => '')).match(/random seed (\d+)/)?.[1] ?? firstSeed), { timeout: 60_000 }).not.toBe(firstSeed)
   const secondSeed = Number((await secondComplete.innerText()).match(/random seed (\d+)/)?.[1])
   expect(secondSeed).not.toBe(firstSeed)
+  await page.getByRole('button', { name: `Repeat random run with seed ${secondSeed}` }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toContainText(`random seed ${secondSeed}`, { timeout: 60_000 })
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByLabel('Independent random runs').selectOption('3')
   await page.getByRole('button', { name: 'Run simulation' }).click()

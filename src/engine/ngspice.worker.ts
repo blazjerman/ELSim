@@ -128,9 +128,15 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     const hasStochasticExpression = /\b(?:gauss|agauss|unif|aunif|limit)\s*\(/i.test(artifact.text)
     let stochasticSeed: number | undefined
     if (hasStochasticExpression) {
-      const randomWord = new Uint32Array(1)
-      worker.crypto.getRandomValues(randomWord)
-      stochasticSeed = randomWord[0] % 2_147_483_647 + 1
+      const requestedSeed = metadata.settings.stochasticSeed
+      if (typeof requestedSeed === 'number') {
+        if (!Number.isSafeInteger(requestedSeed) || requestedSeed < 1 || requestedSeed > 2_147_483_647) throw new Error('Ngspice stochastic seed must be an integer from 1 to 2147483647.')
+        stochasticSeed = requestedSeed
+      } else {
+        const randomWord = new Uint32Array(1)
+        worker.crypto.getRandomValues(randomWord)
+        stochasticSeed = randomWord[0] % 2_147_483_647 + 1
+      }
     }
     const runDeck = addResultControl(artifact.text, parameterSweep, measurements, ngspiceFourier, distortionPlot as 1 | 2 | 3, stochasticSeed)
     if (needsLtspiceFullDeckTranslation(runDeck)) {
