@@ -957,13 +957,13 @@ function isValidNgspiceParameterName(name: string): boolean {
 
 const ngspiceDigitalUPrimitive = /^(?:BUF|INV|AND|NAND|OR|NOR|XOR|NXOR)(?:3)?A?(?:\s*\(\s*\d+\s*\))?$|^(?:AOI?|OAI?|DFF|JKFF|DLTCH|SRFF|DLYLINE|LOGICEXP|PINDLY)$/i
 
-function ngspiceDigitalUPrimitiveFields(tokens: string[]): { primitive: string; fieldCount: number } | null {
+function ngspiceDigitalUPrimitiveFields(tokens: string[]): string | null {
   const first = tokens[1] ?? ''
   if (/^(?:AND|NAND|OR|NOR|XOR|NXOR)3?\($/i.test(first) && /^\d+$/.test(tokens[2] ?? '') && tokens[3] === ')') {
-    return { primitive: `${first}${tokens[2]})`, fieldCount: 3 }
+    return `${first}${tokens[2]})`
   }
   const primitive = first.replace(/\s+/g, '')
-  return ngspiceDigitalUPrimitive.test(primitive) ? { primitive, fieldCount: 1 } : null
+  return ngspiceDigitalUPrimitive.test(primitive) ? primitive : null
 }
 
 function isNgspiceDigitalUDevice(tokens: string[]): boolean {
@@ -971,30 +971,17 @@ function isNgspiceDigitalUDevice(tokens: string[]): boolean {
 }
 
 function digitalUModelDependencies(tokens: string[], owner: string, sourceLine: number): ModelDependency[] {
-  const primitiveFields = ngspiceDigitalUPrimitiveFields(tokens)
-  if (!primitiveFields || !/^u\S*$/i.test(tokens[0] ?? '')) return []
-  const primitive = primitiveFields.primitive.toUpperCase()
-  const declaredInputs = primitive.match(/^(?:AND|NAND|OR|NOR|XOR|NXOR)3?\((\d+)\)$/)?.[1]
-  const tristatePrimitive = primitive.match(/^(BUF|INV|AND|NAND|OR|NOR|XOR|NXOR)3/)
-  const signalPinCount = /^(?:BUF|INV)$/.test(primitive)
-    ? 2
-    : /^(?:BUF|INV)3$/.test(primitive)
-      ? 3
-      : declaredInputs && tristatePrimitive
-        ? Number(declaredInputs) + 2
-        : declaredInputs
-          ? Number(declaredInputs) + 1
-          : undefined
-  // Complex gates, state elements, and function-backed U devices have
-  // primitive-specific pin lists; do not guess at their model field offsets.
-  if (!signalPinCount || !Number.isInteger(signalPinCount) || signalPinCount < 2 || signalPinCount > 64) return []
+  if (!ngspiceDigitalUPrimitiveFields(tokens) || !/^u\S*$/i.test(tokens[0] ?? '')) return []
   const optionAt = tokens.findIndex((token, index) => index >= 2 && (
     /^(?:MNTYMXDLY|IO_LEVEL)\s*=/i.test(token)
     || (/^(?:MNTYMXDLY|IO_LEVEL)$/i.test(token) && tokens[index + 1] === '=')
   ))
   const positionalEnd = optionAt < 0 ? tokens.length : optionAt
-  const firstModelAt = 3 + primitiveFields.fieldCount + signalPinCount // U name, primitive, power, ground, signal pins.
-  const modelNames = tokens.slice(firstModelAt, positionalEnd)
+  // Ngspice's U-device grammar places the timing and I/O model names after
+  // all variable-count signal pins, immediately before optional delay/level
+  // fields. Taking the final two positional fields works for gates, arrays,
+  // compound devices, and state elements without guessing their pin counts.
+  const modelNames = tokens.slice(2, positionalEnd).slice(-2)
   if (modelNames.length !== 2 || !modelNames.every((token) => isValidSpiceModelName(token, true))) return []
   return modelNames.map((modelName) => ({ owner, reference: tokens[0], modelName, kind: 'device', sourceLine }))
 }
