@@ -1422,8 +1422,26 @@ export default function App() {
   )
   const capacitorDischargeInitialVoltage = capacitorInitialCondition && 'voltage' in capacitorInitialCondition ? capacitorInitialCondition.voltage : ''
   const projectWireIds = useMemo(() => new Set(project.wires.map((wire) => wire.id)), [project.wires])
-  const voltageSources = useMemo(() => project.parts.filter((part) => part.kind === 'source'), [project.parts])
-  const dcSweepSources = useMemo(() => project.parts.filter((part) => part.kind === 'source' || part.kind === 'currentSource'), [project.parts])
+  const partCollections = useMemo(() => {
+    const voltageSources: typeof project.parts = []
+    const dcSweepSources: typeof project.parts = []
+    const capacitorParts: typeof project.parts = []
+    const inductorParts: typeof project.parts = []
+    const diodeParts: typeof project.parts = []
+    const bjtParts: typeof project.parts = []
+    const fetParts: typeof project.parts = []
+    for (const part of project.parts) {
+      if (part.kind === 'source') voltageSources.push(part)
+      if (part.kind === 'source' || part.kind === 'currentSource') dcSweepSources.push(part)
+      if (part.kind === 'capacitor') capacitorParts.push(part)
+      if (part.kind === 'inductor') inductorParts.push(part)
+      if (part.kind === 'diode' || part.kind === 'led' || part.kind === 'zener') diodeParts.push(part)
+      if (part.kind === 'npn' || part.kind === 'pnp') bjtParts.push(part)
+      if (part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmesfet' || part.kind === 'pmesfet' || part.kind === 'nvdmos' || part.kind === 'pvdmos') fetParts.push(part)
+    }
+    return { voltageSources, dcSweepSources, capacitorParts, inductorParts, diodeParts, bjtParts, fetParts }
+  }, [project.parts])
+  const { voltageSources, dcSweepSources, capacitorParts, inductorParts, diodeParts, bjtParts, fetParts } = partCollections
   const activeDcSweepSource = dcSweepSources.find((part) => part.ref.toLowerCase() === (project.simulation.dcSweep?.source ?? 'V1').toLowerCase())
   const dcSweepIsCurrent = activeDcSweepSource?.kind === 'currentSource'
   const dcSweepUnit = dcSweepIsCurrent ? 'A' : 'V'
@@ -1441,11 +1459,6 @@ export default function App() {
     const existing = current.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
     return { ...current, simulation: { ...current.simulation, dcSweep: changedQuantity ? defaults : { ...existing, source: sourceRef } } }
   })
-  const capacitorParts = useMemo(() => project.parts.filter((part) => part.kind === 'capacitor'), [project.parts])
-  const inductorParts = useMemo(() => project.parts.filter((part) => part.kind === 'inductor'), [project.parts])
-  const diodeParts = useMemo(() => project.parts.filter((part) => part.kind === 'diode' || part.kind === 'led' || part.kind === 'zener'), [project.parts])
-  const bjtParts = useMemo(() => project.parts.filter((part) => part.kind === 'npn' || part.kind === 'pnp'), [project.parts])
-  const fetParts = useMemo(() => project.parts.filter((part) => ['nmos', 'pmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nvdmos', 'pvdmos'].includes(part.kind)), [project.parts])
   const labeledNodeNames = useMemo(() => [...new Set(project.netLabels.filter((label) => connectivity.labelNets.get(label.id) !== '0').map((label) => label.name))], [project.netLabels, connectivity])
   const changeAnalysis = (analysis: Project['simulation']['analysis']) => setProject((current) => {
     if (analysis !== 'noise' && analysis !== 'tf' && analysis !== 'sens' && analysis !== 'pz' && analysis !== 'disto') return { ...current, simulation: { ...current.simulation, analysis } }
