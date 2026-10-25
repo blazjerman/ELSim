@@ -1768,15 +1768,19 @@ export function analyzeModelLibraries<T extends ModelLibraryInput>(assets: T[]):
   // placed model can actually reach that function through its include chain.
   const inspectedAssets = assets.map((asset) => ({ asset, inspected: inspectLibrarySource(asset.content) }))
   const availableFunctions = modelFunctionSignaturesForInspectedLibraries(inspectedAssets)
+  const inspectedSectionsByAssetId = new Map(inspectedAssets.map(({ asset, inspected }) => [asset.id, inspected.sections] as const))
   const parsedAssets = inspectedAssets.map(({ asset, inspected }) => ({
     asset,
     parsed: parseSubcircuitLibraryFromInspection(asset.content, inspected, asset.selectedSections, availableFunctions),
   }))
-  return { assets: parsedAssets, dependencies: analyzeParsedModelDependencies(parsedAssets) }
+  return { assets: parsedAssets, dependencies: analyzeParsedModelDependencies(parsedAssets, inspectedSectionsByAssetId) }
 }
 
 /** Resolve references between parsed libraries and report missing cards and recursive .SUBCKT chains. */
-function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['assets']): ModelDependencyAnalysis {
+function analyzeParsedModelDependencies(
+  parsedAssets: AnalyzedModelLibraries['assets'],
+  inspectedSectionsByAssetId: ReadonlyMap<string, readonly string[]>,
+): ModelDependencyAnalysis {
   const assetsByBasename = new Map<string, AnalyzedModelLibraries['assets']>()
   for (const entry of parsedAssets) {
     const basename = entry.asset.filename.split(/[\\/]/).at(-1)?.toLowerCase()
@@ -1910,7 +1914,10 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     if (include.section) {
       let sections = sectionCache.get(target.id)
       if (!sections) {
-        const availableSections = listModelLibrarySections(target.content)
+        // Every library was inspected before parsing. Reuse its section names
+        // here instead of rescanning a potentially large shared library for
+        // each dependency-analysis pass.
+        const availableSections = inspectedSectionsByAssetId.get(target.id) ?? listModelLibrarySections(target.content)
         const selectedSections = target.selectedSections ?? (availableSections.length === 1 ? availableSections : [])
         sections = {
           available: new Set(availableSections.map((section) => section.toLowerCase())),

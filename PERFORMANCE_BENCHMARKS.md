@@ -1,5 +1,11 @@
 # ELSim performance benchmarks
 
+## Reuse inspected imported-library sections (2026-10-25)
+
+`analyzeModelLibraries` now reuses the section names collected during its initial library inspection when resolving section-qualified `.LIB` dependencies. The previous dependency pass rescanned the target library source to list those sections. Parser and dependency output is unchanged; the focused `subcircuit-library` test passes, including the large multi-reference section fixture.
+
+On the documented i7-12700F host, version 15 of `npm run benchmark:performance:quick` measured 1,001 imported libraries referencing a shared 2,000-section library at 179.770 ms median / 351.739 ms p95 before and 133.584 ms / 160.777 ms after. This is a local seven-run benchmark snapshot, not a portable guarantee. TypeScript and `git diff --check` pass; no WASM build, browser suite, or Pages workflow ran.
+
 ## Firefox 501-part animation spot check (2026-10-25)
 
 One focused run of the existing 501-part resistor/inductor/transformer fixture passed in Firefox with the local ngspice WASM. All 250 resistor, 225 inductor, and 25 transformer primary/secondary glows changed at the requested sample, and offscreen animation stayed skipped until Fit all. The shared animation callback took 2 ms. The viewport scrub reached its second animation frame in 5 ms; after fitting the full circuit, it reached the second frame in 19 ms. The corresponding Playwright scrub intervals were 48.29 ms in the viewport and 422.92 ms full-canvas, with 31 and 638 DOM mutation records; those intervals include browser automation and, for the full-canvas case, repeated per-component assertions, so they are not application frame latency. Idle and playback RAF medians were both 17.06 ms, with one playback interval above 1.5× median. This single run found no specific renderer bottleneck to optimize and is not a cross-device guarantee. Existing WASM reused; no rebuild or Pages workflow ran.
