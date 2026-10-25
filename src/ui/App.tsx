@@ -3487,6 +3487,7 @@ export default function App() {
                 {exampleLesson.id === 'supply-droop' && <BeginnerPrediction kind="supply-droop" key={`${partsById.get('supply-droop-v1')?.value ?? ''}:${partsById.get('supply-droop-rsource')?.value ?? ''}:${partsById.get('supply-droop-rload')?.value ?? ''}`} supplyValue={partsById.get('supply-droop-v1')?.value ?? ''} seriesResistanceValue={partsById.get('supply-droop-rsource')?.value ?? ''} loadResistanceValue={partsById.get('supply-droop-rload')?.value ?? ''}/>}
                 {exampleLesson.id === 'zener' && <BeginnerPrediction kind="zener-current" key={`${partsById.get('zener-v1')?.value ?? ''}:${partsById.get('zener-r1')?.value ?? ''}`} supplyValue={partsById.get('zener-v1')?.value ?? ''} resistanceValue={partsById.get('zener-r1')?.value ?? ''}/>}
                 {exampleLesson.id === 'switch-lamp' && <BeginnerPrediction kind="switch-lamp"/>}
+                {exampleLesson.id === 'common-emitter' && <BeginnerPrediction kind="common-emitter-phase"/>}
                 {exampleLesson.id === 'common-source' && <BeginnerPrediction kind="common-source-phase"/>}
                 {exampleLesson.id === 'cmos-inverter' && <BeginnerPrediction kind="cmos-inverter"/>}
                 {exampleLesson.id === 'ohms-law' && <BeginnerPrediction kind="ohms-law" key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`} supplyValue={partsById.get('ohms-law-v1')?.value ?? ''} resistanceValue={partsById.get('ohms-law-r1')?.value ?? ''}/>}

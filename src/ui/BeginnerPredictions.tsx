@@ -92,6 +92,15 @@ export function CommonSourcePhasePrediction() {
   />
 }
 
+export function CommonEmitterPhasePrediction() {
+  return <BinaryChoicePrediction
+    id="common-emitter-phase-prediction"
+    prompt="Before running, will the common-emitter amplifier output be inverted (about 180° out of phase)?"
+    expected="yes"
+    explanation="Yes. A rising base signal increases Q1's collector current. The larger voltage drop across RC pulls the collector voltage down, so VOUT moves opposite to VIN in the amplifier's midband."
+  />
+}
+
 export function CmosInverterPrediction() {
   return <BinaryChoicePrediction
     id="cmos-inverter-prediction"
@@ -749,7 +758,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'transformer-voltage' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors' | 'common-source-phase' | 'cmos-inverter'
+  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'transformer-voltage' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors' | 'common-source-phase' | 'common-emitter-phase' | 'cmos-inverter'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -789,6 +798,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'zener-current': return <ZenerCurrentPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'switch-lamp': return <SwitchPathPrediction/>
     case 'common-source-phase': return <CommonSourcePhasePrediction/>
+    case 'common-emitter-phase': return <CommonEmitterPhasePrediction/>
     case 'cmos-inverter': return <CmosInverterPrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
