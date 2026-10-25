@@ -46,6 +46,28 @@ test('the sweep editor and Add action share eligible source, model, IC, and reus
   assert.deepEqual(subcircuitSweepParameters(expressionProject.parts.find((part) => part.ref === 'X1'), [], expressionProject.sheets).map((parameter) => parameter.name), ['RINPUT'])
 })
 
+test('behavioral R/C/L parts cannot be swept as fixed passive values', () => {
+  for (const [kind, property, expression] of [
+    ['resistor', 'behavioralResistance', '1k + 1'],
+    ['capacitor', 'behavioralCapacitance', '10u + 1u'],
+    ['capacitor', 'behavioralCharge', '10u*V(vout) + 1u*V(vout)^3'],
+    ['inductor', 'behavioralInductance', '5m + 1m'],
+  ]) {
+    const project = createStarterProject()
+    const part = kind === 'resistor' ? project.parts.find((item) => item.ref === 'R1') : kind === 'capacitor' ? project.parts.find((item) => item.ref === 'C1') : undefined
+    const target = part ?? { id: 'l1', kind: 'inductor', ref: 'L1', value: '1 mH', x: 500, y: 500, rotation: 0 }
+    target[property] = expression
+    if (!part) project.parts.push(target)
+    project.sheets[0].parts = project.parts
+
+    const validated = validateProject(structuredClone(project))
+    const eligible = eligibleParameterSweepParts({ parts: validated.parts, analysis: 'tran', models: [], subcircuits: [], sheets: validated.sheets })
+    assert.equal(eligible.some((item) => item.ref === target.ref), false, `${target.ref} should not be offered as a fixed-value sweep`)
+    validated.simulation.parameterSweeps = [{ component: target.ref, start: '1', stop: '2', points: 2 }]
+    assert.throws(() => prepareParameterSweep(validated), new RegExp(`${target.ref} uses a behavioral expression.*Sweep a declared project parameter`))
+  }
+})
+
 test('single and nested parameter sweeps produce deterministic, bounded combinations', () => {
   const project = createStarterProject()
   project.simulation.parameterSweeps = [

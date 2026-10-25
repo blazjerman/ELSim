@@ -184,7 +184,13 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     if (start === null || stop === null || start === stop) throw new Error(`${part.ref}.${parameter.name} needs valid, different start and stop values.`)
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
-  if (!part || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, pulse source, resistor, lamp, capacitor, or inductor for parameter stepping.')
+  if (!part) throw new Error(`${sweep.component} is no longer in the circuit.`)
+  if ((part.kind === 'resistor' && part.behavioralResistance !== undefined)
+    || (part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined))
+    || (part.kind === 'inductor' && part.behavioralInductance !== undefined)) {
+    throw new Error(`${part.ref} uses a behavioral expression, so sweeping its fixed component value would not change the circuit. Sweep a declared project parameter used by the expression instead.`)
+  }
+  if (!['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, pulse source, resistor, lamp, capacitor, or inductor for parameter stepping.')
   if (sweep.listValues) {
     const values = sweep.listValues.map((value) => componentMagnitude(value, part.kind))
     if (values.length !== sweep.points || values.length < 2 || values.some((value) => value === null) || (!['source', 'currentSource'].includes(part.kind) && values.some((value) => value! <= 0))) throw new Error(`${part.ref} discrete sweep values must be valid quantities${['source', 'currentSource'].includes(part.kind) ? '' : ' and positive'}.`)
