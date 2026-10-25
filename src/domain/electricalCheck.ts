@@ -3,7 +3,7 @@ import type { Connectivity } from './connectivity'
 import { componentPins } from './geometry'
 import { isElectricalNetLabel, type Part, type Project } from './project'
 import { componentMagnitude, spiceDimensionMagnitude } from './componentValue'
-import { analyzeModelDependencies, coupledLineConductorCount, inspectCoupledLineMatrices, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
+import { analyzeModelDependencies, bjtThermalModelFamily, coupledLineConductorCount, inspectCoupledLineMatrices, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { behavioralCurrentReferenceError, ngspiceCurrentReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionFor, compatibleDeviceModelType, deviceModelTypeMatches } from './componentDefinitions'
 import { expandNgspiceAkoModels } from './ngspiceAko'
@@ -19,7 +19,7 @@ export type ElectricalIssue = {
 
 type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInstanceId?: string }
 type Bsim3BinRange = { name: string; minLength: number; maxLength: number; minWidth: number; maxWidth: number; minLengthText: string; maxLengthText: string; minWidthText: string; maxWidthText: string }
-type ImportedDeviceModel = { type: string; channel?: 'n' | 'p'; parameters: { name: string; defaultValue: string }[]; bsim3Bins?: Bsim3BinRange[] }
+type ImportedDeviceModel = { type: string; channel?: 'n' | 'p'; akoBaseName?: string; akoParametersResolved?: boolean; parameters: { name: string; defaultValue: string }[]; bsim3Bins?: Bsim3BinRange[] }
 
 // Device prefixes and accepted .MODEL families from the ngspice device-line
 // grammar. Some prefixes intentionally accept multiple polarities/families.
@@ -68,6 +68,48 @@ function importedDeviceModelIssue(part: Part, modelTypes: Map<string, ImportedDe
     severity: 'warning',
     title: `${part.ref} uses an incompatible ${modelType.type.toUpperCase()} model${location}`,
     detail: `${part.ref} requires a ${expectedChannel}${expectedType.toUpperCase()} model, but ${part.deviceModel} is a ${modelType.type.toUpperCase()} card${modelType.type.toLowerCase() === 'vdmos' ? ` with ${modelType.channel === 'p' ? 'P-channel' : 'N-channel'} polarity` : ''}. Select an imported model of the required ${expectedChannel ? 'type and polarity' : 'type'} before running.`,
+    partId: selectedPartId,
+  }
+}
+
+function unsupportedBjtThermalNodeIssue(part: Part, modelTypes: Map<string, ImportedDeviceModel>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
+  if ((part.kind !== 'npn' && part.kind !== 'pnp') || !part.thermalNode) return null
+  const model = part.deviceModel ? modelTypes.get(part.deviceModel.toLowerCase()) : undefined
+  if (bjtThermalModelFamily(model)) return null
+  const location = sheetName ? ` in ${sheetName}` : ''
+  return {
+    id: `unsupported-bjt-thermal-node:${id}`,
+    severity: 'warning',
+    title: `${part.ref} thermal node requires a supported BJT model${location}`,
+    detail: 'The fifth ngspice Q-device terminal is available for imported NPN/PNP HICUM/L2 LEVEL=8 or VBIC LEVEL=4/9 models. Select one of these models or clear the thermal-node setting.',
+    partId: selectedPartId,
+  }
+}
+
+function incompleteBjtSelfHeatingIssue(part: Part, modelTypes: Map<string, ImportedDeviceModel>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
+  if ((part.kind !== 'npn' && part.kind !== 'pnp') || !part.thermalNode) return null
+  const model = part.deviceModel ? modelTypes.get(part.deviceModel.toLowerCase()) : undefined
+  const family = bjtThermalModelFamily(model)
+  if (!model || !family || model.akoBaseName && !model.akoParametersResolved) return null
+  const parameters = new Set(model.parameters.map((parameter) => parameter.name.toLowerCase()))
+  const required = family === 'hicum' ? ['FLSH', 'RTH'] : ['RTH']
+  const missing = required.filter((name) => !parameters.has(name.toLowerCase()))
+  const rth = model.parameters.find((parameter) => parameter.name.toLowerCase() === 'rth')
+  if (rth && Number.isFinite(Number(rth.defaultValue)) && Number(rth.defaultValue) <= 0) missing.push('RTH>0')
+  if (family === 'vbic') {
+    const selft = model.parameters.find((parameter) => parameter.name.toLowerCase() === 'selft')
+    if (!selft || Number.isFinite(Number(selft.defaultValue)) && Number(selft.defaultValue) === 0) missing.unshift('SELFT=1')
+  } else {
+    const flsh = model.parameters.find((parameter) => parameter.name.toLowerCase() === 'flsh')
+    if (flsh && Number.isFinite(Number(flsh.defaultValue)) && Number(flsh.defaultValue) === 0 && !missing.includes('FLSH')) missing.unshift('FLSH=1 or 2')
+  }
+  if (!missing.length) return null
+  const location = sheetName ? ` in ${sheetName}` : ''
+  return {
+    id: `incomplete-bjt-self-heating:${id}`,
+    severity: 'warning',
+    title: `${part.ref} thermal model is missing ${missing.join(' and ')}${location}`,
+    detail: `ngspice ${family === 'hicum' ? 'HICUM/L2' : 'VBIC'} self-heating requires ${family === 'hicum' ? 'FLSH and RTH' : 'SELFT=1 and RTH'}, as well as the selected thermal node. Add or enable ${missing.join(' and ')} if self-heating is intended.`,
     partId: selectedPartId,
   }
 }
@@ -158,7 +200,12 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   const effectiveChannels = akoExpansion.channels
   for (const { asset, parsed } of parsedModelAssets) for (const model of parsed.models) if (!model.scope || ['r', 'res', 'c', 'l'].includes(model.type.toLowerCase())) {
     const channel = effectiveChannels.get(`${asset.id}:${model.startLine}`) ?? model.channel
-    importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel, parameters: model.parameters })
+    const effectiveParameters = akoExpansion.parameters.get(`${asset.id}:${model.startLine}`)
+    importedDeviceModels.set(model.name.toLowerCase(), {
+      type: model.type.toLowerCase(), channel, akoBaseName: model.akoBaseName,
+      akoParametersResolved: model.akoBaseName ? Boolean(effectiveParameters) : undefined,
+      parameters: effectiveParameters ?? model.parameters,
+    })
     if (!model.scope) importedDeviceModelCards.push({ ...model, channel })
   }
   for (const family of ngspiceBsim3BinFamilies(importedDeviceModelCards)) {
@@ -342,6 +389,10 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         detail: 'Add or restore a net label with this name in the same sheet, or clear the optional thermal-node setting.',
         partId: topLevelInstanceId ?? part.id,
       })
+      const thermalModelIssue = unsupportedBjtThermalNodeIssue(part, importedDeviceModels, `${sheet.id}:${part.id}`, topLevelInstanceId ?? part.id, sheet.name)
+      if (thermalModelIssue) issues.push(thermalModelIssue)
+      const selfHeatingIssue = incompleteBjtSelfHeatingIssue(part, importedDeviceModels, `${sheet.id}:${part.id}`, topLevelInstanceId ?? part.id, sheet.name)
+      if (selfHeatingIssue) issues.push(selfHeatingIssue)
       if (part.kind === 'nmos' || part.kind === 'pmos') {
         const source = sheetConnectivity.pinNets.get(`${part.id}:2`)
         const bulk = sheetConnectivity.pinNets.get(`${part.id}:3`)
@@ -546,6 +597,10 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
     const modelIssue = importedDeviceModelIssue(part, importedDeviceModels, part.id, part.id)
     if (modelIssue) issues.push(modelIssue)
+    const thermalModelIssue = unsupportedBjtThermalNodeIssue(part, importedDeviceModels, part.id, part.id)
+    if (thermalModelIssue) issues.push(thermalModelIssue)
+    const selfHeatingIssue = incompleteBjtSelfHeatingIssue(part, importedDeviceModels, part.id, part.id)
+    if (selfHeatingIssue) issues.push(selfHeatingIssue)
     if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)

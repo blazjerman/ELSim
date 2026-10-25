@@ -3162,16 +3162,19 @@ test('NPN and PNP parts create separate educational BJT models in C-B-E pin orde
 
 test('BJT substrate nodes use an explicitly labeled net and default to ngspice ground when unset', () => {
   const project = createStarterProject()
-  const transistor = { id: 'p-q1', kind: 'npn', ref: 'Q1', value: '100', substrateNode: 'vsubstrate', x: 700, y: 300, rotation: 0 }
+  const modelText = '.MODEL HICUM NPN LEVEL=8\n'
+  project.modelAssets = []
+  project.modelAssets.push({ id: 'hicum-bjt', filename: 'hicum.lib', content: modelText, sha256: createHash('sha256').update(modelText).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() })
+  const transistor = { id: 'p-q1', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'HICUM', substrateNode: 'vsubstrate', x: 700, y: 300, rotation: 0 }
   project.parts.push(transistor)
   project.netLabels.push({ id: 'bjt-substrate', name: 'Vsubstrate', x: 900, y: 300, visible: false })
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^Q1 \S+ \S+ \S+ Vsubstrate ELSIM_MODEL_Q1$/mi)
+  assert.match(artifact.text, /^Q1 \S+ \S+ \S+ Vsubstrate HICUM$/mi)
 
   transistor.substrateNode = undefined
   const defaultArtifact = createNetlistArtifact(validateProject(project))
-  assert.match(defaultArtifact.text, /^Q1 \S+ \S+ \S+ ELSIM_MODEL_Q1$/m)
+  assert.match(defaultArtifact.text, /^Q1 \S+ \S+ \S+ HICUM$/m)
 
   transistor.substrateNode = 'missing_net'
   const missing = createNetlistArtifact(validateProject(project))
@@ -3184,10 +3187,10 @@ test('BJT substrate nodes use an explicitly labeled net and default to ngspice g
   project.netLabels.push({ id: 'bjt-thermal', name: 'Tjunction', x: 940, y: 300, visible: false })
   const thermalArtifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(thermalArtifact.diagnostics, [])
-  assert.match(thermalArtifact.text, /^Q1 \S+ \S+ \S+ 0 Tjunction ELSIM_MODEL_Q1$/mi)
+  assert.match(thermalArtifact.text, /^Q1 \S+ \S+ \S+ 0 Tjunction HICUM$/mi)
   transistor.substrateNode = 'vsubstrate'
   const substrateAndThermalArtifact = createNetlistArtifact(validateProject(project))
-  assert.match(substrateAndThermalArtifact.text, /^Q1 \S+ \S+ \S+ Vsubstrate Tjunction ELSIM_MODEL_Q1$/mi)
+  assert.match(substrateAndThermalArtifact.text, /^Q1 \S+ \S+ \S+ Vsubstrate Tjunction HICUM$/mi)
   transistor.thermalNode = 'missing_thermal'
   assert.match(createNetlistArtifact(validateProject(project)).diagnostics.map(({ message }) => message).join('\n'), /thermal node.*needs a matching net label/i)
   transistor.thermalNode = 'bad node'
@@ -3195,7 +3198,30 @@ test('BJT substrate nodes use an explicitly labeled net and default to ngspice g
   transistor.substrateNode = undefined
   transistor.thermalNode = '0'
   const groundThermalArtifact = createNetlistArtifact(validateProject(project))
-  assert.match(groundThermalArtifact.text, /^Q1 \S+ \S+ \S+ 0 0 ELSIM_MODEL_Q1$/mi)
+  assert.match(groundThermalArtifact.text, /^Q1 \S+ \S+ \S+ 0 0 HICUM$/mi)
+  const ordinaryBjtModel = '.MODEL GENERIC NPN LEVEL=1\n'
+  project.modelAssets[0].content = ordinaryBjtModel
+  project.modelAssets[0].sha256 = createHash('sha256').update(ordinaryBjtModel).digest('hex')
+  transistor.deviceModel = 'GENERIC'
+  const unsupportedThermalArtifact = createNetlistArtifact(validateProject(project))
+  assert.match(unsupportedThermalArtifact.diagnostics.map(({ message }) => message).join('\n'), /thermal node requires an imported HICUM\/L2.*LEVEL=8.*VBIC.*LEVEL=4.*LEVEL=9/i)
+  assert.doesNotMatch(unsupportedThermalArtifact.text, /^Q1 /m)
+  const vbicModel = '.MODEL VBIC_NPN NPN LEVEL=4 SELFT=1 RTH=100\n'
+  project.modelAssets[0].content = vbicModel
+  project.modelAssets[0].sha256 = createHash('sha256').update(vbicModel).digest('hex')
+  transistor.deviceModel = 'VBIC_NPN'
+  const vbicThermalArtifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(vbicThermalArtifact.diagnostics, [])
+  assert.match(vbicThermalArtifact.text, /^Q1 \S+ \S+ \S+ 0 0 VBIC_NPN$/mi)
+  const akoHicumModels = '.MODEL HICUM_BASE NPN LEVEL=8 FLSH=1 RTH=100\n.MODEL HICUM_CHILD AKO:HICUM_BASE NPN()\n'
+  project.modelAssets[0].content = akoHicumModels
+  project.modelAssets[0].sha256 = createHash('sha256').update(akoHicumModels).digest('hex')
+  transistor.deviceModel = 'HICUM_CHILD'
+  const akoHicumThermalArtifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(akoHicumThermalArtifact.diagnostics, [])
+  assert.match(akoHicumThermalArtifact.text, /^Q1 \S+ \S+ \S+ 0 0 HICUM_CHILD$/mi)
+  assert.match(akoHicumThermalArtifact.text, /^\.MODEL HICUM_CHILD NPN\(LEVEL=8 FLSH=1 RTH=100\)$/mi)
+  assert.doesNotMatch(akoHicumThermalArtifact.text, /AKO:/i)
   transistor.thermalNode = undefined
   const nonBjt = project.parts.find((part) => part.kind === 'resistor')
   nonBjt.substrateNode = 'valid_node'

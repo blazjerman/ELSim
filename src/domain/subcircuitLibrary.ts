@@ -21,6 +21,14 @@ export type ConditionalModelVariant = { model: SpiceModelDefinition; conditionPa
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
 export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; unparsedParameters?: UnparsedModelParameter[]; conditionalOnlyParameters?: ConditionalOnlyModelParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalPath?: ModelConditionFrame[]; conditionalVariants?: ConditionalModelVariant[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
+export function bjtThermalModelFamily(model: Pick<SpiceModelDefinition, 'type' | 'parameters'> | undefined): 'hicum' | 'vbic' | undefined {
+  if (!model || !['npn', 'pnp'].includes(model.type.toLowerCase())) return undefined
+  const level = model.parameters.find((parameter) => parameter.name.toLowerCase() === 'level')?.defaultValue.trim()
+  if (level === undefined || !Number.isFinite(Number(level))) return undefined
+  if (Number(level) === 8) return 'hicum'
+  if (Number(level) === 4 || Number(level) === 9) return 'vbic'
+  return undefined
+}
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[]; topLevelParameterRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }

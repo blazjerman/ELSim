@@ -1,0 +1,8 @@
+HICUM level-8 BJT with its fifth thermal node and self-heating enabled
+VCE c 0 5
+VBE b 0 0.7
+Q1 c b 0 0 dt HICUM_THERMAL
+.MODEL HICUM_THERMAL NPN LEVEL=8 FLSH=1 RTH=100
+.op
+.print op i(VCE) v(dt)
+.end

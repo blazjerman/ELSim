@@ -1,0 +1,8 @@
+VBIC level-4 BJT with its fifth thermal node and self-heating enabled
+VCE c 0 5
+VBE b 0 0.7
+Q1 c b 0 0 dt VBIC_THERMAL
+.MODEL VBIC_THERMAL NPN LEVEL=4 SELFT=1 RTH=100
+.op
+.print op i(VCE) v(dt)
+.end

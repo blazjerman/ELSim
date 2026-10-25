@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { isElectricalNetLabel, sheetModelName, type Part, type Project } from '../domain/project'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit, translateNgspiceExpressionOperators, withoutInlineComment } from '../domain/subcircuitLibrary'
+import { bjtThermalModelFamily, createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit, translateNgspiceExpressionOperators, withoutInlineComment } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { behavioralCurrentReferenceError, ngspiceCurrentReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
@@ -1587,6 +1587,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
       if (part.deviceModel && importedModel?.type.toLowerCase() !== expectedModelType) {
         const message = `${part.ref} device model ${part.deviceModel} is missing or is not a ${part.kind.toUpperCase()} model.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      if (part.thermalNode && !bjtThermalModelFamily(importedModel)) {
+        const message = `${part.ref} thermal node requires an imported HICUM/L2 model with LEVEL=8 or VBIC model with LEVEL=4 or LEVEL=9.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue

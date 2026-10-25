@@ -15240,12 +15240,12 @@ test('an imported NPN level-8 HICUM2 model runs in the browser ngspice engine', 
   await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
 
-  const modelLibrary = '.MODEL USER_HICUM NPN LEVEL=8\n'
+  const modelLibrary = '.MODEL HICUM_BASE NPN LEVEL=8 FLSH=1 RTH=100\n.MODEL USER_HICUM AKO:HICUM_BASE NPN()\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-hicum.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
   })
-  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from user-hicum\.lib/)).toBeVisible()
+  await expect(page.getByText(/Imported 0 subcircuits and 2 device models from user-hicum\.lib/)).toBeVisible()
   await page.locator('.circuit-part[aria-label^="Q1,"]').click()
   const modelPicker = page.getByLabel('Device model for Q1')
   await expect(modelPicker.locator('option', { hasText: 'USER_HICUM (NPN)' })).toHaveCount(1)
@@ -15253,13 +15253,43 @@ test('an imported NPN level-8 HICUM2 model runs in the browser ngspice engine', 
   const substrate = page.getByLabel('Substrate node for Q1')
   await expect(substrate.locator('option', { hasText: 'VCC' })).toHaveCount(1)
   await substrate.selectOption('VCC')
-  await page.getByText('HICUM/L2 thermal terminal (advanced)').click()
+  await page.getByText('BJT thermal terminal (advanced)').click()
   const thermal = page.getByLabel('Thermal node for Q1')
   await expect(thermal.locator('option', { hasText: 'VCC' })).toHaveCount(1)
   await thermal.selectOption('VCC')
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')).toContainText(/^Q1 \S+ \S+ \S+ VCC VCC USER_HICUM$/m)
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(COLLECTOR)')
+})
+
+test('an imported VBIC model exposes its thermal node and self-heating settings', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const modelLibrary = '.MODEL USER_VBIC NPN LEVEL=4 SELFT=1 RTH=100\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'user-vbic.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from user-vbic\.lib/)).toBeVisible()
+  await page.locator('.circuit-part[aria-label^="Q1,"]').click()
+  await page.getByLabel('Device model for Q1').selectOption('USER_VBIC')
+  await page.getByText('BJT thermal terminal (advanced)').click()
+  await expect(page.getByText(/VBIC LEVEL=4 or LEVEL=9 models\. Self-heating requires SELFT=1 and RTH greater than 0\./)).toBeVisible()
+  await page.getByLabel('Thermal node for Q1').selectOption('0')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')).toContainText(/^Q1 \S+ \S+ \S+ 0 0 USER_VBIC$/m)
   await page.getByRole('button', { name: 'Close netlist' }).click()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })

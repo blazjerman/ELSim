@@ -94,6 +94,59 @@ test('device-model preflight matches each built-in device family to its SPICE ca
   }
 })
 
+test('BJT thermal-node preflight accepts HICUM and VBIC model families and checks self-heating parameters', () => {
+  const project = createStarterProject()
+  const transistor = { id: 'hicum-thermal-q1', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'USER_BJT', thermalNode: '0', x: 800, y: 600, rotation: 0 }
+  project.parts = [transistor]
+  project.modelAssets = [{ id: 'bjt-model', filename: 'bjt.lib', sha256: 'a'.repeat(64), content: '.MODEL USER_BJT NPN LEVEL=1\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)
+  root.parts = project.parts
+  const incompatible = checkCircuit(project).find((issue) => issue.id === `unsupported-bjt-thermal-node:${transistor.id}`)
+  assert.ok(incompatible)
+  assert.match(incompatible.detail, /HICUM\/L2 LEVEL=8 or VBIC LEVEL=4\/9/)
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT NPN LEVEL=8\n' }
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `unsupported-bjt-thermal-node:${transistor.id}`), false)
+  let selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
+  assert.ok(selfHeating)
+  assert.match(selfHeating.detail, /HICUM\/L2 self-heating requires FLSH and RTH/)
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT NPN LEVEL=8 FLSH=1 RTH=100\n' }
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`), false)
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT NPN LEVEL=8 FLSH=1 RTH=0\n' }
+  selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
+  assert.ok(selfHeating)
+  assert.match(selfHeating.detail, /RTH>0/)
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT PNP LEVEL=8\n' }
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `unsupported-bjt-thermal-node:${transistor.id}`), false)
+  assert.ok(checkCircuit(project).some((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`))
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT PNP LEVEL=4 SELFT=1 RTH=100\n' }
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `unsupported-bjt-thermal-node:${transistor.id}`), false)
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`), false)
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT PNP LEVEL=9 SELFT=0 RTH=100\n' }
+  selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
+  assert.ok(selfHeating)
+  assert.match(selfHeating.detail, /SELFT=1/)
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT PNP LEVEL=9 SELFT=1 RTH=-1\n' }
+  selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
+  assert.ok(selfHeating)
+  assert.match(selfHeating.detail, /RTH>0/)
+
+  project.modelAssets[0] = {
+    ...project.modelAssets[0],
+    content: '.MODEL HICUM_BASE NPN LEVEL=8 FLSH=1 RTH=100\n.MODEL USER_BJT AKO:HICUM_BASE NPN()\n',
+  }
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `unsupported-bjt-thermal-node:${transistor.id}`), false)
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`), false)
+  project.modelAssets[0] = {
+    ...project.modelAssets[0],
+    content: '.MODEL HICUM_BASE NPN LEVEL=8 FLSH=0 RTH=0\n.MODEL USER_BJT AKO:HICUM_BASE NPN()\n',
+  }
+  selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
+  assert.ok(selfHeating)
+  assert.match(selfHeating.detail, /FLSH=1 or 2 and RTH>0/)
+})
+
 test('MOSFET preflight accepts the unsuffixed base name of imported native BSIM3 bins', () => {
   const project = createStarterProject()
   const mosfet = { id: 'binned-nmos', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', x: 800, y: 600, rotation: 0 }
