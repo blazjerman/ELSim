@@ -2041,6 +2041,32 @@ export function createTransientNoiseSweepExampleProject(): Project {
   return project
 }
 
+/** Demonstrate ngspice's native random functions directly in a behavioral source. */
+export function createStochasticSourceExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'stochastic-source-b1', kind: 'behavioral', ref: 'B1', value: 'aunif(5, 0.1)', behavioralOutput: 'voltage', x: 300, y: 360, rotation: 90 }
+  const resistor: Part = { id: 'stochastic-source-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 500, y: 360, rotation: 90 }
+  const sourcePins = componentPins(source)
+  const resistorPins = componentPins(resistor)
+  project.name = 'Native stochastic behavioral source'
+  project.parts = [source, resistor]
+  project.wires = [
+    { id: 'stochastic-source-output-wire', points: [[sourcePins[0].x, sourcePins[0].y], [resistorPins[0].x, resistorPins[0].y]] },
+    { id: 'stochastic-source-return-wire', points: [[resistorPins[1].x, resistorPins[1].y], [sourcePins[1].x, sourcePins[1].y]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    { id: 'stochastic-source-output', name: 'VOUT', x: sourcePins[0].x, y: sourcePins[0].y, visible: true },
+    { id: 'stochastic-source-reference', name: '0', x: sourcePins[1].x, y: sourcePins[1].y, visible: true },
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '5 ms', maxStep: '10 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VOUT)', 'I(R1)'], ranges: {} }
+  project.view = { zoom: 0.95, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A pulse-driven voltage-controlled amplifier with an explicit load. */
 /** A parallel LC tank with a damped AC response peak near its calculated resonance. */
 export function createRlcResonanceExampleProject(): Project {

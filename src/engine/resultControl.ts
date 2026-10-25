@@ -37,7 +37,7 @@ function behavioralChargeCommands(rows: readonly string[]): string[] {
   return commands
 }
 
-export function addResultControl(netlist: string, parameterSweep: ParameterSweepRun[] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: { fundamentalFrequency: number; traceId: string; vector: string }, distortionPlot: 1 | 2 | 3 = 1): string {
+export function addResultControl(netlist: string, parameterSweep: ParameterSweepRun[] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: { fundamentalFrequency: number; traceId: string; vector: string }, distortionPlot: 1 | 2 | 3 = 1, stochasticSeed?: number): string {
   const rows = netlist.trimEnd().split(/\r?\n/)
   const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
   if (endLine === -1) throw new Error('Generated netlist is missing its .end directive.')
@@ -203,9 +203,11 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   }
   const measurementRows = analysisType !== 'tran' || parameterSweep.length ? [] : measurements.filter((measurement) => measurement.operation !== 'crossing' && !hasSourceCurrentVector(measurement) && (measurement.operation !== 'integ' || typeof measurement.expression === 'string')).map((measurement) => `.meas tran ELSIM_${measurement.id} ${measurement.operation === 'delay' ? `TRIG ${measurement.vector} VAL=${threshold(measurement.threshold, measurement.vector)} ${measurement.edge === 'either' ? 'CROSS' : measurement.edge.toUpperCase()}=${measurement.triggerCount ?? 1} TARG ${measurement.targetVector} VAL=${threshold(measurement.targetThreshold, measurement.targetVector)} ${measurement.targetEdge === 'either' ? 'CROSS' : measurement.targetEdge.toUpperCase()}=${measurement.targetCount ?? 1}` : `${measurement.operation} ${typeof measurement.expression === 'string' ? `par('${measurement.expression}')` : measurement.vector ?? ''}${rangeOptions(measurement)}`}`)
   const save = analysisType === 'ac' || analysisType === 'noise' ? [] : [`.save all${deviceCurrents.length ? ` ${deviceCurrents.join(' ')}` : ''}`]
-  const commands = ['.control', 'set filetype=binary']
+  if (stochasticSeed !== undefined && (!Number.isSafeInteger(stochasticSeed) || stochasticSeed < 1 || stochasticSeed > 2_147_483_647)) throw new Error('Ngspice stochastic seed must be an integer from 1 to 2147483647.')
+  const commands = ['.control', ...(stochasticSeed === undefined ? [] : [`setseed ${stochasticSeed}`, 'reset']), 'set filetype=binary']
   if (parameterSweep.length) {
     parameterSweep.forEach((run, index) => {
+      if (stochasticSeed !== undefined && index > 0) commands.push(`setseed ${Math.min(2_147_483_647, stochasticSeed + index)}`, 'reset')
       run.values.forEach(({ component, value, parameter, model, modelTargets, instanceParameter, sourceParameter, globalParameter, pulseHigh, pwlScale, waveformAmplitude, altermodParameters }) => {
         if (altermodParameters) return
         if (parameter && modelTargets) commands.push(`alterparam ${binFamilyParameters.get(`${component.toLowerCase()}.${parameter.toLowerCase()}`)?.generated}=${value}`)

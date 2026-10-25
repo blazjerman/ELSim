@@ -125,7 +125,14 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       ? distortion.intermodProduct === 'difference' ? 2 : distortion.intermodProduct === 'third-order' ? 3 : 1
       : distortion.harmonic === 3 ? 2 : 1
     const intermodProductLabel = distortion.intermodProduct === 'difference' ? 'f1−f2' : distortion.intermodProduct === 'third-order' ? '2f1−f2' : 'f1+f2'
-    const runDeck = addResultControl(artifact.text, parameterSweep, measurements, ngspiceFourier, distortionPlot as 1 | 2 | 3)
+    const hasStochasticExpression = /\b(?:gauss|agauss|unif|aunif|limit)\s*\(/i.test(artifact.text)
+    let stochasticSeed: number | undefined
+    if (hasStochasticExpression) {
+      const randomWord = new Uint32Array(1)
+      worker.crypto.getRandomValues(randomWord)
+      stochasticSeed = randomWord[0] % 2_147_483_647 + 1
+    }
+    const runDeck = addResultControl(artifact.text, parameterSweep, measurements, ngspiceFourier, distortionPlot as 1 | 2 | 3, stochasticSeed)
     if (needsLtspiceFullDeckTranslation(runDeck)) {
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
@@ -199,7 +206,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     )
     const ambiguousProjectMeasurementIds = new Set(importedMeasurementOutput.conflictingProjectMeasurementIds.map((id) => id.toLowerCase()))
     const result = {
-      metadata: { ...metadata, completedAt: new Date().toISOString() },
+      metadata: { ...metadata, ...(stochasticSeed === undefined ? {} : { settings: { ...metadata.settings, stochasticSeed } }), completedAt: new Date().toISOString() },
       netlist: artifact.text,
       sourceMap: artifact.sourceMap,
       traces,

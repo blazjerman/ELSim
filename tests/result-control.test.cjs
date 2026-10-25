@@ -29,6 +29,15 @@ test('result control saves device currents needed for probes and visualizations'
   assert.match(instrumented, /\.control\nset filetype=binary\ntran 1u 1m\nwrite \/result\.raw all\nquit\n\.endc\n\.end\n$/)
 })
 
+test('stochastic result decks seed and reload ngspice before drawing a random sample', () => {
+  const netlist = '* stochastic source\nB1 out 0 V={aunif(5, 0.1)}\nR1 out 0 1k\n.tran 10u 5m\n.end'
+  const control = addResultControl(netlist, [], [], undefined, 1, 41)
+  assert.match(control, /\.control\nsetseed 41\nreset\nset filetype=binary\ntran 10u 5m\nwrite \/result\.raw all/)
+  assert.throws(() => addResultControl(netlist, [], [], undefined, 1, 0), /seed must be an integer/)
+  const samples = addResultControl(netlist, [{ values: [], label: 'Sample 1' }, { values: [], label: 'Sample 2' }], [], undefined, 1, 41)
+  assert.match(samples, /setseed 41\nreset\nset filetype=binary\nrun\nwrite \/result-0\.raw all\nsetseed 42\nreset\nrun\nwrite \/result-1\.raw all/)
+})
+
 test('result control selects the requested distortion harmonic before writing raw data', () => {
   const netlist = 'V1 in 0 DC 1 DISTOF1 1m 0\n.disto dec 10 100 100k\n.print disto vm(out)\n.end'
   const second = addResultControl(netlist)

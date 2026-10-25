@@ -2933,15 +2933,18 @@ export default function App() {
         const warningSuffix = firstResultWarning
           ? ` · ${resultWarnings.length} warning${resultWarnings.length === 1 ? '' : 's'}: ${firstResultWarning.message}${warningAsset ? ` (${warningAsset.filename}${firstResultWarning.assetLine ? `:${firstResultWarning.assetLine}` : ''})` : ''}`
           : ''
+        const stochasticSeed = response.result.metadata.settings.stochasticSeed
+        const stochasticSeedSuffix = typeof stochasticSeed === 'number' ? ` · random seed ${stochasticSeed}` : ''
+        const resultSuffix = `${warningSuffix}${stochasticSeedSuffix}`
         if (hierarchyWalkthroughStep === 0) {
           setHierarchyWalkthroughStep(1)
-          setNotice(`Simulation complete. Continue the nested-block walkthrough in the guide.${warningSuffix}`)
-        } else if (parameterSweep.length) setNotice(`Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors${response.result.analysis === 'tran' && transientSamples > 1 ? prefersReducedMotionRef.current ? ' · animation paused for reduced motion' : ' · playing solved animation' : ''}${warningSuffix}`)
-        else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(`${prefersReducedMotionRef.current ? 'Transient analysis complete · animation paused for reduced motion' : 'Transient analysis complete · playing solved animation'} · ${response.result.traces.length} result vectors${warningSuffix}`)
-        else if (response.result.analysis === 'pz' && response.result.traces.length === 0) setNotice(`Pole-zero analysis complete · ngspice found no finite roots for this selection${warningSuffix}`)
-        else if (response.result.analysis === 'pz') setNotice(`Pole-zero analysis complete · ${response.result.traces.length} roots${warningSuffix}`)
-        else if (response.result.analysis === 'disto') setNotice(`${projectRef.current.simulation.distortion?.mode === 'intermodulation' ? 'Two-tone intermodulation' : 'Harmonic distortion'} analysis complete · ${response.result.traces.length} vectors${warningSuffix}`)
-        else setNotice(`Analysis complete · ${response.result.traces.length} result vectors${warningSuffix}`)
+          setNotice(`Simulation complete. Continue the nested-block walkthrough in the guide.${resultSuffix}`)
+        } else if (parameterSweep.length) setNotice(`Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors${response.result.analysis === 'tran' && transientSamples > 1 ? prefersReducedMotionRef.current ? ' · animation paused for reduced motion' : ' · playing solved animation' : ''}${resultSuffix}`)
+        else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(`${prefersReducedMotionRef.current ? 'Transient analysis complete · animation paused for reduced motion' : 'Transient analysis complete · playing solved animation'} · ${response.result.traces.length} result vectors${resultSuffix}`)
+        else if (response.result.analysis === 'pz' && response.result.traces.length === 0) setNotice(`Pole-zero analysis complete · ngspice found no finite roots for this selection${resultSuffix}`)
+        else if (response.result.analysis === 'pz') setNotice(`Pole-zero analysis complete · ${response.result.traces.length} roots${resultSuffix}`)
+        else if (response.result.analysis === 'disto') setNotice(`${projectRef.current.simulation.distortion?.mode === 'intermodulation' ? 'Two-tone intermodulation' : 'Harmonic distortion'} analysis complete · ${response.result.traces.length} vectors${resultSuffix}`)
+        else setNotice(`Analysis complete · ${response.result.traces.length} result vectors${resultSuffix}`)
             worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
       } else if (response.type === 'error') {
@@ -3177,6 +3180,7 @@ export default function App() {
           'sine-wave': examples.createSineWaveExampleProject,
           'transient-noise': examples.createTransientNoiseExampleProject,
           'transient-noise-sweep': examples.createTransientNoiseSweepExampleProject,
+          'stochastic-source': examples.createStochasticSourceExampleProject,
           superposition: examples.createSuperpositionExampleProject,
           'thevenin-norton': examples.createTheveninNortonExampleProject,
           'transfer-function': examples.createTransferFunctionExampleProject,
