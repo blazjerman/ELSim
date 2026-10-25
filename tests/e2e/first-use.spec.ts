@@ -2835,6 +2835,26 @@ test('transfer-function analysis runs in browser ngspice and reports gain and im
   await expect(plot.locator('.op-table')).toContainText('Input impedance at V1')
 })
 
+test('transfer-function analysis runs separate parameter-stepped results', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await page.getByLabel('Analysis type').first().selectOption('tf')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 transfer-function results')
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('R1')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 kΩ')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2 kΩ')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  const plot = page.locator('.plot-window').first()
+  await expect(plot.locator('.waveform-title')).toContainText('Small-signal transfer function')
+  await expect(plot.locator('.op-table')).toContainText('R1=1000')
+  await expect(plot.locator('.op-table')).toContainText('R1=2000')
+  await expect(plot.locator('.op-table')).toContainText('DC transfer gain')
+})
+
 test('pole-zero analysis locates the RC pole in the complex plane', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   await page.getByLabel('Analysis type').first().selectOption('pz')

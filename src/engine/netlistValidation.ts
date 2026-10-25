@@ -156,7 +156,6 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     if (!output || resolved.labelNets.get(output.id) === '0') add('tfOutput', 'Choose a labeled, non-ground output node for transfer-function analysis.')
     if (!independentSources.some((part) => part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())) add('tfSource', 'Choose an independent voltage or current input source.')
-    if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('tfSource', 'Parameter stepping is not available for transfer-function analysis yet.')
   } else if (project.simulation.analysis === 'pz') {
     const settings = project.simulation.poleZero ?? { outputNode: '', inputSource: '', roots: 'both' as const }
     const resolved = connectivity ?? analyzeConnectivity(project)
