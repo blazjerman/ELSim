@@ -1852,7 +1852,7 @@ test('parallel RLC resonance example forms a wired, damped tank for AC analysis'
 
 test('active sheet parameters are emitted as source-mapped SPICE declarations', () => {
   const project = createStarterProject()
-  project.sheets[0].parameters = [{ id: 'param-rload', name: 'RLOAD', defaultValue: '1k' }]
+  project.sheets[0].parameters = [{ id: 'param-rload', name: 'RLOAD', defaultValue: '{1 and 1}' }]
   const resistor = project.parts.find((part) => part.kind === 'resistor')
   resistor.value = '{RLOAD}'
   project.sheets[0].parts = project.parts
@@ -1860,9 +1860,9 @@ test('active sheet parameters are emitted as source-mapped SPICE declarations', 
   const artifact = createNetlistArtifact(validateProject(project))
 
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^\.param RLOAD=1k$/m)
+  assert.match(artifact.text, /^\.param RLOAD=\{1 && 1\}$/m)
   assert.match(artifact.text, /^R1 vin vout \{RLOAD\}$/m)
-  const parameterLine = artifact.text.split('\n').indexOf('.param RLOAD=1k') + 1
+  const parameterLine = artifact.text.split('\n').indexOf('.param RLOAD={1 && 1}') + 1
   assert.deepEqual(artifact.sourceMap.find((entry) => entry.line === parameterLine), {
     line: parameterLine,
     sourceId: 'parameter:param-rload',

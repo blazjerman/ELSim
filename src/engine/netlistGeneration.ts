@@ -282,7 +282,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const sheetParameters = (project as Project & { _netlistSheetParameters?: Project['sheets'][number]['parameters'] })._netlistSheetParameters
     ?? (includeHierarchyProbes ? project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters : undefined)
     ?? []
-  if (includeHierarchyProbes) for (const parameter of sheetParameters) append(`.param ${parameter.name}=${parameter.defaultValue}`, `parameter:${parameter.id}`, 'generated')
+  if (includeHierarchyProbes) for (const parameter of sheetParameters) append(`.param ${parameter.name}=${translateNgspiceExpressionOperators(parameter.defaultValue)}`, `parameter:${parameter.id}`, 'generated')
   let usesDiode = false
   let usesZener = false
   let usesSwitch = false
