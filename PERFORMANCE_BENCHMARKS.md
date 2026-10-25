@@ -1111,3 +1111,7 @@ Two focused Firefox runs of the existing 501-part resistor/inductor/transformer 
 ### Firefox full-canvas opacity-write reduction (2026-10-25)
 
 The 501-part Firefox stress fixture passed after skipping SVG opacity writes whose values round to the same 8-bit raster alpha. Exact zero-to-nonzero changes remain explicit so faint glows are preserved. In one second of playback, opacity mutations were 311, compared with 9,066 in the preceding same-fixture run (about 96.6% fewer); all 250 resistor, 225 inductor, and 25 transformer primary and secondary glows still changed on a full-range scrub. The resistor glow remained nonzero at the faint end (`0.000939` before and `0.004672` after). Playback RAF median was 17.08 ms, but two of 62 intervals exceeded 1.5× the median, and the full-canvas Playwright scrub took 500.63 ms. These single runs show fewer redundant DOM writes, not a measured frame-rate or end-to-end latency improvement. No WASM rebuild or Pages workflow ran.
+
+### Stable current-source direction during playback (2026-10-25)
+
+A focused Firefox/ngspice regression observes a constant DC current source during 350 ms of result playback. Before the guard, the shared cursor listener rewrote its unchanged `data-current-direction` attribute on every sample; after the guard, the observer records zero such mutations. The same workflow changes current sign and verifies the source arrow reverses, preserving visible electrical direction. This is a direct mutation regression, not a frame-time benchmark. No WASM rebuild or Pages workflow ran.

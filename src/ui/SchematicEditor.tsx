@@ -553,8 +553,9 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
           const active = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
           const reverse = active && current! < 0
           const direction = active ? reverse ? 'last-to-first' : 'first-to-last' : undefined
-          if (direction) group.setAttribute('data-current-direction', direction)
-          else group.removeAttribute('data-current-direction')
+          if (direction) {
+            if (group.getAttribute('data-current-direction') !== direction) group.setAttribute('data-current-direction', direction)
+          } else if (group.hasAttribute('data-current-direction')) group.removeAttribute('data-current-direction')
           const arrow = reverse ? 'M-10 0L-2 -6V6Z' : 'M10 0L2 -6V6Z'
           if (currentSourceArrow && currentSourceArrow.getAttribute('d') !== arrow) currentSourceArrow.setAttribute('d', arrow)
         }
