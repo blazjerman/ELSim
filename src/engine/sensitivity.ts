@@ -6,13 +6,15 @@ import type { Trace } from './contract'
  */
 export function labelSensitivityTraces(traces: Trace[], outputNode: string): Trace[] {
   return traces.flatMap((trace) => {
-    const parameter = trace.id.match(/^v\((.+)\)$/i)?.[1]
+    const sourceId = trace.baseId ?? trace.id
+    const parameter = sourceId.match(/^v\((.+)\)$/i)?.[1]
     if (!parameter) return []
+    const baseId = `sens:${parameter.toLowerCase()}`
     return [{
       ...trace,
-      id: `sens:${parameter.toLowerCase()}`,
-      baseId: `sens:${parameter.toLowerCase()}`,
-      label: `∂V(${outputNode})/∂${parameter}`,
+      id: trace.sweep ? `${baseId}::sweep-${trace.sweep.index}` : baseId,
+      baseId,
+      label: `∂V(${outputNode})/∂${parameter}${trace.sweep ? ` · ${trace.sweep.label}` : ''}`,
       unit: 'V per parameter unit',
     }]
   })

@@ -171,7 +171,6 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     if (!output || resolved.labelNets.get(output.id) === '0') add('sensOutput', 'Choose a labeled, non-ground output node for sensitivity analysis.')
     if (!['dc', 'ac'].includes(settings.mode)) add('sensMode', 'Choose DC or AC sensitivity analysis.')
-    if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('sensMode', 'Parameter stepping is not available for sensitivity analysis.')
     if (settings.mode === 'ac') {
       for (const part of independentSources) {
         const unit = part.kind === 'source' ? 'source' : 'currentSource'

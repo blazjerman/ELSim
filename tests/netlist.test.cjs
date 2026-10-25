@@ -26,6 +26,14 @@ test('ngspice sensitivity vectors retain numeric data and get derivative labels'
     { id: 'sens:r2', label: '∂V(out)/∂r2', unit: 'V per parameter unit', axis: [1, 10], values: [-0.2, -0.1], imaginaryValues: [0.03, 0] },
   ])
   assert.deepEqual(labelSensitivityTraces([{ ...source, id: 'frequency' }], 'out'), [])
+  const stepped = labelSensitivityTraces([
+    { ...source, id: 'v(r1)::sweep-0', baseId: 'v(r1)', sweep: { label: 'R1=1000 Ω', index: 0 } },
+    { ...source, id: 'v(r1)::sweep-1', baseId: 'v(r1)', sweep: { label: 'R1=2000 Ω', index: 1 } },
+  ], 'out')
+  assert.deepEqual(stepped.map(({ id, baseId, label }) => ({ id, baseId, label })), [
+    { id: 'sens:r1::sweep-0', baseId: 'sens:r1', label: '∂V(out)/∂r1 · R1=1000 Ω' },
+    { id: 'sens:r1::sweep-1', baseId: 'sens:r1', label: '∂V(out)/∂r1 · R1=2000 Ω' },
+  ])
 })
 
 test('integrated noise totals parse for voltage and current inputs and retain sweep labels', () => {
