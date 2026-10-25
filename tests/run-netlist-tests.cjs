@@ -2,6 +2,7 @@ const { spawnSync } = require('node:child_process')
 const { mkdtempSync, rmSync } = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { selectUnitTestFiles } = require('../tools/unit-test-selection.cjs')
 
 const root = path.resolve(__dirname, '..')
 const tsc = path.resolve(path.dirname(require.resolve('typescript')), '../bin/tsc')
@@ -17,13 +18,18 @@ const testFiles = [
   'hierarchy.test.cjs', 'example-path.test.cjs', 'ngspice-wasm-parity.test.mjs', 'plot.test.cjs',
   'fourier.test.cjs', 'simulation-presets.test.cjs', 'ngspice-release-check.test.mjs',
   'ngspice-link-inventory.test.mjs', 'ngspice-xspice-config.test.mjs', 'desktop-preflight.test.mjs',
+  'test-runner-selection.test.cjs',
 ]
-const requestedTestFiles = process.env.ELSIM_TEST_FILES?.split(',').map((file) => file.trim()).filter(Boolean)
-const selectedTestFiles = requestedTestFiles?.length
-  ? testFiles.filter((file) => requestedTestFiles.includes(file) || requestedTestFiles.includes(file.replace(/\.test\.(?:cjs|mjs)$/, '')))
-  : testFiles
-if (requestedTestFiles?.some((file) => !testFiles.includes(file) && !testFiles.some((candidate) => candidate.replace(/\.test\.(?:cjs|mjs)$/, '') === file))) {
-  throw new Error(`Unknown ELSIM_TEST_FILES entry. Choose one of: ${testFiles.join(', ')}`)
+const args = process.argv.slice(2)
+const listOnly = args.includes('--list')
+const requestedTestFiles = [
+  ...(process.env.ELSIM_TEST_FILES?.split(',') ?? []),
+  ...args.filter((arg) => arg !== '--list').flatMap((arg) => arg.split(',')),
+].map((file) => file.trim()).filter(Boolean)
+const selectedTestFiles = selectUnitTestFiles(testFiles, requestedTestFiles)
+if (listOnly) {
+  console.log(selectedTestFiles.join('\n'))
+  process.exit(0)
 }
 const output = mkdtempSync(path.join(os.tmpdir(), 'elsim-netlist-tests-'))
 
