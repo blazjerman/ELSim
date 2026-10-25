@@ -356,9 +356,8 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
       const active = activeSubcircuits.at(-1)
       if (!active) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
       if (tokens.length > 2) throw new Error(`Line ${line.start}: .ENDS accepts at most one optional subcircuit name.`)
-      if (tokens[1] && tokens[1].toLowerCase() !== active.name.toLowerCase()) {
-        throw new Error(`Line ${line.start}: .ENDS ${tokens[1]} does not match the open .SUBCKT ${active.name}.`)
-      }
+      // ngspice closes the innermost open definition and ignores an optional
+      // name here, so section inspection must match the main parser below.
       activeSubcircuits.pop()
     }
     lines.push({ line, section: activeSection })
@@ -1418,10 +1417,9 @@ function parseSubcircuitLibraryFromInspection(
       const active = activeSubcircuits.at(-1)
       if (!active) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
       if (tokens.length > 2) throw new Error(`Line ${line.start}: .ENDS accepts at most one optional subcircuit name.`)
-      const closingName = tokens[1]
-      if (closingName && active.name.toLowerCase() !== closingName.toLowerCase()) {
-        throw new Error(`Line ${line.start}: .ENDS ${closingName} does not match the open .SUBCKT ${active.name}.`)
-      }
+      // ngspice closes the innermost open definition and explicitly does not
+      // validate the optional name on .ENDS. Keep stack-based nesting, but do
+      // not reject imported libraries that the solver itself accepts.
       const functions = scopedFunctions.get(active.name.toLowerCase()) ?? []
       subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, dependencies: active.dependencies, ...(active.parentName ? { parentName: active.parentName } : {}), ...(functions.length ? { functions } : {}), startLine: active.start, endLine: line.end })
       activeSubcircuits.pop()

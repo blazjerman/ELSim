@@ -244,7 +244,7 @@ test('keeps subcircuit .FUNC declarations in their lexical scopes, including nes
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT SIBLING IN OUT gain={DOUBLE(2)}\n.ENDS SIBLING'), /unsupported default value/)
 })
 
-test('validates that each named .ENDS matches the currently open subcircuit', () => {
+test('closes the innermost subcircuit at .ENDS and follows ngspice by ignoring its optional name', () => {
   const source = '.SUBCKT OUTER IN OUT\n.FUNC SCALE(x) {2*x}\n.SUBCKT INNER A B\nR1 A B {SCALE(1)}\n.ENDS INNER\n.ENDS outer\n.SUBCKT LAST IN OUT\n.ENDS'
   const parsed = parseSubcircuitLibrary(source)
   assert.deepEqual(parsed.subcircuits.map(({ name, parentName, functions }) => ({ name, parentName, functions: functions?.map(({ name }) => name) })), [
@@ -253,8 +253,13 @@ test('validates that each named .ENDS matches the currently open subcircuit', ()
     { name: 'LAST', parentName: undefined, functions: undefined },
   ])
   assert.deepEqual(parsed.subcircuits.map(({ endLine }) => endLine), [6, 5, 8])
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT OUTER IN OUT\n.SUBCKT INNER A B\n.ENDS OUTER'), /Line 3: \.ENDS OUTER does not match the open \.SUBCKT INNER/)
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT OPEN IN OUT\n.ENDS OTHER'), /Line 2: \.ENDS OTHER does not match the open \.SUBCKT OPEN/)
+  const mismatchedNested = parseSubcircuitLibrary('.SUBCKT OUTER IN OUT\n.SUBCKT INNER A B\n.ENDS OUTER\n.ENDS INNER')
+  assert.deepEqual(mismatchedNested.subcircuits.map(({ name, parentName, startLine, endLine }) => ({ name, parentName, startLine, endLine })), [
+    { name: 'OUTER', parentName: undefined, startLine: 1, endLine: 4 },
+    { name: 'INNER', parentName: 'OUTER', startLine: 2, endLine: 3 },
+  ])
+  const mismatchedStandalone = parseSubcircuitLibrary('.SUBCKT OPEN IN OUT\n.ENDS OTHER')
+  assert.equal(mismatchedStandalone.subcircuits[0].name, 'OPEN')
 })
 
 test('reuses indexed function scopes across lookups for one parsed library set', () => {
@@ -2131,7 +2136,11 @@ test('rejects malformed pin declarations, block endings, duplicate definitions, 
     { name: 'outer', startLine: 1, endLine: 4 },
     { name: 'inner', startLine: 2, endLine: 3 },
   ])
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS outer\n.ENDS inner'), /Line 3: \.ENDS outer does not match the open \.SUBCKT inner/)
+  const mismatchedNestedEnds = parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS outer\n.ENDS inner')
+  assert.deepEqual(mismatchedNestedEnds.subcircuits.map(({ name, startLine, endLine }) => ({ name, startLine, endLine })), [
+    { name: 'outer', startLine: 1, endLine: 4 },
+    { name: 'inner', startLine: 2, endLine: 3 },
+  ])
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS inner'), /no matching \.ENDS/)
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT outer B\n.ENDS outer\n.ENDS outer'), /declared more than once/)
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.MODEL DLOCAL D(Is=1n)\n.MODEL dlocal D(Is=2n)\n.ENDS outer'), /declared more than once in \.SUBCKT outer/)
