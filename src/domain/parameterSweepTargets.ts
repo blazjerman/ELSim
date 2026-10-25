@@ -50,9 +50,7 @@ export function eligibleParameterSweepParts({ parts, analysis, dcSweepSource, mo
   const sourceModes = new Set(['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm', 'am', 'trnoise'])
   return parts.filter((part) =>
     (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)
-      && !(part.kind === 'resistor' && part.behavioralResistance !== undefined)
-      && !(part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined))
-      && !(part.kind === 'inductor' && part.behavioralInductance !== undefined))
+      && !(part.behavioralResistance ?? part.behavioralCapacitance ?? part.behavioralCharge ?? part.behavioralInductance))
     || ((part.kind === 'source' || part.kind === 'currentSource') && sourceModes.has(part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')))
     || importedModelSweepParameters(part, models).length > 0
     || subcircuitSweepParameters(part, subcircuits, sheets).length > 0)

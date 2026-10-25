@@ -185,9 +185,7 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (!part) throw new Error(`${sweep.component} is no longer in the circuit.`)
-  if ((part.kind === 'resistor' && part.behavioralResistance !== undefined)
-    || (part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined))
-    || (part.kind === 'inductor' && part.behavioralInductance !== undefined)) {
+  if (part.behavioralResistance !== undefined || part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined || part.behavioralInductance !== undefined) {
     throw new Error(`${part.ref} uses a behavioral expression, so sweeping its fixed component value would not change the circuit. Sweep a declared project parameter used by the expression instead.`)
   }
   if (!['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, pulse source, resistor, lamp, capacitor, or inductor for parameter stepping.')
