@@ -1613,6 +1613,15 @@ test('schematic notes can be placed and edited without becoming electrical net l
   const note = page.locator('.canvas-note[data-note-id]')
   await expect(note).toContainText('Power stage')
   await expect(note).toContainText('Review current path')
+  await note.focus()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(note).toBeFocused()
+  const noteFocus = await note.locator('text').evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { stroke: style.stroke, width: style.strokeWidth, dash: style.strokeDasharray }
+  })
+  expect(noteFocus).toMatchObject({ stroke: 'rgb(167, 237, 191)', width: '2px', dash: '3px, 2px' })
   const project = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
   const savedNote = project.netLabels.find((label: { kind?: string; name: string }) => label.kind === 'note' && label.name === 'Power stage\nReview current path')
   expect(savedNote).toBeTruthy()
