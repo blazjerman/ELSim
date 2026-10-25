@@ -82,6 +82,37 @@ async function stopScrubFrameCapture(page: import('@playwright/test').Page) {
   })
 }
 
+async function startRafIntervalCapture(page: import('@playwright/test').Page) {
+  await page.evaluate(() => {
+    type Capture = { frame: number; previous: number | null; intervals: number[] }
+    const captureWindow = window as Window & { __elsimRafIntervalCapture?: Capture }
+    const capture: Capture = { frame: 0, previous: null, intervals: [] }
+    const tick = (timestamp: number) => {
+      if (capture.previous !== null) capture.intervals.push(timestamp - capture.previous)
+      capture.previous = timestamp
+      capture.frame = requestAnimationFrame(tick)
+    }
+    capture.frame = requestAnimationFrame(tick)
+    captureWindow.__elsimRafIntervalCapture = capture
+  })
+}
+
+async function stopRafIntervalCapture(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    type Capture = { frame: number; previous: number | null; intervals: number[] }
+    const captureWindow = window as Window & { __elsimRafIntervalCapture?: Capture }
+    const capture = captureWindow.__elsimRafIntervalCapture
+    if (!capture) return null
+    cancelAnimationFrame(capture.frame)
+    delete captureWindow.__elsimRafIntervalCapture
+    const sorted = [...capture.intervals].sort((left, right) => left - right)
+    const percentile = (fraction: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))] ?? null
+    const median = percentile(0.5)
+    const p95 = percentile(0.95)
+    return { frameCount: sorted.length, medianMs: median === null ? null : Number(median.toFixed(2)), p95Ms: p95 === null ? null : Number(p95.toFixed(2)), maxMs: sorted.length ? Number(sorted[sorted.length - 1].toFixed(2)) : null, intervalsAbove1_5xMedian: median === null ? 0 : sorted.filter((interval) => interval > median * 1.5).length }
+  })
+}
+
 test('measure result animation scrubbing for 500 components and 1,000 vectors', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
@@ -215,8 +246,21 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
     await part.hover()
     await expect(part.locator(':scope > title')).not.toHaveText(resistorReadoutsAtEnd.get(id) ?? '')
   }
+  await page.getByLabel('Simulation playback speed').selectOption('1')
+  const playButton = page.locator('button[title^="Play result animation"]')
+  await expect(playButton).toBeEnabled()
+  await startRafIntervalCapture(page)
+  await page.waitForTimeout(1_000)
+  const idleRafIntervals = await stopRafIntervalCapture(page)
+  await playButton.click()
+  const pauseButton = page.locator('button[title^="Pause result playback"]')
+  await expect(pauseButton).toBeVisible()
+  await startRafIntervalCapture(page)
+  await page.waitForTimeout(1_000)
+  const playbackRafIntervals = await stopRafIntervalCapture(page)
+  await pauseButton.click()
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v8', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), changedGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasFrames, animationCallbackProfile }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v9', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), changedGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportRafIntervals: viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasRafIntervals: fullCanvasFrames, animationCallbackProfile, idleRafIntervals, playbackRafIntervals }, null, 2))
 })
 
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
