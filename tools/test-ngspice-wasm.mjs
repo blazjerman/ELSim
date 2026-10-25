@@ -113,8 +113,9 @@ for (const fixture of selectedFixtures) {
     continue
   }
   if (fixture === 'behavioral-resistor-op') {
-    assert.match(wasmResult.stdout, /0\s+2\.000000e\+00\s+1\.666667e\+00\s+-1\.66667e-03/i, '2 kΩ behavioral R1 and 1 kΩ R2 should produce about 1.667 V at out and 1.667 mA from VIN')
-    process.stdout.write('PASS behavioral-resistor-op: R(V(ctrl)) selects 2 kΩ and solves the expected divider voltage/current\n')
+    assert.match(wasmResult.stdout, /0\s+2\.000000e\+00\s+1\.666667e\+00\s+1\.333333e\+00\s+-1\.66667e-03/i, 'the voltage/parameter and source-current expressions should select 2 kΩ and produce the expected divider voltages')
+    assert.match(wasmResult.stdout, /Index\s+vctrl#branch[\s\S]*?0\s+-1\.00000e-03/i, 'the separate current-vector table should confirm the control-source branch current')
+    process.stdout.write('PASS behavioral-resistor-op: node-voltage, parameter, and voltage-source-current dependencies solve their expected operating points\n')
     continue
   }
   if (fixture === 'pole-zero-rc') {
