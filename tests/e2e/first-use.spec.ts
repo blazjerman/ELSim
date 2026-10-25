@@ -1629,6 +1629,32 @@ test('schematic notes can be placed and edited without becoming electrical net l
   expect(editedProject.netLabels.some((label: { kind?: string; name: string }) => label.kind === 'note' && label.name === 'Power stage checked')).toBe(true)
 })
 
+test('schematic note creation supports undo, redo, and deletion', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Add non-electrical schematic note' }).click()
+  await page.locator('svg.schematic').click({ position: { x: 90, y: 110 } })
+  await page.getByLabel('Add schematic note').fill('Undoable note')
+  await page.getByRole('button', { name: 'Apply' }).click()
+  await waitForProjectAutosave(page)
+
+  const note = page.locator('.canvas-note[data-note-id]')
+  await expect(note).toContainText('Undoable note')
+  const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })
+  const redo = page.getByRole('button', { name: 'Redo (Ctrl/⌘+Shift+Z)' })
+  await undo.click()
+  await expect(note).toHaveCount(0)
+  await redo.click()
+  await expect(note).toContainText('Undoable note')
+
+  await page.getByRole('button', { name: 'Select tool' }).click()
+  await note.click()
+  await page.keyboard.press('Delete')
+  await expect(note).toHaveCount(0)
+  await waitForProjectAutosave(page)
+  const project = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  expect(project.netLabels.some((label: { kind?: string; name: string }) => label.kind === 'note' && label.name === 'Undoable note')).toBe(false)
+})
+
 test('schematic context menu stays inside the canvas near the phone viewport edge', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.setViewportSize({ width: 390, height: 640 })
@@ -6270,6 +6296,15 @@ test('copy and paste a selected wire path without connected parts', async ({ pag
 test('copying and pasting the full circuit selects only all newly pasted wires', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.netLabels.push({ id: 'clipboard-note', kind: 'note', name: 'Keep this annotation with the copied group', x: 760, y: 600, visible: true })
+    project.sheets = project.sheets.map((sheet: { id: string; netLabels: unknown[] }) => sheet.id === project.rootSheetId ? { ...sheet, netLabels: project.netLabels } : sheet)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await waitForProjectAutosave(page)
+  await page.getByTitle('Fit all circuit content in view').click()
   const original = await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return {
@@ -6318,6 +6353,8 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
   expect(new Set(selectedParts)).toEqual(new Set(pasted.parts))
   const selectedLabels = await page.locator('.canvas-label.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-net-label-id')))
   expect(new Set(selectedLabels)).toEqual(new Set(pasted.labels))
+  const pastedNote = await page.evaluate((originalIds) => JSON.parse(localStorage.getItem('elsim:project:v7')!).netLabels.find((label: { id: string }) => !originalIds.labels.includes(label.id) && label.kind === 'note'), original)
+  expect(pastedNote).toMatchObject({ kind: 'note', name: 'Keep this annotation with the copied group', x: 800, y: 640 })
 
   // Verify the pasted mixed selection is a coherent movable group. A stale
   // selection containing original wires can look correct by count, then move
@@ -6356,6 +6393,8 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
     const after = afterMove.netLabels.find((label: { id: string }) => label.id === labelId)
     expect([after.x - before.x, after.y - before.y]).toEqual([dx, dy])
   }
+  const movedNote = afterMove.netLabels.find((label: { id: string }) => label.id === pastedNote.id)
+  expect(movedNote).toMatchObject({ kind: 'note', name: pastedNote.name, x: pastedNote.x + dx, y: pastedNote.y + dy })
 })
 
 test('rapid repeated circuit paste selects and moves only the latest clone', async ({ page }) => {

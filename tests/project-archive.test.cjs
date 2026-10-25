@@ -230,7 +230,7 @@ test('v3 migration and active child-sheet scene round-trip', async () => {
     assert.throws(() => validateProject(invalid), /Independent random samples must be an integer from 1 to 10/)
   }
 
-  const child = { id: 'sheet-driver', name: 'Driver', parentSheetId: 'sheet-main', parts: [{ id: 'p-child-r', kind: 'resistor', ref: 'Rchild', value: '2k', x: 200, y: 200, rotation: 0 }], wires: [], junctions: [], netLabels: [], view: { zoom: 1.2, panX: 10, panY: 20 }, ports: [] }
+  const child = { id: 'sheet-driver', name: 'Driver', parentSheetId: 'sheet-main', parts: [{ id: 'p-child-r', kind: 'resistor', ref: 'Rchild', value: '2k', x: 200, y: 200, rotation: 0 }], wires: [], junctions: [], netLabels: [{ id: 'child-note', kind: 'note', name: 'Driver sheet note', x: 280, y: 240, visible: true }], view: { zoom: 1.2, panX: 10, panY: 20 }, ports: [] }
   const activeChild = structuredClone(current)
   activeChild.sheets.push(child)
   activeChild.activeSheetId = child.id
