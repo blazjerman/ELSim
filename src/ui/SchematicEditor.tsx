@@ -468,7 +468,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
   symbolsById: Map<string, ImportedSymbol>
   coupledInductorIds: ReadonlySet<string>
   tool: ToolMode
-  componentSample: (part: Part, sampleIndex: number | null) => ComponentSampleValues
+  componentSample: (part: Part, sampleIndex: number | null, animationOnly?: boolean) => ComponentSampleValues
   animationEnabled: boolean
   onSelect: (id: string, additive?: boolean) => void
   onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
@@ -523,7 +523,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
       const profileStartedAt = profileAnimation ? performance.now() : 0
       const sampleIndex = getSimulationCursor()
       for (const { group, part, kind, currentSourceArrow, voltageSwitchSymbol, voltageSwitchLever, currentSwitchSymbol, currentSwitchLever, transistorCurrentIndicator, logicOutputLead, logicLow, logicHigh, ledGlow, ledRays, lampGlow, lampFilament, powerGlow, inductorGlow, transformerPrimaryGlow, transformerSecondaryGlow, capacitorPlates, capacitance, seriesResistance, markers } of animatedParts) {
-        const { voltage, current, secondaryCurrent, capacitorCharge, switchClosed, logicOutput } = componentSample(part, sampleIndex)
+        const { voltage, current, secondaryCurrent, capacitorCharge, switchClosed, logicOutput } = componentSample(part, sampleIndex, true)
         if (kind === 'currentSource-result') {
           const active = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
           const reverse = active && current! < 0
@@ -1085,7 +1085,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
       ? `${part.ref} switched ${value.toLowerCase()}. Recalculating the circuit.`
       : `${part.ref} switched ${value.toLowerCase()}. Run simulation to calculate the updated circuit.`)
   }
-  const componentSample = (part: Part, sampleIndex: number | null): ComponentSampleValues => {
+  const componentSample = (part: Part, sampleIndex: number | null, animationOnly = false): ComponentSampleValues => {
     // Offscreen parts cannot display the cursor-linked animation. Keep their
     // result props stable so a scrub does not rerender every symbol in a large
     // sheet; the latest sample is applied when the viewport reaches them.
@@ -1093,13 +1093,17 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
     const plan = componentAnimationPlanFor(part)
     if (!plan) return {}
     const axis = simulationResult?.traces[0]?.axis
-    const positive = readComponentTrace(plan.positive, axis, sampleIndex)
-    const negative = readComponentTrace(plan.negative, axis, sampleIndex)
-    const current = readComponentTrace(plan.current, axis, sampleIndex)
-    const secondaryCurrent = readComponentTrace(plan.secondaryCurrent, axis, sampleIndex)
-    const capacitorCharge = readComponentTrace(plan.capacitorCharge, axis, sampleIndex)
-    const switchClosed = voltageSwitchStateAt(part, sampleIndex) ?? currentSwitchStateAt(part, sampleIndex)
-    const logicOutput = readComponentTrace(plan.logicOutput, axis, sampleIndex)
+    const needsVoltage = !animationOnly || part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor'
+    const needsCurrent = !animationOnly || !LOGIC_OUTPUT_PART_KINDS.has(part.kind)
+    const positive = needsVoltage ? readComponentTrace(plan.positive, axis, sampleIndex) : undefined
+    const negative = needsVoltage ? readComponentTrace(plan.negative, axis, sampleIndex) : undefined
+    const current = needsCurrent ? readComponentTrace(plan.current, axis, sampleIndex) : undefined
+    const secondaryCurrent = !animationOnly || part.kind === 'transformer' ? readComponentTrace(plan.secondaryCurrent, axis, sampleIndex) : undefined
+    const capacitorCharge = !animationOnly || part.kind === 'capacitor' ? readComponentTrace(plan.capacitorCharge, axis, sampleIndex) : undefined
+    const switchClosed = !animationOnly || part.kind === 'voltageSwitch' || part.kind === 'currentSwitch'
+      ? voltageSwitchStateAt(part, sampleIndex) ?? currentSwitchStateAt(part, sampleIndex)
+      : undefined
+    const logicOutput = !animationOnly || LOGIC_OUTPUT_PART_KINDS.has(part.kind) ? readComponentTrace(plan.logicOutput, axis, sampleIndex) : undefined
     return { voltage: positive !== undefined && negative !== undefined ? positive - negative : undefined, current, secondaryCurrent, capacitorCharge, switchClosed, logicOutput }
   }
   const componentSampleRef = useRef(componentSample)
