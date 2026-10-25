@@ -4598,7 +4598,9 @@ test('native behavioral source inspector explains ngspice and LTspice expression
   const inspector = page.locator('.inspector-panel')
   await expect(inspector).toContainText('int(x) truncates toward zero')
   await expect(inspector).toContainText('Native conditionals use condition ? true_value : false_value')
-  await expect(inspector).toContainText('native ngspice does not define LTspice if(), limit(), or table() helpers')
+  await expect(inspector).toContainText('native ngspice does not define LTspice if() or table() helpers')
+  await expect(inspector).toContainText('gauss(nom, rvar, sigma)')
+  await expect(inspector).toContainText('ngspice limit(nom, avar) selects nom ± avar, while LTspice limit(x, low, high) clamps')
   await expect(inspector).toContainText('Imported LTspice expressions retain their dialect, including table() endpoint clamps')
 })
 
