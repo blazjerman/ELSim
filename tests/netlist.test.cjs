@@ -3479,6 +3479,26 @@ test('imported subcircuits preserve declared .FUNC expressions in validated para
   assert.doesNotMatch(unsafeNetlist.text, /^X1 .*\.end/m)
 })
 
+test('netlisting preserves all 256 ordered pins on an imported IC instance', () => {
+  const project = createStarterProject()
+  const pins = Array.from({ length: 256 }, (_, index) => `P${index + 1}`)
+  const content = `.SUBCKT WIDE ${pins.join(' ')}\nR1 P1 P256 1k\n.ENDS WIDE\n`
+  const sha256 = createHash('sha256').update(content).digest('hex')
+  project.modelAssets = [{ id: 'model-wide', filename: 'wide.lib', content, sha256, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'p-wide', kind: 'subcircuit', ref: 'X1', value: 'WIDE', modelName: 'WIDE', modelPins: pins, x: 760, y: 350, rotation: 0 })
+  const validated = validateProject(project)
+  assert.equal(componentPins(validated.parts.at(-1)).length, 256)
+  const artifact = createNetlistArtifact(validated)
+  assert.deepEqual(artifact.diagnostics.filter(({ severity }) => severity === 'error'), [])
+  const instance = artifact.text.split(/\r?\n/).find((line) => /^X1\s/.test(line))
+  assert.ok(instance)
+  const fields = instance.trim().split(/\s+/)
+  assert.equal(fields.length, 258)
+  assert.equal(fields[0], 'X1')
+  assert.equal(fields.at(-1), 'WIDE')
+  assert.match(artifact.text, new RegExp(`^\\.SUBCKT WIDE ${pins.join(' ')}$`, 'm'))
+})
+
 test('normalizes imported ngspice word-form operators without changing source assets', () => {
   const project = createStarterProject()
   const content = [
