@@ -29,8 +29,8 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { formatTime } from './formatTime'
 import { getSimulationCursor, setSimulationCursor, setSimulationCursorForPlayback, useSimulationCursorAnimation } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
-import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
-import type { ComponentPaletteCategory } from './ComponentPalette'
+import { COMPONENT_SHORTCUTS, componentCategoryKinds, componentPaletteItems } from './componentPaletteData'
+import type { ComponentPaletteCategory } from './componentPaletteData'
 import { compatibleDeviceModelType, componentDefaultValue, componentDefinitionFor, componentPropertyDefault, deviceModelTypeMatches, importedSubcircuitComponentDefinition, supportsDeviceTemperatureDelta, supportsInitialOff } from '../domain/componentDefinitions'
 import { componentMagnitude, formatEngineeringValue } from '../domain/componentValue'
 import { eligibleParameterSweepParts, importedModelSweepParameters, subcircuitSweepParameters, sweepParameterValue, unusedSweepTargets } from '../domain/parameterSweepTargets'
@@ -42,7 +42,7 @@ import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetMo
 import { validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlistValidation'
 import { assertProjectFileWithinLimit } from '../domain/projectFileLimits'
 import { updatePartUiState } from './partUiState'
-import { COMPONENT_SHORTCUTS_HELP, EDITOR_SHORTCUTS, exampleSelection, FUTURE_COMPONENT_SHORTCUTS, LOGIC_GATE_SHORTCUTS, LOGIC_GATE_SHORTCUTS_HELP } from './editorMetadata'
+import { FUTURE_COMPONENT_SHORTCUTS, LOGIC_GATE_SHORTCUTS } from './editorMetadata'
 import { getStartHereProgress, type ExampleId } from '../domain/examplePath'
 import { clearProjectAutosave, loadStoredProjectCandidates, readProjectAutosave, shouldRestoreProjectAutosave, writeProjectAutosave } from '../domain/projectAutosave'
 import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
@@ -89,6 +89,7 @@ function clearDeletedInductorCouplings(parts: Part[], deletedIds: ReadonlySet<st
 }
 
 const ParameterSweepEditor = lazy(() => import('./ParameterSweepEditor'))
+const ComponentPalette = lazy(() => import('./ComponentPalette').then((module) => ({ default: module.ComponentPalette })))
 const RandomSamplingEditor = lazy(() => import('./RandomSamplingEditor'))
 const ModelSourceViewer = lazy(() => import('./ModelSourceViewer').then((module) => ({ default: module.ModelSourceViewer })))
 const ImportedDeviceModelParameters = lazy(() => import('./ImportedDeviceModelParameters'))
@@ -3246,6 +3247,7 @@ export default function App() {
     resetDocumentInteractionState()
     const { getExampleLesson } = await import('./exampleLessonAnalysis')
     setExampleLesson(getExampleLesson(example))
+    const { exampleSelection } = await import('./exampleSelection')
     setSelectedTraceIds(next.plotSettings?.selectedTraceIds ?? [])
     setImportWarnings([])
     setCompatibilityDiagnostic(null)
@@ -3393,7 +3395,7 @@ export default function App() {
           <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
         </div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
-        {filteredPalette.length ? <ComponentPalette items={filteredPalette} pendingKind={pendingComponentKind} onSelect={selectComponentForPlacement}/> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
+        {filteredPalette.length ? <Suspense fallback={<div className="component-grid" role="status" aria-label="Loading components"/>}><ComponentPalette items={filteredPalette} pendingKind={pendingComponentKind} onSelect={selectComponentForPlacement}/></Suspense> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
         {availableSheetBlocks.length > 0 && <div className="imported-models">
           <div className="component-list-label">PROJECT BLOCKS</div>
           {availableSheetBlocks.map((sheet) => <div className="imported-model" key={sheet.id}>
@@ -3668,7 +3670,7 @@ export default function App() {
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={closeNetlist}><section className="netlist-modal" role="dialog" aria-modal="true" aria-labelledby="netlist-dialog-title" aria-describedby="netlist-dialog-description" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2 id="netlist-dialog-title">Generated SPICE netlist</h2></div><button autoFocus className="subtle-icon" aria-label="Close netlist" onClick={closeNetlist}><X size={17}/></button></div><p id="netlist-dialog-description" className="sr-only">This is the SPICE input generated from the current schematic. Review it here or copy it to use with another SPICE simulator.</p><pre>{netlistText ?? 'Generating netlist…'}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist} disabled={netlistText === null}><Copy size={13}/> Copy netlist</button></div></section></div>}
     {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" aria-describedby="erc-description" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button autoFocus className="subtle-icon" aria-label="Close circuit checks" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><X size={17}/></button></div><p id="erc-description" className="erc-intro">These checks look for common wiring mistakes and missing model references. They do not decide whether ngspice can solve your circuit.</p>{electricalCheckLoading || (!electricalIssues && !electricalCheckError) ? <div className="erc-success" role="status">Checking circuit…</div> : electricalCheckError ? <p className="field-error" role="alert">{electricalCheckError}</p> : electricalIssues?.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={'erc-severity ' + issue.severity}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => selectCheckedPart(issue.partId!)}>Select affected component</button>}{issue.wireId && <button onClick={() => selectCheckedWire(issue.wireId!)}>Select wire</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalCheckLoading ? 'Checking…' : electricalCheckError ? 'Check unavailable' : electricalIssues ? electricalIssues.length + ' finding' + (electricalIssues.length === 1 ? '' : 's') : 'Preparing checks'}</span><button className="primary-small" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}>Done</button></div></section></div>}
     {engineSetupOpen && <Suspense fallback={<div className="tour-backdrop" role="presentation"><div className="tour-dialog engine-setup-dialog" role="status" aria-live="polite" aria-busy="true">Loading local simulation setup…</div></div>}><EngineSetupDialog open={engineSetupOpen} onClose={closeEngineSetup}/></Suspense>}
-    {shortcutsOpen && <Suspense fallback={null}><KeyboardShortcuts editing={EDITOR_SHORTCUTS} components={COMPONENT_SHORTCUTS_HELP} logicGates={LOGIC_GATE_SHORTCUTS_HELP} reserved={Object.entries(FUTURE_COMPONENT_SHORTCUTS)} onClose={() => { setShortcutsOpen(false); restoreDialogTriggerFocus(shortcutsTriggerRef) }}/></Suspense>}
+    {shortcutsOpen && <Suspense fallback={null}><KeyboardShortcuts reserved={Object.entries(FUTURE_COMPONENT_SHORTCUTS)} onClose={() => { setShortcutsOpen(false); restoreDialogTriggerFocus(shortcutsTriggerRef) }}/></Suspense>}
     {examplesDialogLoaded && <Suspense fallback={examplesOpen ? <div className="tour-backdrop" role="presentation"><div className="tour-dialog" role="status">Loading examples…</div></div> : null}><ExamplesDialog open={examplesOpen} onClose={() => { setExamplesOpen(false); restoreDialogTriggerFocus(examplesTriggerRef) }} onOpen={loadExample} onKeyDown={trapDialogTab} engineAvailable={engineAssetAvailable} pendingExample={pendingExampleRequest} onPendingExampleHandled={clearPendingExampleRequest}/></Suspense>}
     {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-description" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 5</span><h2 id="tour-title" aria-live="polite" aria-atomic="true">{['Understand the workspace', 'Change a component value', 'Run a simulation', 'Explore waveforms and animation', 'Save and reopen your project'][tourStep]}</h2></div><button autoFocus className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p id="tour-description" className="tour-copy">{[
       'Your open circuit is on the center canvas. Browse parts on the left and inspect the selected item on the right. Open Examples to try the RC step response or another guided circuit. You can build and edit without writing a netlist.',
