@@ -357,6 +357,89 @@ test('measure mixed resistor, inductor, and transformer animation for 501 parts'
   console.log(JSON.stringify({ benchmark: 'browser-mixed-component-animation-scrub-v11', browser: browserName, componentCount: fittedComponentCount, resistorCount: 250, inductorCount: 225, transformerCount: 25, vectorCount, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), animatedInductorCount: await animatedInductors.count(), animatedTransformerCount: await animatedTransformers.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), inductorGlowCount: await page.locator('svg.schematic [data-inductor-current-glow]').count(), transformerPrimaryGlowCount: await page.locator('svg.schematic [data-transformer-primary-current-glow]').count(), transformerSecondaryGlowCount: await page.locator('svg.schematic [data-transformer-secondary-current-glow]').count(), changedGlowCount, changedInductorGlowCount, changedTransformerPrimaryGlowCount, changedTransformerSecondaryGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportRafIntervals: viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasRafIntervals: fullCanvasFrames, animationCallbackProfile, idleRafIntervals, playbackRafIntervals, playbackOpacityMutations }, null, 2))
 })
 
+test('measure visible wire-current overlay animation in browser', async ({ page, browserName }) => {
+  test.setTimeout(120_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Reuse the existing local ngspice WASM runtime for the wire-flow benchmark').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect(page.locator('.project-title')).toHaveText('RC step response')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const sourceTemplate = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    const resistorTemplate = project.parts.find((part: { kind: string }) => part.kind === 'resistor')
+    const branches = 100
+    const source = { ...sourceTemplate, id: 'wire-flow-bench-v1', ref: 'V1', value: '5 V', sourceMode: 'dc', x: 200, y: 200 }
+    const resistors = Array.from({ length: branches }, (_, index) => ({
+      ...resistorTemplate,
+      id: `wire-flow-bench-r-${index + 1}`,
+      ref: `R${index + 1}`,
+      value: '1 kΩ',
+      x: 600,
+      y: 300 + index * 80,
+    }))
+    const wires = resistors.flatMap((part, index) => [
+      { id: `wire-flow-bench-${index + 1}-vin`, points: [[548, part.y], [500, part.y]] },
+      { id: `wire-flow-bench-${index + 1}-gnd`, points: [[652, part.y], [700, part.y]] },
+    ])
+    const netLabels = [
+      { id: 'wire-flow-bench-source-vin', name: 'VIN', x: source.x, y: source.y - 52, visible: true },
+      { id: 'wire-flow-bench-source-gnd', name: '0', x: source.x, y: source.y + 52, visible: true },
+      ...resistors.flatMap((part, index) => [
+        { id: `wire-flow-bench-label-${index + 1}-vin`, name: 'VIN', x: 500, y: part.y, visible: true },
+        { id: `wire-flow-bench-label-${index + 1}-gnd`, name: '0', x: 700, y: part.y, visible: true },
+      ]),
+    ]
+    const parts = [source, ...resistors]
+    project.name = 'Browser benchmark · 100 resistor branches with wire current flow'
+    project.parts = parts
+    project.wires = wires
+    project.junctions = []
+    project.netLabels = netLabels
+    project.simulation.analysis = 'op'
+    project.plotSettings.selectedTraceIds = []
+    project.sheets = project.sheets.map((sheet: { id: string }) => sheet.id === project.rootSheetId
+      ? { ...sheet, parts, wires, junctions: [], netLabels }
+      : sheet)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await expect(page.locator('.project-title')).toHaveText('Browser benchmark · 100 resistor branches with wire current flow')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Analysis complete', { timeout: 90_000 })
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  const flowDots = page.locator('svg.schematic .wire-current-flow')
+  await expect.poll(() => flowDots.count()).toBeGreaterThanOrEqual(100)
+  await expect.poll(async () => Number(await flowDots.first().getAttribute('data-current-magnitude'))).toBeGreaterThan(0)
+  const visibleWireSegments = await flowDots.count()
+  const mutationCapture = await page.evaluate(() => {
+    const svg = document.querySelector('svg.schematic')
+    if (!svg) throw new Error('Schematic SVG is missing')
+    let dashOffsetWrites = 0
+    const observer = new MutationObserver((records) => {
+      dashOffsetWrites += records.filter((record) => record.attributeName === 'stroke-dashoffset').length
+    })
+    observer.observe(svg, { subtree: true, attributes: true, attributeFilter: ['stroke-dashoffset'] })
+    Object.assign(window, {
+      __wireFlowWriteCount: () => dashOffsetWrites,
+      __stopWireFlowWriteCapture: () => observer.disconnect(),
+    })
+    return svg.querySelectorAll('.wire-current-flow').length
+  })
+  expect(mutationCapture).toBe(visibleWireSegments)
+  await startRafIntervalCapture(page)
+  await page.waitForTimeout(1_000)
+  const rafIntervals = await stopRafIntervalCapture(page)
+  const dashOffsetWrites = await page.evaluate(() => (window as Window & { __wireFlowWriteCount?: () => number }).__wireFlowWriteCount?.() ?? 0)
+  await page.evaluate(() => (window as Window & { __stopWireFlowWriteCapture?: () => void }).__stopWireFlowWriteCapture?.())
+  expect(dashOffsetWrites).toBeGreaterThan(visibleWireSegments)
+  expect(pageErrors).toEqual([])
+  console.log(JSON.stringify({ benchmark: 'browser-visible-wire-current-animation-v1', browser: browserName, resistorBranches: 100, visibleWireSegments: mutationCapture, dashOffsetWritesPerSecond: dashOffsetWrites, rafIntervals }, null, 2))
+})
+
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
