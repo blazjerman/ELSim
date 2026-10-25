@@ -4,14 +4,41 @@ The browser engine uses ngspice as its numerical core. The checked-in source pin
 
 ## Reproduce the local build
 
-Use Emscripten 5.0.7, Python 3, GNU make, and a clean checkout of the pinned ngspice source. Set `NGSPICE_SOURCE` to that checkout and run:
+The build script currently targets a Bash environment with GNU build tools; use Linux or WSL2 on Windows. The generated WebAssembly runtime runs in the supported Chromium and Firefox browsers. A native Windows shell and macOS build are not currently verified.
+
+On Debian or Ubuntu (including WSL2), install the build tools once:
 
 ```sh
-NGSPICE_SOURCE=/path/to/ngspice JOBS=2 ./tools/build-ngspice-wasm.sh
+sudo apt-get update
+sudo apt-get install build-essential autoconf automake libtool bison flex gettext pkg-config python3 make git gzip tar
+```
+
+Install and activate the exact Emscripten SDK version in the official [Emscripten SDK instructions](https://emscripten.org/docs/getting_started/downloads.html). For Linux/WSL, the commands are:
+
+```sh
+git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
+cd ~/emsdk
+./emsdk install 5.0.7
+./emsdk activate 5.0.7
+source ./emsdk_env.sh
+emcc --version
+```
+
+Keep that terminal open, or source `emsdk_env.sh` again in any new terminal used to build ELSim. The build requires a clean Git checkout of the exact ngspice commit recorded in [`UPSTREAM_COMMIT`](UPSTREAM_COMMIT). Clone from the official SourceForge repository and check out that pin:
+
+```sh
+git clone https://git.code.sf.net/p/ngspice/ngspice ../ngspice
+git -C ../ngspice checkout "$(tr -d '[:space:]' < engine/wasm/UPSTREAM_COMMIT)"
+```
+
+From the ELSim repository root, build and run the local runtime fixtures:
+
+```sh
+NGSPICE_SOURCE=../ngspice JOBS=2 ./tools/build-ngspice-wasm.sh
 node tools/test-ngspice-wasm.mjs
 ```
 
-The build copies the ignored WASM runtime into `public/engine/` for the local browser worker. The browser supports transient analysis with plotted real-valued vectors, DC operating point with a one-sample value table, DC source sweeps plotted against the swept source value, and AC sweeps with complex vectors rendered as magnitude in dB or phase in degrees on a logarithmic frequency axis. AC CSV preserves real and imaginary values. The Node test starts one ngspice instance per fixture and checks transient, diode operating-point, AC, `.SUBCKT`, and operating-point, AC, and DC sweep raw vectors. For the four M0.3 native-parity reference circuits, run the dedicated gate; it requires a native executable and cannot silently skip comparison:
+The build writes the ignored local runtime files to `public/engine/`; restart or reload the local ELSim app after the build. It does not build the app or deploy GitHub Pages. The browser supports transient analysis with plotted real-valued vectors, DC operating point with a one-sample value table, DC source sweeps plotted against the swept source value, and AC sweeps with complex vectors rendered as magnitude in dB or phase in degrees on a logarithmic frequency axis. AC CSV preserves real and imaginary values. The Node test starts one ngspice instance per fixture and checks transient, diode operating-point, AC, `.SUBCKT`, and operating-point, AC, and DC sweep raw vectors. For the four M0.3 native-parity reference circuits, run the dedicated gate; it requires a native executable and cannot silently skip comparison:
 
 ```sh
 NGSPICE_NATIVE=/path/to/pinned/native/ngspice npm run test:wasm:parity
