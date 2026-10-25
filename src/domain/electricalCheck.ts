@@ -151,7 +151,8 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       // Invalid library syntax has its own importer diagnostic.
     }
   }
-  const effectiveChannels = expandNgspiceAkoModels(parsedModelAssets).channels
+  const akoExpansion = expandNgspiceAkoModels(parsedModelAssets)
+  const effectiveChannels = akoExpansion.channels
   for (const { asset, parsed } of parsedModelAssets) for (const model of parsed.models) if (!model.scope || ['r', 'res', 'c', 'l'].includes(model.type.toLowerCase())) {
     const channel = effectiveChannels.get(`${asset.id}:${model.startLine}`) ?? model.channel
     importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel, parameters: model.parameters })
@@ -625,14 +626,16 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
           }
         }
         const model = models.find((candidate) => !candidate.scope && candidate.name.toLowerCase() === dependency.modelName.toLowerCase())
-        // AKO models inherit parameters from their base model; without resolving
-        // the full cross-library base chain, an omitted local LENGTH is ambiguous.
-        if (!model || model.akoBaseName) continue
+        if (!model) continue
         const variants = [model, ...(model.conditionalVariants ?? []).map(({ model: variant }) => variant)]
-        const missingLengthLines = variants.filter((variant) =>
-          !variant.parameters.some(({ name }) => name.toLowerCase() === 'length')
-          && !variant.unparsedParameters?.some(({ name }) => name.toLowerCase() === 'length'),
-        )
+        const missingLengthLines = variants.filter((variant) => {
+          const effectiveParameters = akoExpansion.parameters.get(`${dependency.targetAssetId}:${variant.startLine}`)
+          if (variant.akoBaseName && !effectiveParameters) return false
+          const parameters = effectiveParameters ?? variant.parameters
+          const unparsedParameters = variant.unparsedParameters ?? []
+          return !parameters.some(({ name }) => name.toLowerCase() === 'length')
+            && !unparsedParameters.some(({ name }) => name.toLowerCase() === 'length')
+        })
         if (!missingLengthLines.length) continue
         const filename = assets.get(dependency.targetAssetId) ?? 'the imported model'
         for (const partId of instancesByDefinition.get(dependency.owner.toLowerCase()) ?? []) for (const variant of missingLengthLines) {
