@@ -170,6 +170,7 @@ function BlockParameterOverride({ name, defaultValue, value, onCommit, scope = '
 function BjtSubstrateNodeEditor({ part, labels, onChange }: { part: Part; labels: Project['netLabels']; onChange: (patch: Partial<Part>) => void }) {
   const nodes = [...new Map(labels.filter((label) => isElectricalNetLabel(label) && label.name !== '0').map((label) => [label.name.toLowerCase(), label.name])).values()]
   const hasStoredNode = part.substrateNode && !nodes.some((node) => node.toLowerCase() === part.substrateNode!.toLowerCase())
+  const hasStoredThermalNode = part.thermalNode && !nodes.some((node) => node.toLowerCase() === part.thermalNode!.toLowerCase())
   return <>
     <label className="field-label">BJT substrate node<select aria-label={`Substrate node for ${part.ref}`} value={part.substrateNode ?? ''} onChange={(event) => onChange({ substrateNode: event.target.value || undefined })}>
       <option value="">Ground (ngspice default)</option>
@@ -177,6 +178,15 @@ function BjtSubstrateNodeEditor({ part, labels, onChange }: { part: Part; labels
       {nodes.map((node) => <option key={node.toLowerCase()} value={node}>{node}</option>)}
     </select></label>
     <div className="field-hint">Optional fourth BJT terminal. Create a net label on the desired node, then select it here. If left at the default, ngspice connects the substrate to ground.</div>
+    <details className="bjt-advanced-area"><summary>HICUM/L2 thermal terminal (advanced)</summary>
+      <label className="field-label">BJT thermal node<select aria-label={`Thermal node for ${part.ref}`} value={part.thermalNode ?? ''} onChange={(event) => onChange({ thermalNode: event.target.value || undefined })}>
+        <option value="">Not connected</option>
+        <option value="0">Ground / ambient reference (0)</option>
+        {hasStoredThermalNode && <option value={part.thermalNode}>{part.thermalNode} (label unavailable)</option>}
+        {nodes.map((node) => <option key={node.toLowerCase()} value={node}>{node}</option>)}
+      </select></label>
+      <p className="field-hint">For ngspice HICUM/L2 (LEVEL=8) models, select a labeled thermal-network node or the ambient reference (0). Self-heating also requires the model’s FLSH and RTH parameters. If a thermal node is set and no substrate node is selected, netlisting explicitly grounds the substrate.</p>
+    </details>
   </>
 }
 

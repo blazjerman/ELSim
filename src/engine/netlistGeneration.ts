@@ -1581,6 +1581,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const emitter = pinNet(connectivity, part, 2)
       const substrateLabel = part.substrateNode ? project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === part.substrateNode!.toLowerCase()) : undefined
       const substrate = substrateLabel ? connectivity.labelNets.get(substrateLabel.id) : part.substrateNode
+      const thermalLabel = part.thermalNode ? project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === part.thermalNode!.toLowerCase()) : undefined
+      const thermal = thermalLabel ? connectivity.labelNets.get(thermalLabel.id) : part.thermalNode
       const expectedModelType = part.kind === 'npn' ? 'npn' : 'pnp'
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
       if (part.deviceModel && importedModel?.type.toLowerCase() !== expectedModelType) {
@@ -1591,6 +1593,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       if (part.substrateNode && part.substrateNode !== '0' && !substrateLabel) {
         const message = `${part.ref} substrate node ${part.substrateNode} needs a matching net label on this sheet.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      if (part.thermalNode && part.thermalNode !== '0' && !thermalLabel) {
+        const message = `${part.ref} thermal node ${part.thermalNode} needs a matching net label on this sheet.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
@@ -1608,7 +1616,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         deviceTemperatureSuffix.trim(),
         part.initialOff && 'OFF',
       ].filter(Boolean).join(' ')
-      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}${bjtIcSuffix}`, part.id, 'component')
+      const optionalBjtNodes = thermal ? ` ${substrate ?? '0'} ${thermal}` : substrate ? ` ${substrate}` : ''
+      append(`${part.ref} ${positive} ${base} ${emitter}${optionalBjtNodes} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}${bjtIcSuffix}`, part.id, 'component')
       if (!part.deviceModel) transistorModels.push({ part, name: model })
     }
     else if (part.kind === 'njfet' || part.kind === 'pjfet') {

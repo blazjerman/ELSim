@@ -3179,6 +3179,24 @@ test('BJT substrate nodes use an explicitly labeled net and default to ngspice g
   assert.doesNotMatch(missing.text, /^Q1 .*missing_net/m)
   transistor.substrateNode = 'bad node'
   assert.throws(() => validateProject(project), /invalid BJT substrate node/i)
+  transistor.substrateNode = undefined
+  transistor.thermalNode = 'tjunction'
+  project.netLabels.push({ id: 'bjt-thermal', name: 'Tjunction', x: 940, y: 300, visible: false })
+  const thermalArtifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(thermalArtifact.diagnostics, [])
+  assert.match(thermalArtifact.text, /^Q1 \S+ \S+ \S+ 0 Tjunction ELSIM_MODEL_Q1$/mi)
+  transistor.substrateNode = 'vsubstrate'
+  const substrateAndThermalArtifact = createNetlistArtifact(validateProject(project))
+  assert.match(substrateAndThermalArtifact.text, /^Q1 \S+ \S+ \S+ Vsubstrate Tjunction ELSIM_MODEL_Q1$/mi)
+  transistor.thermalNode = 'missing_thermal'
+  assert.match(createNetlistArtifact(validateProject(project)).diagnostics.map(({ message }) => message).join('\n'), /thermal node.*needs a matching net label/i)
+  transistor.thermalNode = 'bad node'
+  assert.throws(() => validateProject(project), /invalid BJT thermal node/i)
+  transistor.substrateNode = undefined
+  transistor.thermalNode = '0'
+  const groundThermalArtifact = createNetlistArtifact(validateProject(project))
+  assert.match(groundThermalArtifact.text, /^Q1 \S+ \S+ \S+ 0 0 ELSIM_MODEL_Q1$/mi)
+  transistor.thermalNode = undefined
   const nonBjt = project.parts.find((part) => part.kind === 'resistor')
   nonBjt.substrateNode = 'valid_node'
   assert.throws(() => validateProject(project), /invalid BJT substrate node/i)

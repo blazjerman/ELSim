@@ -74,6 +74,8 @@ export type Part = {
   deviceModel?: string
   /** Optional labeled substrate node for ngspice's four-node BJT instance form. */
   substrateNode?: string
+  /** Optional labeled thermal node for ngspice HICUM/L2 five-node BJT instances. */
+  thermalNode?: string
   controlSource?: string
   voltageSwitch?: { onResistance?: string; offResistance?: string; hysteresis?: string }
   currentSwitch?: { onResistance?: string; offResistance?: string; hysteresis?: string }
@@ -768,6 +770,7 @@ export function validateProject(input: unknown): Project {
       if (!isValidSpiceModelName(part.deviceModel, true)) throw new Error(`${part.ref} has an invalid imported device model name.`)
     }
     if (part.substrateNode !== undefined && ((part.kind !== 'npn' && part.kind !== 'pnp') || typeof part.substrateNode !== 'string' || !isValidSpiceNodeName(part.substrateNode))) throw new Error(`${part.ref} has an invalid BJT substrate node.`)
+    if (part.thermalNode !== undefined && ((part.kind !== 'npn' && part.kind !== 'pnp') || typeof part.thermalNode !== 'string' || !isValidSpiceNodeName(part.thermalNode))) throw new Error(`${part.ref} has an invalid BJT thermal node.`)
   }
   const simulation = data.simulation as Project['simulation'] | undefined
   const view = data.view as Project['view'] | undefined

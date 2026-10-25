@@ -335,6 +335,13 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         detail: 'Add or restore a net label with this name in the same sheet, or return the substrate setting to ngspice’s default ground.',
         partId: topLevelInstanceId ?? part.id,
       })
+      if ((part.kind === 'npn' || part.kind === 'pnp') && part.thermalNode && part.thermalNode !== '0' && !sheet.netLabels.some((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === part.thermalNode!.toLowerCase())) issues.push({
+        id: `missing-bjt-thermal-node:${sheet.id}:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} thermal node ${part.thermalNode} is not labeled in ${sheet.name}`,
+        detail: 'Add or restore a net label with this name in the same sheet, or clear the optional thermal-node setting.',
+        partId: topLevelInstanceId ?? part.id,
+      })
       if (part.kind === 'nmos' || part.kind === 'pmos') {
         const source = sheetConnectivity.pinNets.get(`${part.id}:2`)
         const bulk = sheetConnectivity.pinNets.get(`${part.id}:3`)
