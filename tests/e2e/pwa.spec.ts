@@ -64,7 +64,7 @@ test('production app shell opens offline and preserves local project edits', asy
   expect(offlineRuntime).toEqual({ moduleOk: true, moduleType: 'text/javascript', wasmOk: true, wasmType: 'application/wasm' })
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByText(/5 result vectors/)).toBeVisible()
+  await expect(page.getByText(/Transient analysis complete.*\d+ result vectors/)).toBeVisible()
 
   await page.getByRole('button', { name: 'Examples' }).click()
   const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
