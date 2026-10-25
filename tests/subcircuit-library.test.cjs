@@ -1787,11 +1787,19 @@ test('warns for unsupported B-source functions hidden in used imported .FUNC hel
 
 test('follows global imported .FUNC helpers across library files and attributes the helper source', () => {
   const source = '.SUBCKT helpers IN OUT\nB1 OUT 0 V=shared_square(V(IN))\n.ENDS helpers'
+  const continuedHelper = String.raw`.FUNC shared_square(x) {x + \\
++ sqr(x)}`
+  assert.equal(parseSubcircuitLibrary(continuedHelper).functions[0].name, 'shared_square')
+  const sectionedHelper = String.raw`.LIB active
+.FUNC shared_square(x) {x + \\
++ sqr(x)}
+.ENDL active`
+  assert.equal(parseSubcircuitLibrary(sectionedHelper, ['active']).functions[0].name, 'shared_square')
   const warnings = analyzeLtspiceModelDialect(source, {
     sourceAssetId: 'device-lib',
     supportingLibraries: [
       { assetId: 'device-lib', content: source },
-      { assetId: 'common-functions', content: '.FUNC shared_square(x) {square_inner(x)}\n.FUNC square_inner(x) {sqr(x)}' },
+      { assetId: 'common-functions', content: continuedHelper },
     ],
   })
   assert.deepEqual(warnings.map(({ sourceLine, sourceAssetId, feature }) => [sourceLine, sourceAssetId, feature]), [
