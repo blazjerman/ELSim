@@ -983,13 +983,13 @@ function digitalUModelDependencies(tokens: string[], owner: string, sourceLine: 
     || (/^(?:MNTYMXDLY|IO_LEVEL)$/i.test(token) && tokens[index + 1] === '=')
   ))
   const positionalEnd = optionAt < 0 ? tokens.length : optionAt
-  // Ngspice's U-device grammar places the timing and I/O model names after
-  // all variable-count signal pins, immediately before optional delay/level
-  // fields. Taking the final two positional fields works for gates, arrays,
-  // compound devices, and state elements without guessing their pin counts.
+  // Ngspice's U-device grammar places timing and I/O model names after all
+  // variable-count signal pins, immediately before optional delay/level
+  // fields. Only the timing model is a dependency: PS-mode conversion ignores
+  // I/O models. Taking the final two fields avoids guessing pin counts.
   const modelNames = tokens.slice(2, positionalEnd).slice(-2)
   if (modelNames.length !== 2 || !modelNames.every((token) => isValidSpiceModelName(token, true))) return []
-  return modelNames.map((modelName) => ({ owner, reference: tokens[0], modelName, kind: 'device', sourceLine }))
+  return [{ owner, reference: tokens[0], modelName: modelNames[0], kind: 'device', sourceLine }]
 }
 
 function dependencyOnLine(text: string, owner: string, sourceLine: number): ModelDependency | null {

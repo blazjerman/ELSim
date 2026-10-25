@@ -2326,7 +2326,7 @@ Z1 A B C ZFAST OFF
   assert.deepEqual(analyzeModelDependencies([{ id: 'devices', filename: 'devices.lib', content: parsed.modelText }]).missing, [])
 })
 
-test('tracks both ngspice digital U-device model dependencies without confusing URC cards', () => {
+test('tracks ngspice digital timing-model dependencies without requiring ignored I/O models or confusing URC cards', () => {
   const assets = [
     { id: 'digital-ic', filename: 'digital-ic.lib', content: [
       '.SUBCKT DIGITAL A B Y',
@@ -2343,21 +2343,23 @@ test('tracks both ngspice digital U-device model dependencies without confusing 
       'U11 CONSTRAINT $G_DPWR $G_DGND A B',
       '.ENDS DIGITAL',
     ].join('\n') },
-    { id: 'models', filename: 'digital-models.lib', content: '.MODEL TM UGATE()\n.MODEL IO UIO()\n.MODEL URCMOD URC(CPERL=1p RPERL=1k)' },
+    { id: 'models', filename: 'digital-models.lib', content: '.MODEL TM UGATE()\n.MODEL URCMOD URC(CPERL=1p RPERL=1k)' },
+    { id: 'ignored-io-model', filename: 'digital-io-model.lib', content: '.MODEL IO UIO()' },
   ]
   const analysis = analyzeModelLibraries(assets)
   assert.deepEqual(analysis.assets[0].parsed.dependencies.map(({ reference, modelName }) => [reference, modelName]), [
-    ['U1', 'TM'], ['U1', 'IO'], ['U2', 'TM'], ['U2', 'IO'], ['U3', 'URCMOD'], ['U4', 'TM'], ['U4', 'IO'], ['U5', 'TM'], ['U5', 'IO'], ['U6', 'TM'], ['U6', 'IO'], ['U7', 'TM'], ['U7', 'IO'], ['U8', 'TM'], ['U8', 'IO'], ['U9', 'TM'], ['U9', 'IO'], ['U10', 'TM'], ['U10', 'IO'],
+    ['U1', 'TM'], ['U2', 'TM'], ['U3', 'URCMOD'], ['U4', 'TM'], ['U5', 'TM'], ['U6', 'TM'], ['U7', 'TM'], ['U8', 'TM'], ['U9', 'TM'], ['U10', 'TM'],
   ])
   assert.deepEqual(analysis.dependencies.missing, [])
   assert.deepEqual(analysis.dependencies.resolved.filter(({ reference }) => reference.startsWith('U')).map(({ reference, modelName, targetAssetId }) => [reference, modelName, targetAssetId]), [
-    ['U1', 'TM', 'models'], ['U1', 'IO', 'models'], ['U2', 'TM', 'models'], ['U2', 'IO', 'models'], ['U3', 'URCMOD', 'models'], ['U4', 'TM', 'models'], ['U4', 'IO', 'models'], ['U5', 'TM', 'models'], ['U5', 'IO', 'models'], ['U6', 'TM', 'models'], ['U6', 'IO', 'models'], ['U7', 'TM', 'models'], ['U7', 'IO', 'models'], ['U8', 'TM', 'models'], ['U8', 'IO', 'models'], ['U9', 'TM', 'models'], ['U9', 'IO', 'models'], ['U10', 'TM', 'models'], ['U10', 'IO', 'models'],
+    ['U1', 'TM', 'models'], ['U2', 'TM', 'models'], ['U3', 'URCMOD', 'models'], ['U4', 'TM', 'models'], ['U5', 'TM', 'models'], ['U6', 'TM', 'models'], ['U7', 'TM', 'models'], ['U8', 'TM', 'models'], ['U9', 'TM', 'models'], ['U10', 'TM', 'models'],
   ])
   assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'DIGITAL' }])].sort(), ['digital-ic', 'models'])
+  assert.equal([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'DIGITAL' }])].includes('ignored-io-model'), false)
 
   const missing = analyzeModelLibraries([{ id: 'broken-digital', filename: 'broken-digital.lib', content: '.SUBCKT BROKEN A B Y\nU1 AND(2) $G_DPWR $G_DGND A B Y MISSING_TIMING MISSING_IO\n.ENDS BROKEN' }])
   assert.deepEqual(missing.dependencies.missing.map(({ reference, modelName }) => [reference, modelName]), [
-    ['U1', 'MISSING_TIMING'], ['U1', 'MISSING_IO'],
+    ['U1', 'MISSING_TIMING'],
   ])
 })
 
