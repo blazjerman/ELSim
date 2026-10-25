@@ -275,6 +275,8 @@ test('long native subcircuit names survive component identity and project valida
   const projectSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/project-v11.schema.json'), 'utf8'))
   const longName = `X${'A'.repeat(8191)}`
   assert.throws(() => parseSubcircuitLibrary(`.SUBCKT X${'A'.repeat(8192)} IN OUT\nR1 IN OUT 1k\n.ENDS`), /valid model name/)
+  assert.equal(parseSubcircuitLibrary(`.MODEL ${longName} D(IS=1n)`).models[0].name, longName)
+  assert.throws(() => parseSubcircuitLibrary(`.MODEL X${'A'.repeat(8192)} D(IS=1n)`), /valid model name/)
   const library = `.SUBCKT ${longName} IN OUT\nR1 IN OUT 1k\n.ENDS ${longName}\n`
   const parsed = parseSubcircuitLibrary(library).subcircuits[0]
   const provenance = { assetId: 'long-name-library', filename: 'long-name.lib', sha256: crypto.createHash('sha256').update(library).digest('hex') }

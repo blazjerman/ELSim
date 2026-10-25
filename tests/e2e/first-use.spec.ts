@@ -2628,7 +2628,8 @@ test('standalone resistor capacitor and inductor can select imported native mode
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
-  const library = ['.MODEL R_CUSTOM RES(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n')
+  const longModelName = `R${'A'.repeat(8191)}`
+  const library = ['.MODEL R_CUSTOM RES(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)', `.MODEL ${longModelName} RES(R=2k TC1=0.01)`].join('\n')
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'passives.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
   for (const [id, modelName, modelType] of [['p-r1', 'R_CUSTOM', 'R'], ['p-c1', 'C_CUSTOM', 'C']]) {
     await page.locator(`.circuit-part[data-part-id="${id}"]`).click()
@@ -2641,6 +2642,11 @@ test('standalone resistor capacitor and inductor can select imported native mode
   await expect(page.getByLabel('Device model for C1').locator('option', { hasText: 'C_CUSTOM (C)' })).toHaveCount(1)
   await page.getByLabel('Device model for C1').selectOption('C_CUSTOM')
   await expect(page.locator('[data-part-setting="p-c1:value"]')).toHaveAttribute('placeholder', 'Leave blank to use model default')
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  await page.getByLabel('Device model for R1').selectOption(longModelName)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1')?.deviceModel)).toBe(longModelName)
+  await expect.poll(() => page.locator('html').evaluate((element) => element.scrollWidth - element.ownerDocument.defaultView!.innerWidth)).toBe(0)
+  await expect.poll(() => page.locator('.imported-model strong[title]').evaluateAll((elements) => elements.find((element) => element.getAttribute('title')?.length === 8192)?.getAttribute('title'))).toBe(longModelName)
 
   const existingInductorIds = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.filter((part: { kind: string }) => part.kind === 'inductor').map((part: { id: string }) => part.id))
   const schematic = page.locator('svg.schematic')
@@ -2669,7 +2675,8 @@ test('standalone resistor capacitor and inductor can select imported native mode
   await inductorModel.selectOption('L_CUSTOM')
   await expect(page.locator(`[data-part-setting="${inductorId}:value"]`)).toHaveAttribute('placeholder', 'Leave blank to use model default')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-    await expect(page.locator('.netlist-modal pre')).toContainText(/^C1 .* C_CUSTOM$/m)
+  await expect(page.locator('.netlist-modal pre')).toContainText(longModelName)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^C1 .* C_CUSTOM$/m)
   await expect(page.locator('.netlist-modal pre')).toContainText(/^L1 .* L_CUSTOM$/m)
 })
 
