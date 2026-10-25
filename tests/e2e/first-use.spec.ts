@@ -1769,6 +1769,8 @@ test('schematic context menu preserves native keyboard selection for transistor 
 
 test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect(page.getByRole('banner', { name: 'Project header' })).toBeVisible()
+  await expect(page.getByRole('contentinfo', { name: 'Application status' })).toBeVisible()
   await expect(page.getByRole('complementary', { name: 'Component library' })).toBeVisible()
   await expect(page.getByRole('main', { name: 'Schematic workspace' })).toBeVisible()
   await expect(page.getByRole('complementary', { name: 'Properties inspector' })).toBeVisible()
