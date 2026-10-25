@@ -1,8 +1,8 @@
 # ELSim performance benchmarks
 
-## Repeated Firefox memory profile (2026-10-25)
+## Firefox memory phase attribution repeat (2026-10-25)
 
-The focused Linux Firefox process-tree memory harness was run three times with the existing ngspice WASM runtime, simulating 1,000,130 samples and displaying 32 traces across eight waveform windows. All three runs passed and reported the same WASM linear-memory capacity: 154,796,032 bytes (147.6 MiB). Across the three runs, the peak summed process-tree PSS median/range was 1,052.4 MiB / 1,013.3–1,054.9 MiB and RSS was 1,399.9 MiB / 1,360.1–1,400.5 MiB; these peaks occurred during the combined solver/result-transfer phase. Plot-interaction phase peaks were 775.0 MiB PSS and 1,122.7 MiB RSS median. Process values sum Firefox and its descendants and are not ELSim-only allocation; RSS may count shared pages multiple times. Firefox heap APIs were unavailable. This establishes same-host repeatability only; second-hardware measurements remain open.
+`npm run benchmark:browser:memory -- --plot-windows 8 --repeats 3` passed three fresh Firefox runs with the existing local ngspice runtime. Each solved 1,000,130 transient samples and rendered 32 traces across eight windows; the worker reported 154,796,032 bytes (147.6 MiB) of WASM linear-memory capacity in every run. Solver/result-transfer process-tree peaks had medians of 1,052.4 MiB PSS and 1,399.9 MiB RSS, with run ranges of 1,013.3–1,054.9 MiB PSS and 1,360.1–1,400.5 MiB RSS. Plot-validation/interaction peaks had medians of 775.0 MiB PSS and 1,122.7 MiB RSS. One result-validation sample reached 1,012.0 MiB PSS / 1,357.8 MiB RSS while the other two were 669.8 / 1,015.1 MiB and 687.0 / 1,035.5 MiB; the 100 ms sampler and short phase make that phase’s distribution too noisy to summarize as a stable peak. PSS/RSS include Firefox and all descendants, not ELSim-only memory, and Firefox heap APIs were unavailable. This establishes a same-host profile, not a cross-machine budget; next memory investigation needs per-process attribution to separate browser baseline, worker, and solver allocations.
 
 ## Reuse connectivity for repeated sheet instances (2026-10-25)
 
