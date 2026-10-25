@@ -120,6 +120,25 @@ test('declared global parameters produce alterparam cases and a reset before eac
   assert.throws(() => validateProject({ ...validated, simulation: { ...validated.simulation, parameterSweeps: [{ ...validated.simulation.parameterSweeps[0], globalParameter: 'MISSING', component: '$param:MISSING' }] } }), /declared global project parameter/)
 })
 
+test('a declared project parameter can sweep a behavioral passive expression', () => {
+  const project = createStarterProject()
+  project.sheets[0].parameters = [{ id: 'param-behavioral-r', name: 'RBASE', defaultValue: '1k' }]
+  project.parts.find((part) => part.ref === 'R1').behavioralResistance = 'RBASE'
+  project.simulation.parameterSweeps = [{ component: '$param:RBASE', globalParameter: 'RBASE', start: '1k', stop: '3k', points: 3 }]
+  const validated = validateProject(structuredClone(project))
+  const eligible = eligibleParameterSweepParts({ parts: validated.parts, analysis: 'tran', models: [], subcircuits: [], sheets: validated.sheets })
+  assert.equal(eligible.some((part) => part.ref === 'R1'), false)
+
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 3)
+  assert.deepEqual(runs.map((run) => Number(run.values[0].value)), [1000, 2000, 3000])
+  const deck = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(deck, /^\.param RBASE=1k$/m)
+  assert.match(deck, /R1 vin vout R=\{RBASE\}/)
+  assert.match(deck, /alterparam RBASE=1\.00000000e\+3\nreset\nrun/)
+  assert.match(deck, /alterparam RBASE=3\.00000000e\+3\nreset\nrun/)
+})
+
 test('non-arithmetic global parameter lists preserve each requested value exactly', () => {
   const project = createStarterProject()
   project.sheets[0].parameters = [{ id: 'param-rload', name: 'RLOAD', defaultValue: '1k' }]
