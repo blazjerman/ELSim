@@ -47,15 +47,17 @@ function reserveUniqueName(base: string, used: Set<string>): string {
   return name
 }
 
-function rewriteImportedFunctionNames(line: string, aliases: ReadonlyMap<string, string>, shadowedFunctions: ReadonlySet<string> = new Set()): string {
-  if (!aliases.size || line.trimStart().startsWith('*')) return line
+function rewriteImportedFunctionNames(line: string, aliases: ReadonlyMap<string, string>, shadowedFunctions: ReadonlySet<string> = new Set(), declarationAliases: ReadonlyMap<string, string> = aliases): string {
+  if ((!aliases.size && !declarationAliases.size) || line.trimStart().startsWith('*')) return line
   const activeAliases = shadowedFunctions.size
     ? new Map([...aliases].filter(([name]) => !shadowedFunctions.has(name)))
     : aliases
-  if (!activeAliases.size) return line
+  if (!activeAliases.size && !declarationAliases.size) return line
   const code = withoutInlineComment(line)
   if (!code) return line
   const codeStart = line.indexOf(code)
+  const functionDeclaration = /^\s*\.func\s+([A-Za-z][A-Za-z0-9!#$%_\[\].]*)/i.exec(code)
+  const declarationNameStart = functionDeclaration ? functionDeclaration[0].length - functionDeclaration[1].length : -1
   let output = ''
   let quote = ''
   for (let index = 0; index < code.length;) {
@@ -80,7 +82,11 @@ function rewriteImportedFunctionNames(line: string, aliases: ReadonlyMap<string,
       const name = code.slice(start, index)
       let next = index
       while (next < code.length && /\s/.test(code[next])) next += 1
-      output += next < code.length && code[next] === '(' ? activeAliases.get(name.toLowerCase()) ?? name : name
+      const key = name.toLowerCase()
+      const replacement = start === declarationNameStart && !shadowedFunctions.has(key)
+        ? declarationAliases.get(key)
+        : next < code.length && code[next] === '(' ? activeAliases.get(key) : undefined
+      output += replacement ?? name
       continue
     }
     output += character
@@ -378,7 +384,41 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   }
   const ambiguousGlobalFunctionNames = [...globalFunctionDefinitions].filter(([, definitions]) => definitions.length > 1).map(([name]) => name)
   const functionAliasesByAssetId = new Map<string, Map<string, string>>()
+  const functionCallAliasesByAssetId = new Map<string, Map<string, string>>()
   const localAmbiguousFunctionBodiesByAssetId = new Map<string, Map<string, string>>()
+  const modelAssetsByBasename = new Map<string, typeof parsedModelLibraryEntries>()
+  for (const entry of parsedModelLibraryEntries) {
+    const basename = entry.asset.filename.replace(/\\/g, '/').split('/').at(-1)?.toLowerCase()
+    if (!basename) continue
+    const matches = modelAssetsByBasename.get(basename) ?? []
+    matches.push(entry)
+    modelAssetsByBasename.set(basename, matches)
+  }
+  const includedAssetIdsByAssetId = new Map<string, string[]>()
+  for (const { asset, parsed } of parsedModelLibraryEntries) {
+    const targets: string[] = []
+    for (const include of parsed.includes) {
+      if (!include.filename) continue
+      const matches = modelAssetsByBasename.get(include.filename.toLowerCase()) ?? []
+      if (matches.length !== 1) continue
+      const target = matches[0].asset
+      if (include.section && target.selectedSections?.length && !target.selectedSections.some((section) => section.toLowerCase() === include.section!.toLowerCase())) continue
+      targets.push(target.id)
+    }
+    includedAssetIdsByAssetId.set(asset.id, targets)
+  }
+  const reachableAssetIdsByAssetId = new Map<string, Set<string>>()
+  for (const { asset } of parsedModelLibraryEntries) {
+    const reachable = new Set<string>()
+    const pending = [asset.id]
+    while (pending.length) {
+      const current = pending.pop()!
+      if (reachable.has(current)) continue
+      reachable.add(current)
+      pending.push(...(includedAssetIdsByAssetId.get(current) ?? []))
+    }
+    reachableAssetIdsByAssetId.set(asset.id, reachable)
+  }
   const usedFunctionNames = new Set(globalFunctionDefinitions.keys())
   const reserveFunctionReferences = (text: string) => {
     for (const [, name] of text.matchAll(/([A-Za-z][A-Za-z0-9!#$%_\[\].]*)\s*\(/g)) usedFunctionNames.add(name.toLowerCase())
@@ -402,10 +442,26 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const aliases = functionAliasesByAssetId.get(assetId) ?? new Map<string, string>()
       aliases.set(functionName, alias)
       functionAliasesByAssetId.set(assetId, aliases)
-      const bodies = localAmbiguousFunctionBodiesByAssetId.get(assetId) ?? new Map<string, string>()
-      bodies.set(functionName, body)
-      localAmbiguousFunctionBodiesByAssetId.set(assetId, bodies)
     }
+  }
+  for (const { asset } of parsedModelLibraryEntries) {
+    const reachable = reachableAssetIdsByAssetId.get(asset.id) ?? new Set([asset.id])
+    const callAliases = new Map<string, string>()
+    const localBodies = new Map<string, string>()
+    for (const functionName of ambiguousGlobalFunctionNames) {
+      const definitions = globalFunctionDefinitions.get(functionName) ?? []
+      if (new Set(definitions.map(({ assetId }) => assetId)).size !== definitions.length) continue
+      const visibleDefinitions = definitions.filter(({ assetId }) => reachable.has(assetId))
+      const visibleAssetIds = new Set(visibleDefinitions.map(({ assetId }) => assetId))
+      if (visibleAssetIds.size !== 1) continue
+      const definitionAssetId = [...visibleAssetIds][0]
+      const alias = functionAliasesByAssetId.get(definitionAssetId)?.get(functionName)
+      const body = libraryFunctionBodies.get(definitionAssetId)?.get(functionName)
+      if (alias) callAliases.set(functionName, alias)
+      if (body !== undefined) localBodies.set(functionName, body)
+    }
+    if (callAliases.size) functionCallAliasesByAssetId.set(asset.id, callAliases)
+    if (localBodies.size) localAmbiguousFunctionBodiesByAssetId.set(asset.id, localBodies)
   }
   const withoutQuotedStrings = (text: string) => {
     const characters = text.split('')
@@ -1711,7 +1767,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   for (let assetIndex = 0; assetIndex < modelAssets.length; assetIndex += 1) {
     const asset = modelAssets[assetIndex]
     const parsed = parsedModelAssets[assetIndex]
-    const functionAliases = functionAliasesByAssetId.get(asset.id)
+    const functionAliases = functionCallAliasesByAssetId.get(asset.id)
+    const functionDeclarationAliases = functionAliasesByAssetId.get(asset.id)
+    const hasFunctionAliases = Boolean(functionAliases?.size || functionDeclarationAliases?.size)
     const translatedModelsByLine = new Map(parsed.models.flatMap((model) => {
       const translation = translateVoltageSwitchModel(model)
       return translation ? [[model.startLine, { model, translation }] as const] : []
@@ -1722,7 +1780,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }))
     let conditionalDepth = 0
     let skipModelThroughLine = 0
-    const functionScopeEvents = functionAliases
+    const functionScopeEvents = hasFunctionAliases
       ? parsed.subcircuits.flatMap((definition) => (definition.functions ?? []).flatMap((functionDefinition) => [
         { sourceLine: definition.startLine + 1, name: functionDefinition.name.toLowerCase(), delta: 1 },
         { sourceLine: definition.endLine, name: functionDefinition.name.toLowerCase(), delta: -1 },
@@ -1762,7 +1820,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       if (record.text.trim()) {
         const shadowedFunctions = activeFunctionScopes.size ? new Set(activeFunctionScopes.keys()) : undefined
-        append(functionAliases ? rewriteImportedFunctionNames(record.text, functionAliases, shadowedFunctions) : record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
+        append(hasFunctionAliases ? rewriteImportedFunctionNames(record.text, functionAliases ?? new Map(), shadowedFunctions, functionDeclarationAliases ?? new Map()) : record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
       }
       if (directive === '.if') conditionalDepth += 1
     }

@@ -7904,6 +7904,49 @@ test('separate imported libraries can use same-named global helper functions ind
   await expect(netlist).toContainText(/^B1 OUT 0 V=\{ELSIM_INTERNAL_FUNC_\d+\(2\)\}$/m)
 })
 
+test('an imported subcircuit resolves a duplicate helper through its project-local include', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createStarterProject()
+  const rootLibrary = '.include helpers.lib\n.SUBCKT INCLUDED_STAGE IN OUT\nB1 OUT 0 V={SCALE(2)}\n.ENDS INCLUDED_STAGE\n'
+  const helperLibrary = '.FUNC SCALE(x) {2*x}\n'
+  const unrelatedLibrary = '.FUNC SCALE(x) {99*x}\n'
+  const parts = [
+    { id: 'included-stage', kind: 'subcircuit' as const, ref: 'XINCLUDED', value: 'INCLUDED_STAGE', modelName: 'INCLUDED_STAGE', modelPins: ['IN', 'OUT'], x: 300, y: 400, rotation: 0 as const },
+    { id: 'included-load', kind: 'resistor' as const, ref: 'RLOAD', value: '1 kΩ', x: 500, y: 400, rotation: 0 as const },
+  ]
+  const netLabels = parts.flatMap((part) => componentPins(part).map((pin) => ({
+    id: `${part.id}-net-${pin.index}`,
+    name: part.id === 'included-stage' ? (pin.index === 0 ? '0' : 'VOUT') : (pin.index === 0 ? 'VOUT' : '0'),
+    x: pin.x, y: pin.y, visible: false,
+  })))
+  project.name = 'Included duplicate helper'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [
+    { id: 'included-root', filename: 'root.lib', content: rootLibrary, sha256: createHash('sha256').update(rootLibrary).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'included-helper', filename: 'helpers.lib', content: helperLibrary, sha256: createHash('sha256').update(helperLibrary).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'unrelated-helper', filename: 'unrelated.lib', content: unrelatedLibrary, sha256: createHash('sha256').update(unrelatedLibrary).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openComponentVoltagePlot(page, 'RLOAD')
+  await expect(plot.locator('.op-table').getByRole('row', { name: /V\(RLOAD\).*4\.000000 V/i })).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  const helperAlias = (await netlist.innerText()).match(/^\.FUNC\s+(ELSIM_INTERNAL_FUNC_\d+)\(x\) \{2\*x\}$/im)?.[1]
+  expect(helperAlias).toBeTruthy()
+  await expect(netlist).toContainText(new RegExp(`^B1 OUT 0 V=\\{${helperAlias}\\(2\\)\\}$`, 'm'))
+  await expect(netlist).not.toContainText(/^\.include helpers\.lib$/im)
+})
+
 test('native ngspice Monte Carlo subcircuit parameter defaults import and solve', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

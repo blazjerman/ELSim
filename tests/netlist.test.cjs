@@ -291,6 +291,22 @@ test('same-named helper functions in separate imported libraries are namespaced 
   assert.match(artifact.text, /^B1 OUT 0 V=\{SCALE\(2\)\}$/im)
 })
 
+test('duplicate global helper calls resolve through an unambiguous imported include chain', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'included-helper-stage', kind: 'subcircuit', ref: 'XINCLUDED', modelName: 'INCLUDED_STAGE', modelPins: ['IN', 'OUT'], value: 'INCLUDED_STAGE', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'included-root', filename: 'root.lib', content: '.include helpers.lib\n.SUBCKT INCLUDED_STAGE IN OUT\nB1 OUT 0 V={SCALE(2)}\n.ENDS INCLUDED_STAGE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'included-helper', filename: 'helpers.lib', content: '.FUNC SCALE(x) {2*x}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'unrelated-helper', filename: 'unrelated.lib', content: '.FUNC SCALE(x) {99*x}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  const helperAlias = artifact.text.match(/^\.func\s+(ELSIM_INTERNAL_FUNC_\d+)\(x\) \{2\*x\}$/im)?.[1]
+  assert.ok(helperAlias)
+  assert.match(artifact.text, new RegExp(`^B1 OUT 0 V=\\{${helperAlias}\\(2\\)\\}$`, 'im'))
+  assert.match(artifact.text, /^\.func ELSIM_INTERNAL_FUNC_\d+\(x\) \{99\*x\}$/im)
+})
+
 test('same-arity duplicate functions in one imported library are preflighted when used', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })
