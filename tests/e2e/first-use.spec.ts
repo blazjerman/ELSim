@@ -11557,6 +11557,28 @@ test('experimental TRNOISE current source simulates through browser ngspice', { 
   await expect(page.locator('.netlist-modal pre')).toContainText(/I1 .* DC 1m TRNOISE\(100u 100u 0 0 0 1u 1u\)/)
 })
 
+test('current-source TRNOISE amplitude sweeps retain ampere units in result labels', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createCurrentSourceExampleProject()
+  const source = project.parts.find((part) => part.ref === 'I1')!
+  source.sourceMode = 'trnoise'
+  source.trnoise = { gaussianRms: '100 uA', timeStep: '10 us', flickerExponent: '0', flickerAmplitude: '0 A', rtsAmplitude: '0 A', rtsCaptureTime: '1 ms', rtsEmissionTime: '1 ms' }
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '1m', maxStep: '10u', parameterSweeps: [{ component: 'I1', sourceParameter: 'trnoise.gaussianRms', start: '100 uA', stop: '300 uA', points: 2 }] }
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate((projectJson) => localStorage.setItem('elsim:project:v7', projectJson), JSON.stringify(project))
+  await page.reload()
+  await expect(page.locator('.project-title')).toHaveText('Current source and load')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 source parameter' })).toHaveValue('trnoise.gaussianRms')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Multiple simulation runs complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openComponentCurrentPlot(page, 'I1')
+  await expect(plot.locator('.trace-toggles')).toContainText('I1.trnoise.gaussianRms=0.0001 A')
+  await expect(plot.locator('.trace-toggles')).toContainText('I1.trnoise.gaussianRms=0.0003 A')
+})
+
 test('TRNOISE Gaussian RMS can be stepped in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])

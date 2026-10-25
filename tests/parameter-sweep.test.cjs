@@ -10,7 +10,7 @@ const { componentMagnitude, createNetlistArtifact } = require(path.join(build, '
 const { prepareParameterSweep, prepareStochasticSamples } = require(path.join(build, 'engine/sweep.js'))
 const { addResultControl } = require(path.join(build, 'engine/resultControl.js'))
 const { isEngineRequest } = require(path.join(build, 'engine/contract.js'))
-const { createUrcLineExampleProject, createHierarchicalExampleProject, createVoltageSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createUrcLineExampleProject, createHierarchicalExampleProject, createVoltageSwitchExampleProject, createCurrentSourceExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { eligibleParameterSweepParts, importedModelSweepParameters, subcircuitSweepParameters, unusedSweepTargets } = require(path.join(build, 'domain/parameterSweepTargets.js'))
 
 test('engineering units parse to base magnitudes for resistor, capacitor, and inductor values', () => {
@@ -441,6 +441,26 @@ test('transient-noise waveform fields can be stepped with their native units', (
   missingRtsTimes.parts.find((part) => part.ref === 'V1').trnoise.rtsCaptureTime = '0'
   missingRtsTimes.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'trnoise.rtsAmplitude', start: '0', stop: '1 mV', points: 2 }]
   assert.throws(() => prepareParameterSweep(validateProject(missingRtsTimes)), /positive RTS capture and emission times/)
+
+  const currentProject = createCurrentSourceExampleProject()
+  currentProject.simulation.analysis = 'tran'
+  const current = currentProject.parts.find((part) => part.ref === 'I1')
+  current.sourceMode = 'trnoise'
+  current.trnoise = { gaussianRms: '100 uA', timeStep: '10 us', flickerExponent: '1', flickerAmplitude: '10 uA', rtsAmplitude: '20 uA', rtsCaptureTime: '1 ms', rtsEmissionTime: '2 ms' }
+  const currentCases = [
+    ['trnoise.gaussianRms', '50 uA', '150 uA', /TRNOISE\(\{ELSIM_SWEEP_SOURCE_I1_TRNOISE_GAUSSIANRMS\} 10u 1 10u 20u 1m 2m\)/],
+    ['trnoise.flickerAmplitude', '5 uA', '15 uA', /TRNOISE\(100u 10u 1 \{ELSIM_SWEEP_SOURCE_I1_TRNOISE_FLICKERAMPLITUDE\} 20u 1m 2m\)/],
+    ['trnoise.rtsAmplitude', '10 uA', '30 uA', /TRNOISE\(100u 10u 1 10u \{ELSIM_SWEEP_SOURCE_I1_TRNOISE_RTSAMPLITUDE\} 1m 2m\)/],
+  ]
+  for (const [sourceParameter, start, stop, pattern] of currentCases) {
+    const project = structuredClone(currentProject)
+    project.simulation.parameterSweeps = [{ component: 'I1', sourceParameter, start, stop, points: 2 }]
+    const validated = validateProject(project)
+    const runs = prepareParameterSweep(validated)
+    assert.equal(runs.length, 2, sourceParameter)
+    assert.ok(runs[0].label.startsWith(`I1.${sourceParameter}=`), runs[0].label)
+    assert.match(addResultControl(createNetlistArtifact(validated).text, runs), pattern, sourceParameter)
+  }
 })
 
 test('imported device model parameters are validated and emitted with altermod', () => {
