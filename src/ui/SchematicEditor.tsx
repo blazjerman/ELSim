@@ -233,7 +233,7 @@ const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView(
     const lampGlow = primitive.className === 'lamp-glow-fill'
     const resistorPowerGlow = primitive.className === 'resistor-power-glow'
     const ledGlow = primitive.className === 'led-glow'
-    return <circle className={primitive.className} data-resistor-power-glow={resistorPowerGlow ? true : undefined} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={lampGlow ? '#ffd36d' : resistorPowerGlow ? '#ff9b55' : ledGlow ? '#ff766d' : primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={lampGlow || resistorPowerGlow || ledGlow ? 'none' : common.stroke} strokeWidth={common.strokeWidth} opacity={lampGlow ? sample.lampGlow * .82 : resistorPowerGlow ? sample.resistorPowerGlow * .34 : ledGlow ? Math.min(.3, sample.ledBrightness * .3) : undefined} pointerEvents={lampGlow || resistorPowerGlow || primitive.className === 'lamp-glow-outline' || ledGlow ? 'none' : undefined}/>
+    return <circle className={primitive.className} data-lamp-glow={lampGlow ? true : undefined} data-resistor-power-glow={resistorPowerGlow ? true : undefined} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={lampGlow ? '#ffd36d' : resistorPowerGlow ? '#ff9b55' : ledGlow ? '#ff766d' : primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={lampGlow || resistorPowerGlow || ledGlow ? 'none' : common.stroke} strokeWidth={common.strokeWidth} opacity={lampGlow ? sample.lampGlow * .82 : resistorPowerGlow ? sample.resistorPowerGlow * .34 : ledGlow ? Math.min(.3, sample.ledBrightness * .3) : undefined} pointerEvents={lampGlow || resistorPowerGlow || primitive.className === 'lamp-glow-outline' || ledGlow ? 'none' : undefined}/>
   }
   if (primitive.kind === 'text') {
     const currentPolarity = isCurrentPolarityPrimitive(primitive)
@@ -246,7 +246,7 @@ const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView(
   const transformerGlow = primitive.className?.includes('transformer-current-glow') ?? false
   const transformerPrimaryGlow = primitive.className?.includes('transformer-primary-current-glow') ?? false
   const transformerSecondaryGlow = primitive.className?.includes('transformer-secondary-current-glow') ?? false
-  return <path className={primitive.className} data-inductor-current-glow={inductorGlow ? true : undefined} data-transformer-primary-current-glow={transformerPrimaryGlow ? true : undefined} data-transformer-secondary-current-glow={transformerSecondaryGlow ? true : undefined} d={primitive.d} transform={primitive.className === 'potentiometer-wiper-arrow' ? `translate(0 ${sample.potentiometerWiperY})` : undefined} fill={primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={transistorCurrent ? '#79d9a4' : ledRay ? '#ff766d' : common.stroke} strokeWidth={primitive.className === 'lamp-filament' || ledRay ? 2 : transistorCurrent ? 2.5 : common.strokeWidth} strokeLinecap={common.strokeLinecap} strokeLinejoin={common.strokeLinejoin} opacity={transistorCurrent ? sample.channelCurrentGlow : ledRay ? sample.ledBrightness : inductorGlow || transformerPrimaryGlow ? sample.currentGlow : transformerSecondaryGlow ? sample.secondaryCurrentGlow : undefined} pointerEvents={transistorCurrent || ledRay || inductorGlow || transformerGlow ? 'none' : undefined} aria-hidden={transistorCurrent || ledRay || inductorGlow || transformerGlow ? true : undefined} style={primitive.className === 'lamp-filament' ? { stroke: sample.lampGlow > .05 ? '#ffe6a8' : common.stroke } : undefined}/>
+  return <path className={primitive.className} data-lamp-filament={primitive.className === 'lamp-filament' ? true : undefined} data-inductor-current-glow={inductorGlow ? true : undefined} data-transformer-primary-current-glow={transformerPrimaryGlow ? true : undefined} data-transformer-secondary-current-glow={transformerSecondaryGlow ? true : undefined} d={primitive.d} transform={primitive.className === 'potentiometer-wiper-arrow' ? `translate(0 ${sample.potentiometerWiperY})` : undefined} fill={primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={transistorCurrent ? '#79d9a4' : ledRay ? '#ff766d' : common.stroke} strokeWidth={primitive.className === 'lamp-filament' || ledRay ? 2 : transistorCurrent ? 2.5 : common.strokeWidth} strokeLinecap={common.strokeLinecap} strokeLinejoin={common.strokeLinejoin} opacity={transistorCurrent ? sample.channelCurrentGlow : ledRay ? sample.ledBrightness : inductorGlow || transformerPrimaryGlow ? sample.currentGlow : transformerSecondaryGlow ? sample.secondaryCurrentGlow : undefined} pointerEvents={transistorCurrent || ledRay || inductorGlow || transformerGlow ? 'none' : undefined} aria-hidden={transistorCurrent || ledRay || inductorGlow || transformerGlow ? true : undefined} style={primitive.className === 'lamp-filament' ? { stroke: sample.lampGlow > .05 ? '#ffe6a8' : common.stroke } : undefined}/>
 })
 
 const ComponentSymbolGeometry = memo(function ComponentSymbolGeometry({ geometry, stroke, animation, rotation = 0 }: {
@@ -284,7 +284,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   // simulation cursor, but hundreds of off-focus SVG <title> nodes no longer
   // need their text replaced on every scrub/playback frame.
   const showSampleTitle = selected || focusable || hovered
-  const sharedFrameAnimation = part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor' || part.kind === 'transformer'
+  const sharedFrameAnimation = part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor' || part.kind === 'transformer' || part.kind === 'lamp'
   const sampleRequested = animate && (sharedFrameAnimation ? selected || hovered : RESULT_ANIMATED_PART_KINDS.has(part.kind) || selected || hovered)
   const animationSample = useSimulationCursorWhen(sampleRequested)
   const { voltage, current, secondaryCurrent, capacitorCharge: sampledCapacitorCharge, switchClosed, logicOutput } = useMemo(() => sampleRequested ? componentSample(part, animationSample) : {}, [sampleRequested, animationSample, componentSample, part])
@@ -349,7 +349,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   }, [part.kind, part.flipX, currentNegative, hasCurrentDirection, animate])
   const capacitorChargeGeometry = part.kind === 'capacitor' && (animate || voltage !== undefined) ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
-  const hasPowerGlow = (part.kind === 'resistor' && animate) || lampGlow > 0 || resistorPowerGlow > 0
+  const hasPowerGlow = (part.kind === 'resistor' && animate) || (part.kind === 'lamp' && animate) || lampGlow > 0 || resistorPowerGlow > 0
   const powerGlowGeometry = hasPowerGlow ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const inductorFieldGeometry = part.kind === 'inductor' && animate ? componentDefinition.symbolAnimations?.['field.current']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const transformerPrimaryFieldGeometry = part.kind === 'transformer' && animate ? componentDefinition.symbolAnimations?.['field.primaryCurrent']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
@@ -494,6 +494,8 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         group,
         part,
         kind: group.dataset.animationKind,
+        lampGlow: group.querySelector<SVGCircleElement>('[data-lamp-glow]'),
+        lampFilament: group.querySelector<SVGPathElement>('[data-lamp-filament]'),
         powerGlow: group.querySelector<SVGCircleElement>('[data-resistor-power-glow]'),
         inductorGlow: group.querySelector<SVGPathElement>('[data-inductor-current-glow]'),
         transformerPrimaryGlow: group.querySelector<SVGPathElement>('[data-transformer-primary-current-glow]'),
@@ -507,8 +509,18 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
     const updateResistorAnimation = () => {
       const profileStartedAt = profileAnimation ? performance.now() : 0
       const sampleIndex = getSimulationCursor()
-      for (const { part, kind, powerGlow, inductorGlow, transformerPrimaryGlow, transformerSecondaryGlow, capacitorPlates, capacitance, seriesResistance, markers } of animatedParts) {
+      for (const { part, kind, lampGlow, lampFilament, powerGlow, inductorGlow, transformerPrimaryGlow, transformerSecondaryGlow, capacitorPlates, capacitance, seriesResistance, markers } of animatedParts) {
         const { voltage, current, secondaryCurrent, capacitorCharge } = componentSample(part, sampleIndex)
+        if (kind === 'lamp-result') {
+          const power = Math.abs((voltage ?? 0) * (current ?? 0))
+          const brightness = Math.min(0.9, power / (part.animationNominalPower ?? 10))
+          const opacity = String(brightness * .82)
+          if (lampGlow && lampGlow.getAttribute('opacity') !== opacity) lampGlow.setAttribute('opacity', opacity)
+          if (lampFilament) {
+            const stroke = brightness > .05 ? '#ffe6a8' : partUiState(part.id) & 1 ? '#86e3b7' : '#c6cec7'
+            if (lampFilament.getAttribute('stroke') !== stroke) lampFilament.setAttribute('stroke', stroke)
+          }
+        }
         if (kind === 'resistor-result') {
           const power = Math.abs((voltage ?? 0) * (current ?? 0))
           const opacity = String(Math.min(1, Math.sqrt(power / (part.animationNominalPower ?? 0.25))) * 0.34)

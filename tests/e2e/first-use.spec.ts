@@ -13671,10 +13671,14 @@ test('lamp glow renders from its definition animation at solved electrical power
   await expect(page.locator('.project-title')).toHaveText('Current source and load')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
-  const glow = page.locator('.circuit-part[data-part-id="isource-r1"] .lamp-glow-fill')
+  const lamp = page.locator('.circuit-part[data-part-id="isource-r1"]')
+  await expect(lamp).toHaveAttribute('data-animation-kind', 'lamp-result')
+  await expect(lamp.locator(':scope > title')).toHaveCount(0)
+  const glow = lamp.locator('.lamp-glow-fill')
   await expect(glow).toHaveCount(1)
   await expect.poll(async () => Number(await glow.getAttribute('opacity'))).toBeGreaterThan(0)
-  await expect(page.locator('.circuit-part[data-part-id="isource-r1"] .lamp-glow-outline')).toHaveCount(1)
+  await expect(lamp.locator('.lamp-filament')).toHaveAttribute('stroke', '#ffe6a8')
+  await expect(lamp.locator('.lamp-glow-outline')).toHaveCount(1)
 })
 
 test('lamp-power lesson compares predicted power, ngspice current, and the result-driven glow', { tag: '@ngspice' }, async ({ page }) => {
