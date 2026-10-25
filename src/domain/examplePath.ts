@@ -9,6 +9,7 @@ export const START_HERE_EXAMPLES: readonly ExampleId[] = [
   'led-current-limiter',
   'capacitor-discharge',
   'transistor',
+  'opamp-buffer',
 ]
 
 export function getStartHereProgress(exampleId: ExampleId): { step: number; total: number; next: ExampleId | null } | null {

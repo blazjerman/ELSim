@@ -855,7 +855,7 @@ test('examples can be browsed by topic and combined with search', { tag: '@ui-sm
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
-  await expect(page.locator('#examples-description')).toContainText('Start here to see all 8')
+  await expect(page.locator('#examples-description')).toContainText('Start here to see all 9')
   const topicFilters = dialog.getByRole('group', { name: 'Filter examples by topic' })
   const cards = dialog.locator('.example-list article')
   await expect(cards.first()).toBeVisible()
@@ -890,8 +890,9 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards.nth(5)).toContainText('LED current limiter')
   await expect(cards.nth(6)).toContainText('Capacitor discharge')
   await expect(cards.nth(7)).toContainText('NPN low-side switch')
+  await expect(cards.nth(8)).toContainText('Op-amp voltage follower buffer')
   await topicFilters.getByRole('button', { name: 'Start here' }).click()
-  await expect(cards).toHaveCount(8)
+  await expect(cards).toHaveCount(9)
   await expect(cards.nth(0)).toContainText('Open and close a lamp circuit')
   await expect(cards.nth(1)).toContainText("Ohm's law: voltage, current, resistance")
   await expect(cards.nth(2)).toContainText('RC step response')
@@ -900,11 +901,12 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards.nth(5)).toContainText('LED current limiter')
   await expect(cards.nth(6)).toContainText('Capacitor discharge')
   await expect(cards.nth(7)).toContainText('NPN low-side switch')
+  await expect(cards.nth(8)).toContainText('Op-amp voltage follower buffer')
   await topicFilters.getByRole('button', { name: 'All' }).click()
   await expect(cards).toHaveCount(allExampleCount)
 })
 
-test('guided starter path continues through all eight lessons and confirms circuit replacement', { tag: '@ui-smoke' }, async ({ page }) => {
+test('guided starter path continues through all nine lessons and confirms circuit replacement', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
   const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
@@ -913,19 +915,19 @@ test('guided starter path continues through all eight lessons and confirms circu
   await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
 
   const lesson = page.locator('aside[aria-label="Guided example"]')
-  await expect(lesson).toContainText('START HERE · STEP 1 OF 8')
+  await expect(lesson).toContainText('START HERE · STEP 1 OF 9')
   await lesson.getByRole('button', { name: 'Continue to next lesson' }).click()
   const confirmation = page.getByRole('alertdialog', { name: 'Replace the current circuit?' })
   await expect(confirmation).toContainText("Ohm's law: voltage, current, resistance will replace the circuit")
   await confirmation.getByRole('button', { name: 'Cancel' }).click()
-  await expect(lesson).toContainText('START HERE · STEP 1 OF 8')
+  await expect(lesson).toContainText('START HERE · STEP 1 OF 9')
   await expect(page.locator('.circuit-part[data-part-id="switch-lamp-s1"]')).toBeVisible()
 
   await page.getByRole('button', { name: 'Close examples' }).click()
   await lesson.getByRole('button', { name: 'Continue to next lesson' }).click()
   await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
   const secondLesson = page.locator('aside[aria-label="Guided example"]')
-  await expect(secondLesson).toContainText('START HERE · STEP 2 OF 8')
+  await expect(secondLesson).toContainText('START HERE · STEP 2 OF 9')
   await expect(page.locator('.circuit-part[data-part-id="ohms-law-r1"]')).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(secondLesson.getByRole('button', { name: 'Continue to next lesson' })).toBeVisible()
@@ -938,16 +940,17 @@ test('guided starter path continues through all eight lessons and confirms circu
     { title: 'LED current limiter', step: 6 },
     { title: 'Capacitor discharge', step: 7 },
     { title: 'NPN low-side switch', step: 8 },
+    { title: 'Op-amp voltage follower buffer', step: 9 },
   ]
   for (const next of remainingLessons) {
     await secondLesson.getByRole('button', { name: 'Continue to next lesson' }).click()
     const replace = page.getByRole('alertdialog', { name: 'Replace the current circuit?' })
     await expect(replace).toContainText(next.title)
     await replace.getByRole('button', { name: 'Replace and open' }).click()
-    await expect(secondLesson).toContainText(`START HERE · STEP ${next.step} OF 8`)
+    await expect(secondLesson).toContainText(`START HERE · STEP ${next.step} OF 9`)
   }
-  await expect(secondLesson).toContainText('START HERE · STEP 8 OF 8')
-  await expect(secondLesson).toContainText('Choose a base resistor for the collector load')
+  await expect(secondLesson).toContainText('START HERE · STEP 9 OF 9')
+  await expect(secondLesson).toContainText('estimate VOUT below')
   await expect(secondLesson.locator('.example-path-complete')).toHaveText('Starter path complete')
   await expect(secondLesson.getByRole('button', { name: 'Continue to next lesson' })).toHaveCount(0)
 })

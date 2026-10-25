@@ -16,6 +16,7 @@ test('starter example path has stable order and correct next-step progress', () 
     'led-current-limiter',
     'capacitor-discharge',
     'transistor',
+    'opamp-buffer',
   ])
   START_HERE_EXAMPLES.forEach((exampleId, index) => {
     assert.deepEqual(getStartHereProgress(exampleId), {
