@@ -638,6 +638,25 @@ test('reports a malformed imported CPL matrix on the placed IC that uses it', ()
   assert.match(splitLibraryIssue?.detail ?? '', /coupled-device\.lib at line 1/)
 })
 
+test('checks CPL matrices when a node name matches the model name', () => {
+  const project = createStarterProject()
+  const content = [
+    '.SUBCKT SAME_NAME CPL_BAD IN2 GND1 OUT1 OUT2 GND2',
+    'P1 CPL_BAD IN2 GND1 OUT1 OUT2 GND2 CPL_BAD LEN=1',
+    '.ENDS SAME_NAME',
+    '.MODEL CPL_BAD CPL LENGTH=1 R=1 0 1 L=1 0 1 G=0 0 0 C=1 0',
+  ].join('\n')
+  project.modelAssets = [{ id: 'same-name-cpl', filename: 'same-name.lib', content, sha256: 'f'.repeat(64), licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
+  const ic = { id: 'same-name-cpl-ic', kind: 'subcircuit', ref: 'X1', value: 'SAME_NAME', modelName: 'SAME_NAME', modelPins: ['CPL_BAD', 'IN2', 'GND1', 'OUT1', 'OUT2', 'GND2'], x: 760, y: 600, rotation: 0 }
+  project.parts.push(ic)
+  project.sheets[0].parts = project.parts
+
+  const issue = checkCircuit(project).find((item) => item.id.startsWith('invalid-cpl-matrix:'))
+  assert.equal(issue?.partId, ic.id)
+  assert.equal(issue?.title, 'CPL_BAD has an invalid C matrix for 2 conductors')
+  assert.match(issue?.detail ?? '', /C contains 2 packed upper-triangle values, but a 2-conductor model needs 3/)
+})
+
 test('reports incompatible native semiconductor, switch, and MESFET model families inside an imported IC', () => {
   const project = createStarterProject()
   project.modelAssets = [{

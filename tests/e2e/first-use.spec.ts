@@ -12748,28 +12748,28 @@ test('circuit checks explain a short CPL matrix and select its imported IC', { t
   await page.evaluate(async () => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const content = [
-      '.SUBCKT COUPLED IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2',
-      'P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL_BAD LEN=1',
+      '.SUBCKT COUPLED CPL_BAD IN2 GND1 OUT1 OUT2 GND2',
+      'P1 CPL_BAD IN2 GND1 OUT1 OUT2 GND2 CPL_BAD LEN=1',
       '.ENDS COUPLED',
       '.MODEL CPL_BAD CPL',
-      '+ R=1 0 0 1 0 1',
-      '+ L=3.8e-7 8e-8 1e-8 3.8e-7 8e-8 3.8e-7',
-      '+ G=0 0 0 0 0 0',
-      '+ C=9e-11 -9e-12 9e-11 -9e-12 9e-11',
+      '+ R=1 0 1',
+      '+ L=3.8e-7 8e-8 3.8e-7',
+      '+ G=0 0 0',
+      '+ C=9e-11 -9e-12',
       '',
     ].join('\n')
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
     const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
     project.modelAssets = [{ id: 'bad-cpl-library', filename: 'coupled.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-    project.parts.push({ id: 'bad-cpl-instance', kind: 'subcircuit', ref: 'XCOUPLED', value: 'COUPLED', modelName: 'COUPLED', modelPins: ['IN1', 'IN2', 'IN3', 'GND1', 'OUT1', 'OUT2', 'OUT3', 'GND2'], x: 760, y: 600, rotation: 0 })
+    project.parts.push({ id: 'bad-cpl-instance', kind: 'subcircuit', ref: 'XCOUPLED', value: 'COUPLED', modelName: 'COUPLED', modelPins: ['CPL_BAD', 'IN2', 'GND1', 'OUT1', 'OUT2', 'GND2'], x: 760, y: 600, rotation: 0 })
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
   await page.getByRole('button', { name: /Check circuit/ }).click()
   const report = page.getByRole('dialog', { name: 'Circuit checks' })
-  const issue = report.getByRole('listitem').filter({ hasText: 'CPL_BAD has an invalid C matrix for 3 conductors' })
-  await expect(issue).toContainText('5 packed upper-triangle values, but a 3-conductor model needs 6')
+  const issue = report.getByRole('listitem').filter({ hasText: 'CPL_BAD has an invalid C matrix for 2 conductors' })
+  await expect(issue).toContainText('2 packed upper-triangle values, but a 2-conductor model needs 3')
   await expect(issue).toContainText('coupled.lib at line 4')
   const missingLength = report.getByRole('listitem').filter({ hasText: 'CPL_BAD has no LENGTH parameter' })
   await expect(missingLength).toContainText('even when a P instance supplies its own LEN')

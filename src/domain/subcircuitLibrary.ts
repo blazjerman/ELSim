@@ -1514,13 +1514,21 @@ function parseSubcircuitLibraryFromInspection(
 }
 
 /** Check the packed upper-triangle matrix sizes for imported CPL models used by P devices. */
+function coupledLineModelTokenIndex(line: string, modelNames: ReadonlySet<string>): { tokens: string[]; modelIndex: number } | null {
+  const text = withoutInlineComment(line).trim().replace(/\s+LEN\s*=\s*(?:\{[^{}]*\}|"(?:\\.|[^"\\\r\n])*"|'[^']*'|\S+)\s*$/i, '')
+  const tokens = text.split(/\s+/)
+  if (!/^p\S*$/i.test(tokens[0] ?? '')) return null
+  const modelIndex = tokens.length - 1
+  if (modelIndex < 4 || !modelNames.has(tokens[modelIndex].toLowerCase())) return null
+  return { tokens, modelIndex }
+}
+
 export function coupledLineConductorCount(source: string, sourceLine: number, modelName: string): number | null {
   const line = logicalLines(source).find((candidate) => candidate.start === sourceLine)
   if (!line) return null
-  const tokens = withoutInlineComment(line.text).trim().split(/\s+/)
-  if (!/^p\S*$/i.test(tokens[0] ?? '')) return null
-  const modelIndex = tokens.findIndex((token, index) => index > 0 && token.toLowerCase() === modelName.toLowerCase())
-  if (modelIndex < 0) return null
+  const parsed = coupledLineModelTokenIndex(line.text, new Set([modelName.toLowerCase()]))
+  if (!parsed) return null
+  const { modelIndex } = parsed
   const conductorCount = (modelIndex - 3) / 2
   return Number.isInteger(conductorCount) && conductorCount >= 1 && conductorCount <= 8 ? conductorCount : null
 }
@@ -1561,6 +1569,7 @@ export function inspectCoupledLineMatrices(source: string, selectedSections?: st
   const parsed = parseSubcircuitLibrary(source, selectedSections)
   const cplModels = new Map(parsed.models.filter((model) => model.type.toLowerCase() === 'cpl').map((model) => [model.name.toLowerCase(), model.name]))
   if (!cplModels.size) return []
+  const cplModelNames = new Set(cplModels.keys())
   const inspected = inspectLibrarySections(source)
   const selected = selectedSections ?? (inspected.sections.length === 1 ? inspected.sections : [])
   const activeLines = inspected.lines
@@ -1572,9 +1581,9 @@ export function inspectCoupledLineMatrices(source: string, selectedSections?: st
   } else {
     for (const line of activeLines) {
       if (!/^p\S+\s+/i.test(line.text)) continue
-      const tokens = line.text.split(/\s+/)
-      const modelIndex = tokens.findIndex((token, index) => index > 0 && cplModels.has(token.toLowerCase()))
-      if (modelIndex < 0) continue
+      const parsedLine = coupledLineModelTokenIndex(line.text, cplModelNames)
+      if (!parsedLine) continue
+      const { tokens, modelIndex } = parsedLine
       const pinCount = modelIndex - 1
       const conductorCount = (pinCount - 2) / 2
       if (!Number.isInteger(conductorCount) || conductorCount < 1 || conductorCount > 8) continue

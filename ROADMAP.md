@@ -2,6 +2,8 @@
 
 Status: active implementation roadmap, 2026-10-10. The application foundation is being built in this repository.
 
+M2.4 CPL model-name/node-name collision (2026-10-25): Coupled-line model detection now follows ngspice's P-device record grammar and reads the model from its final argument, with optional `LEN` removed first. A legal node that shares the `.MODEL CPL` name can no longer hide the actual model token and suppress matrix-shape preflight. Unit regression verifies a two-conductor matrix finding; focused Firefox verifies the source-linked Circuit Checks result and affected-IC selection. All 40 unit groups, TypeScript, and Firefox pass. No WASM rebuild or Pages workflow ran.
+
 M4.3 shared part-kind indexing (2026-10-25): The main workspace now categorizes voltage/current sources, capacitors, inductors, diodes, BJTs, and FETs in one memoized pass when the parts array changes, replacing seven independent full-array filters. Category contents and source order are unchanged. TypeScript and all 40 unit-test groups pass. The focused Firefox UI test could not start because Playwright's Vite webServer exited before reporting a browser result; no WASM or Pages workflow ran.
 
 M4.3 part-category indexing Firefox check (2026-10-25): Reran the focused inductor lesson regression with `playwright.firefox.config.ts` and local server binding permitted; it passes in Firefox. The earlier failure used the default config and did not establish a UI regression. No WASM rebuild or Pages workflow ran.
