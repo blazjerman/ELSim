@@ -3714,20 +3714,6 @@ test('native ngspice numeric-leading IC names and pins import and generate a val
   expect(netlist).toMatch(/X1 .* 74HC00m/)
 })
 
-test('model-library import rejects mismatched nested .ENDS names at their source line', { tag: '@ui-smoke' }, async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Components', exact: true }).click()
-  const modelLibrary = '.SUBCKT TOP IN OUT\nXCORE IN OUT CORE\n.SUBCKT CORE A B\nR1 A B 1k\n.ENDS TOP\n.ENDS CORE\n'
-  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
-  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
-    name: 'nested.lib',
-    mimeType: 'text/plain',
-    buffer: Buffer.from(modelLibrary),
-  })
-  await expect(page.getByText('Line 5: .ENDS TOP does not match the open .SUBCKT CORE.')).toBeVisible()
-})
-
 test('subcircuit parameter defaults can call functions from an imported include library', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const input = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
@@ -15342,7 +15328,7 @@ test('used duplicate imported .PARAM conflicts stop before ngspice runs', { tag:
   await expect(page.getByText(/X1 uses imported subcircuit PARAM_STAGE body.*ambiguous global \.PARAM gain \(parameter-a\.lib:1, parameter-b\.lib:1\)/i)).toBeVisible()
 })
 
-test('nested native ngspice .IF model branches import and select the active diode model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('native ngspice .ENDS names are ignored during imported .IF library simulation', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -15364,7 +15350,7 @@ test('nested native ngspice .IF model branches import and select the active diod
     '.ELSE',
     '.MODEL DLOCAL D(IS=1e-14 N=1)',
     '.ENDIF',
-    '.ENDS NESTED_STAGE',
+    '.ENDS IGNORED_NAME',
   ].join('\n')
   await modelInput.setInputFiles({ name: 'nested-model.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
   const model = page.locator('.imported-model').filter({ hasText: 'NESTED_STAGE' })
@@ -15374,6 +15360,7 @@ test('nested native ngspice .IF model branches import and select the active diod
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
   await expect(netlist).toContainText('.IF (OUTER == 0)\n.IF (INNER == 0)\n.MODEL DLOCAL D(IS=1e-12 N=1)')
+  await expect(netlist).toContainText('.ENDS IGNORED_NAME')
   await page.getByRole('button', { name: 'Close netlist' }).click()
   await page.getByLabel('Analysis type', { exact: true }).selectOption('op')
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -15386,18 +15373,6 @@ test('nested native ngspice .IF model branches import and select the active diod
   const row = plot.locator('.op-table').getByRole('row', { name: /V\(X1\).*V/i })
   await expect(row).toBeVisible()
   await expect(row).toContainText('0.346')
-})
-
-test('model-library import identifies a .ENDS name mismatch at its source line', { tag: '@ui-smoke' }, async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
-  const library = '.SUBCKT OUTER IN OUT\n.SUBCKT INNER A B\n.ENDS OUTER\n.ENDS INNER\n'
-  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
-    name: 'mismatched-ends.lib',
-    mimeType: 'text/plain',
-    buffer: Buffer.from(library),
-  })
-  await expect(page.getByText('Line 3: .ENDS OUTER does not match the open .SUBCKT INNER.')).toBeVisible()
 })
 
 test('imported subcircuit-local .FUNC validates IC defaults and instance overrides', { tag: '@ui-smoke' }, async ({ page }) => {
