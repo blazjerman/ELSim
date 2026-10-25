@@ -113,7 +113,7 @@ async function stopRafIntervalCapture(page: import('@playwright/test').Page) {
   })
 }
 
-test('measure result animation scrubbing for 500 components and 1,000 vectors', async ({ page, browserName }) => {
+test('measure mixed resistor, inductor, and transformer animation for 501 parts', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the animation benchmark').toEqual([])
