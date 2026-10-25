@@ -1722,7 +1722,21 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }))
     let conditionalDepth = 0
     let skipModelThroughLine = 0
+    const functionScopeEvents = functionAliases
+      ? parsed.subcircuits.flatMap((definition) => (definition.functions ?? []).flatMap((functionDefinition) => [
+        { sourceLine: definition.startLine + 1, name: functionDefinition.name.toLowerCase(), delta: 1 },
+        { sourceLine: definition.endLine, name: functionDefinition.name.toLowerCase(), delta: -1 },
+      ])).sort((left, right) => left.sourceLine - right.sourceLine)
+      : []
+    const activeFunctionScopes = new Map<string, number>()
+    let nextFunctionScopeEvent = 0
     for (const record of parsed.modelRecords) {
+      while (nextFunctionScopeEvent < functionScopeEvents.length && functionScopeEvents[nextFunctionScopeEvent].sourceLine <= record.sourceLine) {
+        const event = functionScopeEvents[nextFunctionScopeEvent++]
+        const count = (activeFunctionScopes.get(event.name) ?? 0) + event.delta
+        if (count > 0) activeFunctionScopes.set(event.name, count)
+        else activeFunctionScopes.delete(event.name)
+      }
       if (record.sourceLine <= skipModelThroughLine) continue
       const directive = record.text.trim().split(/\s+/, 1)[0]?.toLowerCase()
       if (directive === '.endif') conditionalDepth = Math.max(0, conditionalDepth - 1)
@@ -1747,12 +1761,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       if (record.text.trim()) {
-        const scopedFunctions = functionAliases
-          ? parsed.subcircuits
-            .filter((definition) => record.sourceLine > definition.startLine && record.sourceLine < definition.endLine)
-            .flatMap((definition) => (definition.functions ?? []).map((definition) => definition.name.toLowerCase()))
-          : []
-        append(functionAliases ? rewriteImportedFunctionNames(record.text, functionAliases, new Set(scopedFunctions)) : record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
+        const shadowedFunctions = activeFunctionScopes.size ? new Set(activeFunctionScopes.keys()) : undefined
+        append(functionAliases ? rewriteImportedFunctionNames(record.text, functionAliases, shadowedFunctions) : record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
       }
       if (directive === '.if') conditionalDepth += 1
     }
