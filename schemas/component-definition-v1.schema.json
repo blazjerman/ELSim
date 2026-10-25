@@ -343,7 +343,7 @@
           },
           "defaultValue": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 512
           }
         }
       }

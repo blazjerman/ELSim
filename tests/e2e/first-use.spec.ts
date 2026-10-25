@@ -3509,7 +3509,8 @@ test('user model library adds a subcircuit with ordered pins and bracketed param
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Components', exact: true }).click()
-  const modelLibrary = '.FUNC DOUBLE(x) {2*x}\n.PARAM BASE_GAIN=2\n.CSPARAM USER_GAIN={BASE_GAIN}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)} GAIN[1]=2 LOG_GAIN={log10(100)} RVAL=1mil TINY=1a RUNIT=10kOhm MIXED={2mil + 3a} QUOTED=\'BASE_GAIN + 3\'\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n.END\n'
+  const longExpression = `{${Array.from({ length: 128 }, () => '1').join('+')}}`
+  const modelLibrary = `.FUNC DOUBLE(x) {2*x}\n.PARAM BASE_GAIN=2\n.CSPARAM USER_GAIN={BASE_GAIN}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)} GAIN[1]=2 LOG_GAIN={log10(100)} RVAL=1mil TINY=1a RUNIT=10kOhm MIXED={2mil + 3a} QUOTED='BASE_GAIN + 3' LONG_EXPR=${longExpression}\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n.END\n`
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-double.lib',
@@ -3518,7 +3519,7 @@ test('user model library adds a subcircuit with ordered pins and bracketed param
   })
   await expect(page.getByText(/Imported 1 subcircuit and 0 device models from user-double\.lib/)).toBeVisible()
   const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_DOUBLE' })
-  await expect(importedModel).toContainText("Parameters: gain={DOUBLE(2)}, GAIN[1]=2, LOG_GAIN={log10(100)}, RVAL=1mil, TINY=1a, RUNIT=10kOhm, MIXED={2mil + 3a}, QUOTED='BASE_GAIN + 3'")
+  await expect(importedModel).toContainText(`Parameters: gain={DOUBLE(2)}, GAIN[1]=2, LOG_GAIN={log10(100)}, RVAL=1mil, TINY=1a, RUNIT=10kOhm, MIXED={2mil + 3a}, QUOTED='BASE_GAIN + 3', LONG_EXPR=${longExpression}`)
   await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
   await page.getByRole('button', { name: 'Schematic', exact: true }).click()
   const instance = page.locator('.circuit-part[aria-label^="X1,"]')
@@ -3528,6 +3529,11 @@ test('user model library adds a subcircuit with ordered pins and bracketed param
   await page.getByRole('button', { name: 'Properties', exact: true }).click()
   const gain = page.getByRole('textbox', { name: 'gain model value', exact: true })
   await expect(gain).toHaveValue('{DOUBLE(2)}')
+  const longParameter = page.getByRole('textbox', { name: 'LONG_EXPR model value', exact: true })
+  await expect(longParameter).toHaveValue(longExpression)
+  await longParameter.fill(longExpression)
+  await longParameter.blur()
+  await expect(longParameter).toHaveAttribute('aria-invalid', 'false')
   const bracketedGain = page.getByRole('textbox', { name: 'GAIN[1] model value', exact: true })
   await expect(bracketedGain).toHaveValue('2')
   await bracketedGain.fill('3')

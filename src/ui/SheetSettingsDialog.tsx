@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { X } from 'lucide-react'
 import type { ProjectSheet } from '../domain/project'
+import { MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH } from '../domain/subcircuitLibrary'
 import { trapDialogTab } from './dialogKeyboard'
 
 type SheetPort = ProjectSheet['ports'][number]
@@ -80,12 +81,12 @@ export function SheetSettingsDialog({
         <div className="modal-footer"><span>Port order follows the list above. With placed blocks, remove pins from the end.</span><button className="primary-small" disabled={!portSelection} onClick={() => { addSheetPort(portSelection); setPortSelection('') }}>Expose as port</button></div>
         <h3>Block parameters</h3>
         {activeSheet?.parameters?.length ? <div className="example-list">{activeSheet.parameters.map((parameter: SheetParameter) => <article key={parameter.id}>
-          <div><strong>{parameter.name} = {parameter.defaultValue}</strong><label className="field-label">Default value<input aria-label={`Default value for ${parameter.name}`} value={parameterDefaultDrafts[parameter.id] ?? parameter.defaultValue} onChange={(event) => setParameterDefaultDrafts((drafts) => ({ ...drafts, [parameter.id]: event.target.value }))} onBlur={(event) => updateSheetParameterDefault(parameter.id, event.target.value)}/></label><p>Use {'{'}{parameter.name}{'}'} as a component value inside this sheet.</p></div>
+          <div><strong>{parameter.name} = {parameter.defaultValue}</strong><label className="field-label">Default value<input aria-label={`Default value for ${parameter.name}`} maxLength={MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH} value={parameterDefaultDrafts[parameter.id] ?? parameter.defaultValue} onChange={(event) => setParameterDefaultDrafts((drafts) => ({ ...drafts, [parameter.id]: event.target.value }))} onBlur={(event) => updateSheetParameterDefault(parameter.id, event.target.value)}/></label><p>Use {'{'}{parameter.name}{'}'} as a component value inside this sheet.</p></div>
           <button className="tour-secondary" onClick={() => removeSheetParameter(parameter.id)}>Remove</button>
         </article>)}</div> : <p className="field-hint">No parameters. Add one to let each block instance use a different value.</p>}
         <div className="block-parameter-form">
           <label className="field-label">Parameter name<input aria-label="New block parameter name" value={parameterNameDraft} maxLength={64} placeholder="RLOAD" onChange={(event) => { setParameterNameDraft(event.target.value); setParameterFormError('') }}/></label>
-          <label className="field-label">Default SPICE value<input aria-label="New block parameter default" value={parameterValueDraft} maxLength={64} placeholder="{RBASE * 2}" onChange={(event) => { setParameterValueDraft(event.target.value); setParameterFormError('') }}/><small className="field-hint">Use a number such as 1k, braced arithmetic such as {'{'}RBASE * 2{'}'}, or double-quoted text. Operators: +, -, *, /, ^.</small></label>
+          <label className="field-label">Default SPICE value<input aria-label="New block parameter default" value={parameterValueDraft} maxLength={MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH} placeholder="{RBASE * 2}" onChange={(event) => { setParameterValueDraft(event.target.value); setParameterFormError('') }}/><small className="field-hint">Use a number such as 1k, braced arithmetic such as {'{'}RBASE * 2{'}'}, or double-quoted text. Operators: +, -, *, /, ^.</small></label>
           {parameterFormError && <small className="field-error" role="alert">{parameterFormError}</small>}
           <button className="tour-secondary" disabled={(activeSheet?.parameters?.length ?? 0) >= 32 || !parameterNameDraft.trim()} onClick={addSheetParameter}>Add block parameter</button>
         </div>

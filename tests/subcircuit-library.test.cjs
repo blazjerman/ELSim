@@ -35,7 +35,7 @@ test('inline comments do not begin inside escaped ngspice string literals', () =
 
 test('accepts bounded ngspice parameter operators and expression functions', () => {
   for (const value of ['1k', '1mil', '1a', '10kOhm', '"input table.csv"', '"C:/models/my table.txt"', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{var(foo)}', '{var("foo")}', '{vec(pi)}', '{vec("pi")}', '{vec("v(out)") + 1}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{1 and 1}', '{1 or 0}', '{not 0}', '{5 div 2}', '{5 mod 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
-  for (const value of ['"unterminated', '"two"quotes"', '"line\nbreak"', '"' + 'A'.repeat(63) + '"', '{"foo"}', '{sqrt("1")}', '{var()}', '{var(foo, bar)}', '{vec(foo, bar)}', '{vec("pi", 1)}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+  for (const value of ['"unterminated', '"two"quotes"', '"line\nbreak"', '"' + 'A'.repeat(511) + '"', '{"foo"}', '{sqrt("1")}', '{var()}', '{var(foo, bar)}', '{vec(foo, bar)}', '{vec("pi", 1)}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
   // ngspice exposes u/u2/uramp in behavioral-source expressions, but the
   // bundled runtime does not accept them in subcircuit parameter defaults.
   for (const value of ['{u(1)}', '{u2(0.5)}', '{uramp(1)}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
@@ -342,6 +342,20 @@ test('accepts native ngspice punctuation-rich batch node names as ordered subcir
   project.modelAssets = [{ id: 'punctuated', filename: 'punctuated.lib', content, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push({ id: 'punctuated-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: 'PUNCTUATED', modelPins: parsed.subcircuits[0].pins })
   assert.deepEqual(validateProject(project).parts.at(-1).modelPins, ['IN!', 'IN:1', 'OUT#1', 'IN[1]', 'IN%2', 'IN<3>', 'IN~4', 'IN\\5', 'IN`6', 'IN]7'])
+})
+
+test('accepts bounded native ngspice subcircuit parameter expressions above the old 64-token limit', () => {
+  const expression = Array.from({ length: 128 }, () => '1').join('+')
+  const defaultValue = `{${expression}}`
+  assert.equal(defaultValue.length, 257)
+  assert.equal(isSafeSubcircuitParameterValue(defaultValue), true)
+  assert.equal(isSafeSubcircuitParameterValue(`{+${expression}}`), true)
+  assert.equal(isSafeSubcircuitParameterValue(`"${'A'.repeat(510)}"`), true)
+  assert.equal(isSafeSubcircuitParameterValue(`"${'A'.repeat(511)}"`), false)
+  const tooManyTokens = `{${Array.from({ length: 129 }, () => '1').join('+')}}`
+  assert.equal(isSafeSubcircuitParameterValue(tooManyTokens), false)
+  const parsed = parseSubcircuitLibrary(`.SUBCKT AMP IN OUT PARAMS: GAIN=${defaultValue}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS AMP`)
+  assert.equal(parsed.subcircuits[0].parameters[0].defaultValue, defaultValue)
 })
 
 test('accepts 512-character native ngspice node and subcircuit pin identifiers', () => {

@@ -4,6 +4,10 @@ export const MAX_IMPORTED_IC_PINS = 256
 // characters; a 1024-character token can trap the WASM build. Keep the parser
 // bound aligned with the verified engine limit instead of the old 64-char UI cap.
 export const MAX_SPICE_NODE_NAME_LENGTH = 512
+export const MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH = 512
+// Bound parser work separately from source length; nested expressions also
+// have the stricter existing depth limit below.
+const MAX_SUBCIRCUIT_PARAMETER_TOKENS = 256
 export type ConditionalModelParameterValue = { sourceLine: number; sourceValue: string; parsed: boolean }
 export type UnparsedModelParameter = { name: string; sourceValue: string; conditionalValues?: ConditionalModelParameterValue[] }
 export type ConditionalOnlyModelParameter = { name: string; conditionalValues: { sourceLine: number; sourceValue: string }[] }
@@ -1072,7 +1076,7 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
 }
 
 export function isSafeSubcircuitParameterValue(value: string, customFunctions: ReadonlyMap<string, number> = new Map()): boolean {
-  if (typeof value !== 'string' || value.length > 64) return false
+  if (typeof value !== 'string' || value.length > MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH) return false
   const trimmed = value.trim()
   // ngspice permits string-valued formal parameters in subcircuits (for
   // example, a filename passed to a source model). Keep the accepted form
@@ -1091,7 +1095,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
   // Accept bounded ngspice parameter expressions and math calls inside an
   // optional brace pair. Expressions are validated, never evaluated in JS.
   const expression = expressionSource
-  if (!expression || expression.length > 64) return false
+  if (!expression || expression.length > MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH) return false
   const tokens: string[] = []
   const tokenPattern = /\s+|"(?:\\.|[^"\\\r\n\u0000-\u001f\u007f])*"|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9!#$%_\[\]]*|\*\*|==|!=|<>|<=|>=|&&|\|\||[(),+*/^%\\\-!<>=?:]/iy
   let offset = 0
@@ -1100,8 +1104,9 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
     const match = tokenPattern.exec(expression)
     if (!match) return false
     offset = tokenPattern.lastIndex
+    if (/^[A-Za-z_]/.test(match[0]) && match[0].length > 64) return false
     if (!/^\s+$/.test(match[0])) tokens.push(verboseNgspiceOperators[match[0].toLowerCase()] ?? match[0])
-    if (tokens.length > 64) return false
+    if (tokens.length > MAX_SUBCIRCUIT_PARAMETER_TOKENS) return false
   }
   let index = 0
   let depth = 0

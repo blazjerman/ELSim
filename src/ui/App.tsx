@@ -16,7 +16,7 @@ import { createPartClipboard, resolvePartClipboard, type PartClipboard } from '.
 import { fitEditorView } from '../domain/editorView'
 import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
-import { analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelProvenanceForReplacement, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
+import { analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH, modelFunctionSignaturesForLibraries, modelProvenanceForReplacement, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import type { AnalyzedModelLibraries, ModelDialectWarning, SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseSymbolAsset } from '../domain/symbolAsset'
@@ -164,7 +164,7 @@ function BlockParameterOverride({ name, defaultValue, value, onCommit, scope = '
     setError('')
     onCommit(draft)
   }
-  return <label className="field-label">{name}<input aria-label={`${name} ${scope} value`} aria-invalid={Boolean(error)} aria-describedby={error ? `block-parameter-error-${name}` : undefined} value={draft} onChange={(event) => { const nextValue = event.target.value; setDraft(nextValue); setError(''); if (isSafeSubcircuitParameterValue(nextValue, functions)) onCommit(nextValue) }} onBlur={commit}/>{error && <small id={`block-parameter-error-${name}`} className="field-error" role="alert">{error}</small>}<small className="field-hint">Default: {defaultValue} · numeric value, SPICE math or Monte Carlo function, imported library function, or double-quoted text</small></label>
+  return <label className="field-label">{name}<input aria-label={`${name} ${scope} value`} maxLength={MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH} aria-invalid={Boolean(error)} aria-describedby={error ? `block-parameter-error-${name}` : undefined} value={draft} onChange={(event) => { const nextValue = event.target.value; setDraft(nextValue); setError(''); if (isSafeSubcircuitParameterValue(nextValue, functions)) onCommit(nextValue) }} onBlur={commit}/>{error && <small id={`block-parameter-error-${name}`} className="field-error" role="alert">{error}</small>}<small className="field-hint">Default: {defaultValue} · numeric value, SPICE math or Monte Carlo function, imported library function, or double-quoted text</small></label>
 }
 
 function BjtSubstrateNodeEditor({ part, labels, onChange }: { part: Part; labels: Project['netLabels']; onChange: (patch: Partial<Part>) => void }) {
