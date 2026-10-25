@@ -1766,7 +1766,7 @@ export function createBehavioralInductorExampleProject(): Project {
   return project
 }
 
-/** A teaching model shows how a nonlinear Q(V) law changes capacitor charging. */
+/** Compare a nonlinear Q(V) capacitor with a linear reference under the same pulse. */
 export function createBehavioralCapacitorExampleProject(): Project {
   const project = createStarterProject()
   const source: Part = {
@@ -1779,33 +1779,41 @@ export function createBehavioralCapacitorExampleProject(): Project {
     id: 'behavioral-capacitor-c1', kind: 'capacitor', ref: 'C1', value: '10 µF',
     behavioralCharge: '10u*V(VOUT) + 1u*V(VOUT)*V(VOUT)*V(VOUT)', x: 700, y: 300, rotation: 0,
   }
+  const referenceResistor: Part = { id: 'behavioral-capacitor-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 460, y: 560, rotation: 0 }
+  const referenceCapacitor: Part = { id: 'behavioral-capacitor-c2', kind: 'capacitor', ref: 'C2', value: '10 µF', x: 700, y: 560, rotation: 0 }
   const labelAt = (id: string, name: string, part: Part, pin: number) => {
     const location = componentPins(part)[pin]
     return { id, name, x: location.x, y: location.y, visible: true }
   }
-  project.name = 'Voltage-dependent capacitor charge'
-  project.parts = [source, resistor, capacitor]
+  project.name = 'Linear vs voltage-dependent capacitor charge'
+  project.parts = [source, resistor, capacitor, referenceResistor, referenceCapacitor]
   project.wires = [
     { id: 'behavioral-capacitor-feed-rise', points: [[220, 310], [220, 260]] },
     { id: 'behavioral-capacitor-feed-top', points: [[220, 260], [410, 260]] },
     { id: 'behavioral-capacitor-feed-drop', points: [[410, 260], [410, 300]] },
+    { id: 'behavioral-capacitor-shared-feed', points: [[410, 300], [410, 560]] },
     { id: 'behavioral-capacitor-resistor-capacitor', points: [[510, 300], [650, 300]] },
     { id: 'behavioral-capacitor-vout-label-stub', points: [[650, 300], [650, 240]] },
     { id: 'behavioral-capacitor-return-right', points: [[750, 300], [800, 300]] },
-    { id: 'behavioral-capacitor-return-drop', points: [[800, 300], [800, 460]] },
-    { id: 'behavioral-capacitor-return-bottom', points: [[800, 460], [220, 460]] },
-    { id: 'behavioral-capacitor-return-source', points: [[220, 460], [220, 410]] },
+    { id: 'behavioral-capacitor-reference-branch', points: [[510, 560], [650, 560]] },
+    { id: 'behavioral-capacitor-reference-label-stub', points: [[650, 560], [650, 500]] },
+    { id: 'behavioral-capacitor-reference-return-right', points: [[750, 560], [800, 560]] },
+    { id: 'behavioral-capacitor-return-drop', points: [[800, 300], [800, 560]] },
+    { id: 'behavioral-capacitor-return-bottom-drop', points: [[800, 560], [800, 700]] },
+    { id: 'behavioral-capacitor-return-bottom', points: [[800, 700], [220, 700]] },
+    { id: 'behavioral-capacitor-return-source', points: [[220, 700], [220, 410]] },
   ]
   project.junctions = []
   project.netLabels = [
     labelAt('behavioral-capacitor-vin', 'VIN', source, 0),
     { id: 'behavioral-capacitor-vout', name: 'VOUT', x: 650, y: 240, visible: true },
+    { id: 'behavioral-capacitor-vlinear', name: 'VLINEAR', x: 650, y: 500, visible: true },
     labelAt('behavioral-capacitor-ground', '0', source, 1),
   ]
   project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
-  project.plotSettings = { selectedTraceIds: ['V(VOUT)', 'elsim_q_c1'], ranges: {} }
-  project.view = { zoom: 0.9, panX: -15, panY: 0 }
+  project.plotSettings = { selectedTraceIds: ['V(VOUT)', 'V(VLINEAR)'], ranges: {} }
+  project.view = { zoom: 0.75, panX: 0, panY: 0 }
   project.sheets[0].view = project.view
   return project
 }

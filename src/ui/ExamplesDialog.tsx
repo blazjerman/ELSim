@@ -18,7 +18,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'intermodulation', title: 'Diode two-tone intermodulation', description: 'Apply two small signals to a forward-biased diode and inspect the third-order product 2F1−F2 in ngspice.' },
   { id: 'lc-energy', title: 'LC energy exchange', description: 'Start with a charged capacitor and watch stored electric energy move into inductor current and back.' },
   { id: 'behavioral-inductor', title: 'Inductance changes with current', description: 'Use a smooth ngspice L= expression to model a saturation-style effect: inductance falls as current rises, so the current ramp steepens. This is an illustrative model, not a device core model.' },
-  { id: 'behavioral-capacitor', title: 'Voltage-dependent capacitor charge', description: 'Use an ngspice Q= expression where charge is nonlinear with voltage; rising differential capacitance slows the voltage ramp. This is an illustrative charge law, not a dielectric or device model.' },
+  { id: 'behavioral-capacitor', title: 'Compare linear and voltage-dependent charge', description: 'Compare two 10 µF capacitors under the same step: an ngspice Q= model charges more slowly as its differential capacitance rises. This is an illustrative charge law, not a dielectric or device model.' },
   { id: 'rc', title: 'RC step response', description: 'Watch a capacitor charge through a resistor and explore the time constant.' },
   { id: 'pwl', title: 'PWL waveform response', description: 'Drive an RC circuit with a custom three-level source and see how the capacitor follows each change.' },
   { id: 'current-source', title: 'Current source and load', description: 'See a 1 mA source drive a 1 kΩ load and produce a 1 V operating point.' },

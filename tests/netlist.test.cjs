@@ -2761,7 +2761,9 @@ test('voltage-dependent capacitor example generates native Q= charge behavior', 
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [], artifact.text)
   assert.match(artifact.text, /^C1 __ELSIM_behavioral_capacitor_c1_CURRENT 0 Q=\{10u\*V\(VOUT\) \+ 1u\*V\(VOUT\)\*V\(VOUT\)\*V\(VOUT\)\}$/m)
-  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VOUT)', 'elsim_q_c1'])
+  assert.match(artifact.text, /^R2 .* 1k$/m)
+  assert.match(artifact.text, /^C2 .* 10u$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VOUT)', 'V(VLINEAR)'])
 })
 
 test('native ngspice int() is emitted as truncation toward zero with supported runtime functions', () => {
