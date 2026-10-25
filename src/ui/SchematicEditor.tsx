@@ -27,6 +27,23 @@ type SchematicTransform = { left: number; top: number; scale: number; offsetX: n
 const EMPTY_SUBCIRCUIT_PIN_OFFSETS: [number, number][] = []
 const EMPTY_SHEET_PORT_LAYOUT: NonNullable<Part['sheetPortLayout']> = []
 const EMPTY_SYMBOL_GEOMETRY: NonNullable<ReturnType<typeof componentDefinitionFor>['symbolGeometry']> = []
+const RASTER_ALPHA_LEVELS = 255
+
+function updateOpacityWhenRasterValueChanges(element: SVGElement | null, value: number): boolean {
+  if (!element || !Number.isFinite(value)) return false
+  const next = Math.max(0, Math.min(1, value))
+  const previous = Number(element.getAttribute('opacity') ?? 0)
+  const crossesVisibilityThreshold = (previous === 0) !== (next === 0)
+  // Keep precise sample values whenever they can change the raster alpha. If
+  // two nonzero values round to the same 8-bit alpha, the older value is
+  // visually equivalent at this render target. Preserve exact 0↔nonzero
+  // transitions so even faint educational glows remain represented.
+  if (!crossesVisibilityThreshold && Number.isFinite(previous) && Math.round(previous * RASTER_ALPHA_LEVELS) === Math.round(next * RASTER_ALPHA_LEVELS)) return false
+  const opacity = String(value)
+  if (element.getAttribute('opacity') === opacity) return false
+  element.setAttribute('opacity', opacity)
+  return true
+}
 const MUTUAL_INDUCTOR_DOT_GEOMETRY = [{ kind: 'circle', cx: -42, cy: -7, r: 3.5, fill: 'stroke', className: 'mutual-inductor-dot' }] as const satisfies NonNullable<ReturnType<typeof componentDefinitionFor>['symbolGeometry']>
 const LOGIC_OUTPUT_PART_KINDS: ReadonlySet<PartKind> = new Set(['inverter', 'logicGate'])
 const TRANSISTOR_CHANNEL_PART_KINDS: ReadonlySet<PartKind> = new Set(['nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet'])
@@ -543,10 +560,8 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         }
         if (kind === 'led-result') {
           const brightness = Math.min(1, Math.max(0, (current ?? 0) - .0002) / .01)
-          const glowOpacity = String(Math.min(.3, brightness * .3))
-          if (ledGlow && ledGlow.getAttribute('opacity') !== glowOpacity) ledGlow.setAttribute('opacity', glowOpacity)
-          const raysOpacity = String(brightness)
-          if (ledRays && ledRays.getAttribute('opacity') !== raysOpacity) ledRays.setAttribute('opacity', raysOpacity)
+          updateOpacityWhenRasterValueChanges(ledGlow, Math.min(.3, brightness * .3))
+          updateOpacityWhenRasterValueChanges(ledRays, brightness)
         }
         if (kind === 'voltageSwitch-result' || kind === 'currentSwitch-result') {
           const isVoltageSwitch = kind === 'voltageSwitch-result'
@@ -579,8 +594,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         if (kind === 'lamp-result') {
           const power = Math.abs((voltage ?? 0) * (current ?? 0))
           const brightness = Math.min(0.9, power / (part.animationNominalPower ?? 10))
-          const opacity = String(brightness * .82)
-          if (lampGlow && lampGlow.getAttribute('opacity') !== opacity) lampGlow.setAttribute('opacity', opacity)
+          updateOpacityWhenRasterValueChanges(lampGlow, brightness * .82)
           if (lampFilament) {
             const stroke = brightness > .05 ? '#ffe6a8' : partUiState(part.id) & 1 ? '#86e3b7' : '#c6cec7'
             if (lampFilament.getAttribute('stroke') !== stroke) lampFilament.setAttribute('stroke', stroke)
@@ -588,8 +602,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         }
         if (kind === 'resistor-result') {
           const power = Math.abs((voltage ?? 0) * (current ?? 0))
-          const opacity = String(Math.min(1, Math.sqrt(power / (part.animationNominalPower ?? 0.25))) * 0.34)
-          if (powerGlow && powerGlow.getAttribute('opacity') !== opacity) powerGlow.setAttribute('opacity', opacity)
+          updateOpacityWhenRasterValueChanges(powerGlow, Math.min(1, Math.sqrt(power / (part.animationNominalPower ?? 0.25))) * 0.34)
         }
         const currentGlow = Math.min(1, Math.sqrt(Math.abs(current ?? 0) / 0.005) * 0.8)
         if (transistorCurrentIndicator) {
@@ -598,13 +611,12 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
             const directionPath = current !== undefined && current < 0 ? paths.reverse : paths.forward
             if (transistorCurrentIndicator.getAttribute('d') !== directionPath) transistorCurrentIndicator.setAttribute('d', directionPath)
           }
-          const opacity = String(currentGlow)
-          if (transistorCurrentIndicator.getAttribute('opacity') !== opacity) transistorCurrentIndicator.setAttribute('opacity', opacity)
+          updateOpacityWhenRasterValueChanges(transistorCurrentIndicator, currentGlow)
         }
-        if (inductorGlow && inductorGlow.getAttribute('opacity') !== String(currentGlow)) inductorGlow.setAttribute('opacity', String(currentGlow))
-        if (transformerPrimaryGlow && transformerPrimaryGlow.getAttribute('opacity') !== String(currentGlow)) transformerPrimaryGlow.setAttribute('opacity', String(currentGlow))
+        updateOpacityWhenRasterValueChanges(inductorGlow, currentGlow)
+        updateOpacityWhenRasterValueChanges(transformerPrimaryGlow, currentGlow)
         const secondaryGlow = Math.min(1, Math.sqrt(Math.abs(secondaryCurrent ?? 0) / 0.005) * 0.8)
-        if (transformerSecondaryGlow && transformerSecondaryGlow.getAttribute('opacity') !== String(secondaryGlow)) transformerSecondaryGlow.setAttribute('opacity', String(secondaryGlow))
+        updateOpacityWhenRasterValueChanges(transformerSecondaryGlow, secondaryGlow)
         if (kind === 'capacitor-result') {
           const capacitorVoltage = voltage === undefined ? 0 : voltage - (current ?? 0) * seriesResistance
           const charge = capacitorCharge ?? capacitance * capacitorVoltage
@@ -617,9 +629,9 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
               ['data-charge-level', String(chargeLevel)],
               ['stroke', (negativeVoltage === positivePlate) ? '#74bdf2' : '#f18484'],
               ['stroke-width', String(2 + chargeLevel * 6)],
-              ['opacity', String(chargeLevel * .8)],
             ]
             for (const [name, value] of attributes) if (plate.getAttribute(name) !== value) plate.setAttribute(name, value)
+            updateOpacityWhenRasterValueChanges(plate, chargeLevel * .8)
           }
         }
         if (kind === 'transformer-result') continue

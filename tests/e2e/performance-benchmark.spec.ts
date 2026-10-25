@@ -327,6 +327,19 @@ test('measure mixed resistor, inductor, and transformer animation for 501 parts'
   await page.getByLabel('Simulation playback speed').selectOption('1')
   const playButton = page.locator('button[title^="Play result animation"]')
   await expect(playButton).toBeEnabled()
+  await page.evaluate(() => {
+    const svg = document.querySelector('svg.schematic')
+    if (!svg) throw new Error('Cannot observe animation opacity without the schematic')
+    let opacityMutations = 0
+    const observer = new MutationObserver((records) => {
+      opacityMutations += records.filter((record) => record.attributeName === 'opacity').length
+    })
+    observer.observe(svg, { subtree: true, attributes: true, attributeFilter: ['opacity'] })
+    Object.assign(window, {
+      __readAnimationOpacityMutations: () => opacityMutations,
+      __stopAnimationOpacityMutations: () => observer.disconnect(),
+    })
+  })
   await startRafIntervalCapture(page)
   await page.waitForTimeout(1_000)
   const idleRafIntervals = await stopRafIntervalCapture(page)
@@ -336,9 +349,12 @@ test('measure mixed resistor, inductor, and transformer animation for 501 parts'
   await startRafIntervalCapture(page)
   await page.waitForTimeout(1_000)
   const playbackRafIntervals = await stopRafIntervalCapture(page)
+  const playbackOpacityMutations = await page.evaluate(() => (window as Window & { __readAnimationOpacityMutations?: () => number }).__readAnimationOpacityMutations?.() ?? 0)
+  await page.evaluate(() => (window as Window & { __stopAnimationOpacityMutations?: () => void }).__stopAnimationOpacityMutations?.())
+  expect(playbackOpacityMutations).toBeLessThan(1_000)
   await pauseButton.click()
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-mixed-component-animation-scrub-v11', browser: browserName, componentCount: fittedComponentCount, resistorCount: 250, inductorCount: 225, transformerCount: 25, vectorCount, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), animatedInductorCount: await animatedInductors.count(), animatedTransformerCount: await animatedTransformers.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), inductorGlowCount: await page.locator('svg.schematic [data-inductor-current-glow]').count(), transformerPrimaryGlowCount: await page.locator('svg.schematic [data-transformer-primary-current-glow]').count(), transformerSecondaryGlowCount: await page.locator('svg.schematic [data-transformer-secondary-current-glow]').count(), changedGlowCount, changedInductorGlowCount, changedTransformerPrimaryGlowCount, changedTransformerSecondaryGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportRafIntervals: viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasRafIntervals: fullCanvasFrames, animationCallbackProfile, idleRafIntervals, playbackRafIntervals }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-mixed-component-animation-scrub-v11', browser: browserName, componentCount: fittedComponentCount, resistorCount: 250, inductorCount: 225, transformerCount: 25, vectorCount, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), animatedInductorCount: await animatedInductors.count(), animatedTransformerCount: await animatedTransformers.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), inductorGlowCount: await page.locator('svg.schematic [data-inductor-current-glow]').count(), transformerPrimaryGlowCount: await page.locator('svg.schematic [data-transformer-primary-current-glow]').count(), transformerSecondaryGlowCount: await page.locator('svg.schematic [data-transformer-secondary-current-glow]').count(), changedGlowCount, changedInductorGlowCount, changedTransformerPrimaryGlowCount, changedTransformerSecondaryGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportRafIntervals: viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasRafIntervals: fullCanvasFrames, animationCallbackProfile, idleRafIntervals, playbackRafIntervals, playbackOpacityMutations }, null, 2))
 })
 
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
