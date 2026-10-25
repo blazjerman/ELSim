@@ -15197,6 +15197,16 @@ test('harmonic and two-tone distortion analyses run in the browser engine', { ta
   await expect(page.getByText(/Two-tone intermodulation analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('group', { name: /Intermodulation magnitude from/i })).toBeVisible()
   await expect(page.getByRole('group', { name: /Selected ac result vectors/ }).getByRole('button', { name: /Disable IM \(2f1−f2\) · V\(vout\)/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('R1')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 kΩ')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2 kΩ')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  const sweepPlot = page.locator('.plot-window').filter({ hasText: 'R1=1000' }).last()
+  await expect(sweepPlot.locator('.trace-toggles button', { hasText: 'R1=1000' })).toBeVisible()
+  await expect(sweepPlot.locator('.trace-toggles button', { hasText: 'R1=2000' })).toBeVisible()
 })
 
 test('diode intermodulation example opens with guidance and solves in Firefox', { tag: ['@ngspice', '@engine-smoke'], timeout: 90_000 }, async ({ page }) => {

@@ -214,7 +214,6 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     const start = spiceMagnitude(sweep.startFrequency, 'frequency'), stop = spiceMagnitude(sweep.stopFrequency, 'frequency')
     if (start === null || start <= 0) add('distoStartFrequency', 'Enter a positive start frequency, such as 10 Hz.')
     if (stop === null || stop <= 0 || start !== null && stop <= start) add('distoStopFrequency', 'Stop frequency must be greater than the start frequency.')
-    if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('distoSource', 'Parameter stepping is not available for distortion analysis.')
   } else if (project.simulation.analysis === 'noise') {
     const sweep = project.simulation.noiseSweep ?? { outputNode: '', inputSource: '', scale: 'dec' as const, points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
     const resolved = connectivity ?? analyzeConnectivity(project)

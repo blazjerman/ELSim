@@ -17,7 +17,6 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const analysisCommand = rows.slice(0, endLine).find((line) => /^\s*\.(?:tran|op|ac|dc|noise|tf|sens|pz|disto)\b/i.test(line))?.trim().replace(/^\./, '')
   if (!analysisCommand) throw new Error('Generated netlist is missing its analysis directive.')
   const analysisType = analysisCommand.split(/\s+/, 1)[0].toLowerCase()
-  if (analysisType === 'disto' && parameterSweep.length) throw new Error('Parameter stepping is not supported during harmonic distortion analysis.')
   if (ngspiceFourier && (analysisType !== 'tran' || !Number.isFinite(ngspiceFourier.fundamentalFrequency) || ngspiceFourier.fundamentalFrequency <= 0 || !/^[vi]\([@A-Za-z0-9_.$!#\[\]-]+\)$/i.test(ngspiceFourier.traceId) || !/^(?:[vi]\([A-Za-z0-9_.$!#-]+\)|@[A-Za-z0-9_.$!#-]+\[(?:i|id|ic|ib|ie|ig|is|current)\])$/i.test(ngspiceFourier.vector))) {
     throw new Error('Ngspice Fourier analysis requires a transient run, a positive frequency, and one simple voltage or current vector.')
   }
@@ -182,7 +181,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
       })
       run.values.filter((value) => value.altermodParameters && value.model).forEach(({ model, altermodParameters }) => commands.push(`altermod ${model} RON=${altermodParameters!.RON} ROFF=${altermodParameters!.ROFF} VT=${altermodParameters!.VT} VH=${altermodParameters!.VH}`))
       if (run.values.some((value) => value.globalParameter || value.instanceParameter || value.modelTargets || value.sourceParameter || value.pulseHigh || value.pwlScale || value.waveformAmplitude)) commands.push('reset')
-      commands.push(analysisType === 'pz' ? analysisCommand : 'run', ...measurements.flatMap((measurement) => measurementCommand(measurement, `_${index}`)), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? [`setplot noise${index * 2 + 2}`, 'print onoise_total', 'print inoise_total', `setplot noise${index * 2 + 1}`] : []), `write /result-${index}.raw all`)
+      commands.push(analysisType === 'pz' || analysisType === 'disto' ? analysisCommand : 'run', ...(analysisType === 'disto' ? [`setplot disto${index * 3 + distortionPlot}`] : []), ...measurements.flatMap((measurement) => measurementCommand(measurement, `_${index}`)), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? [`setplot noise${index * 2 + 2}`, 'print onoise_total', 'print inoise_total', `setplot noise${index * 2 + 1}`] : []), `write /result-${index}.raw all`)
     })
   } else commands.push(analysisCommand, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.flatMap((measurement) => measurementCommand(measurement)) : []), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? ['setplot noise2', 'print onoise_total', 'print inoise_total', 'setplot noise1'] : []), ...(analysisType === 'disto' ? [`setplot disto${distortionPlot}`] : []), 'write /result.raw all')
   commands.push('quit', '.endc', '.end')
