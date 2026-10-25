@@ -5,7 +5,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { componentDefinitions, componentDefinitionFor, componentDefaultValue, componentPropertyDefault, compatibleDeviceModelType, deviceModelTypeMatches, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
+const { componentDefinitions, componentDefinitionFor, componentDefaultValue, componentPropertyDefault, compatibleDeviceModelType, deviceModelTypeMatches, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createStarterProject, kindNames, kindPrefix, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { parseSubcircuitLibrary } = require(path.join(build, 'domain/subcircuitLibrary.js'))
@@ -267,4 +267,54 @@ test('imported subcircuits become content-addressed component definitions with o
   const restored = validateProject(project)
   assert.equal(restored.parts.at(-1).componentDefinitionId, definition.id)
   assert.equal(restored.sheets[0].parts.at(-1).componentDefinitionId, definition.id)
+})
+
+test('long native subcircuit names survive component identity and project validation', () => {
+  const crypto = require('node:crypto')
+  const schema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8'))
+  const projectSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/project-v11.schema.json'), 'utf8'))
+  const longName = `X${'A'.repeat(8191)}`
+  assert.throws(() => parseSubcircuitLibrary(`.SUBCKT X${'A'.repeat(8192)} IN OUT\nR1 IN OUT 1k\n.ENDS`), /valid model name/)
+  const library = `.SUBCKT ${longName} IN OUT\nR1 IN OUT 1k\n.ENDS ${longName}\n`
+  const parsed = parseSubcircuitLibrary(library).subcircuits[0]
+  const provenance = { assetId: 'long-name-library', filename: 'long-name.lib', sha256: crypto.createHash('sha256').update(library).digest('hex') }
+  const definition = importedSubcircuitComponentDefinition(parsed, provenance)
+  assert.equal(definition.name, longName)
+  assert.equal(schema.properties.name.maxLength, 8192)
+  assert.equal(schema.properties.properties.items.properties.defaultValue.maxLength, 8192)
+  assert.ok(definition.id.length <= schema.properties.id.maxLength)
+  assert.match(definition.id, new RegExp(schema.properties.id.pattern))
+  assert.equal(projectSchema.$defs.part.properties.modelName.maxLength, 8192)
+  assert.equal(projectSchema.$defs.part.properties.deviceModel.maxLength, 8192)
+
+  const project = createStarterProject()
+  project.modelAssets = [{ id: provenance.assetId, filename: provenance.filename, sha256: provenance.sha256, content: library, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'p-long-x1', kind: 'subcircuit', componentDefinitionId: definition.id, ref: 'X1', value: longName, modelName: longName, modelPins: ['IN', 'OUT'], x: 800, y: 500, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  const restored = validateProject(project)
+  assert.equal(restored.parts.at(-1).modelName, longName)
+  assert.equal(restored.parts.at(-1).componentDefinitionId, definition.id)
+
+  const collisionPrefix = 'A'.repeat(64)
+  const collisionLibrary = `.SUBCKT ${collisionPrefix}X IN OUT\nR1 IN OUT 1k\n.ENDS\n.SUBCKT ${collisionPrefix}Y IN OUT\nR2 IN OUT 1k\n.ENDS`
+  const collisions = parseSubcircuitLibrary(collisionLibrary).subcircuits
+  const siblingNames = collisions.map(({ name }) => name)
+  const collisionSha = crypto.createHash('sha256').update(collisionLibrary).digest('hex')
+  const collisionProvenance = { assetId: 'collision-library', filename: 'collision.lib', sha256: collisionSha }
+  const collisionIds = collisions.map((item) => importedSubcircuitComponentDefinition(item, { ...collisionProvenance, siblingModelNames: siblingNames }).id)
+  assert.equal(new Set(collisionIds).size, 2)
+  assert.ok(collisionIds.every((id) => id.length <= schema.properties.id.maxLength && new RegExp(schema.properties.id.pattern).test(id)))
+  const prefix = `user.${collisionSha}.${'a'.repeat(48)}`
+  assert.equal(isLegacyImportedSubcircuitDefinitionId(prefix, collisions[0], { sha256: collisionSha, siblingModelNames: siblingNames }), true)
+  const oldEscapedId = `${prefix}.${encodeURIComponent(collisions[1].name.toLowerCase())}`
+  assert.equal(isLegacyImportedSubcircuitDefinitionId(oldEscapedId, collisions[1], { sha256: collisionSha, siblingModelNames: siblingNames }), true)
+  const collisionProject = createStarterProject()
+  collisionProject.modelAssets = [{ id: collisionProvenance.assetId, filename: collisionProvenance.filename, sha256: collisionSha, content: collisionLibrary, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  collisionProject.parts.push(
+    { id: 'p-old-x1', kind: 'subcircuit', componentDefinitionId: prefix, ref: 'X1', value: collisions[0].name, modelName: collisions[0].name, modelPins: ['IN', 'OUT'], x: 800, y: 500, rotation: 0 },
+    { id: 'p-old-x2', kind: 'subcircuit', componentDefinitionId: oldEscapedId, ref: 'X2', value: collisions[1].name, modelName: collisions[1].name, modelPins: ['IN', 'OUT'], x: 1000, y: 500, rotation: 0 },
+  )
+  collisionProject.sheets[0].parts = collisionProject.parts
+  const migratedCollisions = validateProject(collisionProject)
+  assert.deepEqual(migratedCollisions.parts.slice(-2).map(({ componentDefinitionId }) => componentDefinitionId), collisionIds)
 })

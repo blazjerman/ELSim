@@ -3719,6 +3719,27 @@ test('imports native ngspice subcircuit names with punctuation and adds the sele
   await expect(netlist).toContainText(/X1 .* AMP\[\]/)
 })
 
+test('long native ngspice subcircuit names import and can be placed', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const modelName = `X${'A'.repeat(8191)}`
+  const modelLibrary = `.SUBCKT ${modelName} IN OUT\nR1 IN OUT 1k\n.ENDS ${modelName}\n`
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'long-model-name.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from long-model-name\.lib/)).toBeVisible()
+  const importedModel = page.locator('.imported-model').first()
+  await expect(importedModel.locator('strong')).toHaveAttribute('title', modelName)
+  await expect.poll(() => page.locator('html').evaluate((element) => element.scrollWidth - element.ownerDocument.defaultView!.innerWidth)).toBe(0)
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => {
+    const part = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
+    return { nameLength: part?.modelName?.length, first: part?.modelName?.[0], last: part?.modelName?.at(-1), idLength: part?.componentDefinitionId?.length }
+  })).toEqual({ nameLength: 8192, first: 'X', last: 'A', idLength: expect.any(Number) })
+})
+
 test('native ngspice numeric-leading IC names and pins import and generate a valid instance', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const modelLibrary = '.SUBCKT 74HC00m 1A 1B 1Y\nE1 1Y 0 1A 1B 2\n.ENDS 74HC00m\n'

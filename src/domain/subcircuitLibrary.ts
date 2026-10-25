@@ -4,6 +4,10 @@ export const MAX_IMPORTED_IC_PINS = 256
 // characters; a 1024-character token can trap the WASM build. Keep the parser
 // bound aligned with the verified engine limit instead of the old 64-char UI cap.
 export const MAX_SPICE_NODE_NAME_LENGTH = 512
+// The pinned ngspice 47 browser runtime resolves model identifiers through
+// 8,192 characters. Bound this token at the largest length verified against
+// that runtime so malformed library text cannot create unbounded project keys.
+export const MAX_SPICE_MODEL_NAME_LENGTH = 8192
 export const MAX_SUBCIRCUIT_PARAMETER_VALUE_LENGTH = 512
 // Bound parser work separately from source length; nested expressions also
 // have the stricter existing depth limit below.
@@ -122,6 +126,7 @@ const spiceModelNameCharacter = String.raw`[A-Za-z0-9_!#$%\.\[\]-]`
 const spiceModelNameSegment = String.raw`[A-Za-z0-9_]${spiceModelNameCharacter}*`
 const spiceModelNamePattern = `${spiceModelNameSegment}(?:/${spiceModelNameSegment})*`
 export function isValidSpiceModelName(value: string, allowLeadingDigit = false): boolean {
+  if (value.length === 0 || value.length > MAX_SPICE_MODEL_NAME_LENGTH) return false
   const firstCharacter = allowLeadingDigit ? '[A-Za-z0-9_]' : '[A-Za-z_]'
   return new RegExp(`^${firstCharacter}${spiceModelNameCharacter}*(?:/${spiceModelNameSegment})*$`).test(value)
 }
