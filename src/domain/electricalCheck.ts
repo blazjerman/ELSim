@@ -98,10 +98,10 @@ function incompleteBjtSelfHeatingIssue(part: Part, modelTypes: Map<string, Impor
   if (rth && Number.isFinite(Number(rth.defaultValue)) && Number(rth.defaultValue) <= 0) missing.push('RTH>0')
   if (family === 'vbic') {
     const selft = model.parameters.find((parameter) => parameter.name.toLowerCase() === 'selft')
-    if (!selft || Number.isFinite(Number(selft.defaultValue)) && Number(selft.defaultValue) === 0) missing.unshift('SELFT=1')
+    if (!selft || Number.isFinite(Number(selft.defaultValue)) && Number(selft.defaultValue) !== 1) missing.unshift('SELFT=1')
   } else {
     const flsh = model.parameters.find((parameter) => parameter.name.toLowerCase() === 'flsh')
-    if (flsh && Number.isFinite(Number(flsh.defaultValue)) && Number(flsh.defaultValue) === 0 && !missing.includes('FLSH')) missing.unshift('FLSH=1 or 2')
+    if (flsh && Number.isFinite(Number(flsh.defaultValue)) && ![1, 2].includes(Number(flsh.defaultValue)) && !missing.includes('FLSH')) missing.unshift('FLSH=1 or 2')
   }
   if (!missing.length) return null
   const location = sheetName ? ` in ${sheetName}` : ''

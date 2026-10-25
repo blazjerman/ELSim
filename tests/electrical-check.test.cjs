@@ -116,6 +116,10 @@ test('BJT thermal-node preflight accepts HICUM and VBIC model families and check
   selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
   assert.ok(selfHeating)
   assert.match(selfHeating.detail, /RTH>0/)
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT NPN LEVEL=8 FLSH=3 RTH=100\n' }
+  selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
+  assert.ok(selfHeating)
+  assert.match(selfHeating.detail, /FLSH=1 or 2/)
   project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT PNP LEVEL=8\n' }
   assert.equal(checkCircuit(project).some((issue) => issue.id === `unsupported-bjt-thermal-node:${transistor.id}`), false)
   assert.ok(checkCircuit(project).some((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`))
@@ -124,6 +128,10 @@ test('BJT thermal-node preflight accepts HICUM and VBIC model families and check
   assert.equal(checkCircuit(project).some((issue) => issue.id === `unsupported-bjt-thermal-node:${transistor.id}`), false)
   assert.equal(checkCircuit(project).some((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`), false)
   project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT PNP LEVEL=9 SELFT=0 RTH=100\n' }
+  selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
+  assert.ok(selfHeating)
+  assert.match(selfHeating.detail, /SELFT=1/)
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.MODEL USER_BJT PNP LEVEL=9 SELFT=2 RTH=100\n' }
   selfHeating = checkCircuit(project).find((issue) => issue.id === `incomplete-bjt-self-heating:${transistor.id}`)
   assert.ok(selfHeating)
   assert.match(selfHeating.detail, /SELFT=1/)
