@@ -957,13 +957,23 @@ function isValidNgspiceParameterName(name: string): boolean {
 
 const ngspiceDigitalUPrimitive = /^(?:BUF|INV|AND|NAND|OR|NOR|XOR|NXOR)(?:3)?A?(?:\s*\(\s*\d+\s*\))?$|^(?:AOI?|OAI?|DFF|JKFF|DLTCH|SRFF|DLYLINE|LOGICEXP|PINDLY)$/i
 
+function ngspiceDigitalUPrimitiveFields(tokens: string[]): { primitive: string; fieldCount: number } | null {
+  const first = tokens[1] ?? ''
+  if (/^(?:AND|NAND|OR|NOR|XOR|NXOR)\($/i.test(first) && /^\d+$/.test(tokens[2] ?? '') && tokens[3] === ')') {
+    return { primitive: `${first}${tokens[2]})`, fieldCount: 3 }
+  }
+  const primitive = first.replace(/\s+/g, '')
+  return ngspiceDigitalUPrimitive.test(primitive) ? { primitive, fieldCount: 1 } : null
+}
+
 function isNgspiceDigitalUDevice(tokens: string[]): boolean {
-  return /^u\S*$/i.test(tokens[0] ?? '') && ngspiceDigitalUPrimitive.test(tokens[1] ?? '')
+  return /^u\S*$/i.test(tokens[0] ?? '') && ngspiceDigitalUPrimitiveFields(tokens) !== null
 }
 
 function digitalUModelDependencies(tokens: string[], owner: string, sourceLine: number): ModelDependency[] {
-  if (!isNgspiceDigitalUDevice(tokens)) return []
-  const primitive = tokens[1].replace(/\s+/g, '').toUpperCase()
+  const primitiveFields = ngspiceDigitalUPrimitiveFields(tokens)
+  if (!primitiveFields || !/^u\S*$/i.test(tokens[0] ?? '')) return []
+  const primitive = primitiveFields.primitive.toUpperCase()
   const declaredInputs = primitive.match(/^(?:AND|NAND|OR|NOR|XOR|NXOR)\((\d+)\)$/)?.[1]
   const signalPinCount = /^(?:BUF|INV)$/.test(primitive)
     ? 2
@@ -976,7 +986,7 @@ function digitalUModelDependencies(tokens: string[], owner: string, sourceLine: 
     || (/^(?:MNTYMXDLY|IO_LEVEL)$/i.test(token) && tokens[index + 1] === '=')
   ))
   const positionalEnd = optionAt < 0 ? tokens.length : optionAt
-  const firstModelAt = 4 + signalPinCount // U name, primitive, power, ground, signal pins.
+  const firstModelAt = 3 + primitiveFields.fieldCount + signalPinCount // U name, primitive, power, ground, signal pins.
   const modelNames = tokens.slice(firstModelAt, positionalEnd)
   if (modelNames.length !== 2 || !modelNames.every((token) => isValidSpiceModelName(token, true))) return []
   return modelNames.map((modelName) => ({ owner, reference: tokens[0], modelName, kind: 'device', sourceLine }))
