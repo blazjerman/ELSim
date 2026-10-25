@@ -1058,6 +1058,26 @@ test('accepts hyphens inside ngspice model and subcircuit identifiers', () => {
   assert.deepEqual(dependencies.resolved.map(({ modelName, kind }) => [modelName, kind]), [['AMP-CORE', 'subcircuit'], ['D-FAST', 'device']])
 })
 
+test('accepts native ngspice punctuation in model identifiers', () => {
+  const names = ['D!TEST', 'D#TEST', 'D$TEST', 'D%TEST', 'D[1]']
+  for (const name of names) {
+    assert.equal(isValidSpiceModelName(name), true, `${name} should be a valid native model identifier`)
+    assert.equal(isValidSpiceModelName(name, true), true, `${name} should be a valid device-model reference`)
+  }
+  assert.equal(isValidSpiceModelName('D[1'), false)
+  assert.equal(isValidSpiceModelName('D[]'), false)
+  const cards = names.map((name) => `.MODEL ${name} D(IS=1n)`).join('\n')
+  const parsed = parseSubcircuitLibrary(`${cards}\n.SUBCKT WRAPPER IN OUT\n${names.map((name, index) => `D${index + 1} IN OUT ${name}`).join('\n')}\n.ENDS WRAPPER`)
+  assert.deepEqual(parsed.models.map(({ name }) => name), names)
+  assert.deepEqual(parsed.dependencies.map(({ modelName, kind }) => [modelName, kind]), names.map((name) => [name, 'device']))
+  const report = analyzeModelDependencies([
+    { id: 'wrapper', filename: 'wrapper.lib', content: `.SUBCKT WRAPPER IN OUT\n${names.map((name, index) => `D${index + 1} IN OUT ${name}`).join('\n')}\n.ENDS WRAPPER` },
+    { id: 'devices', filename: 'devices.lib', content: cards },
+  ])
+  assert.deepEqual(report.missing, [])
+  assert.deepEqual(report.resolved.map(({ modelName }) => modelName), names)
+})
+
 test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {
   const source = [
     '.SUBCKT AMP IN OUT gain=2 RLOAD = 10k FILE="input table.txt"',

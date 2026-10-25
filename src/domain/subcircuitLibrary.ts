@@ -108,9 +108,13 @@ export function isValidSpiceNodeName(value: string): boolean {
 export function isValidSpiceSubcircuitPinName(value: string): boolean {
   return isValidSpiceNodeName(value) && value !== '0' && !/^gnd$/i.test(value)
 }
-/** Native SPICE model identifiers may contain slash (for example LF356/NS). */
+/** Native ngspice model identifiers may contain punctuation and slash (for example LF356/NS). */
+const spiceModelNameCharacter = String.raw`(?:[A-Za-z0-9_!#$%.-]|\[[A-Za-z0-9_]+\])`
+const spiceModelNameSegment = String.raw`[A-Za-z0-9_]${spiceModelNameCharacter}*`
+const spiceModelNamePattern = `${spiceModelNameSegment}(?:/${spiceModelNameSegment})*`
 export function isValidSpiceModelName(value: string, allowLeadingDigit = false): boolean {
-  return (allowLeadingDigit ? /^[A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*$/ : /^[A-Za-z_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*$/).test(value)
+  const firstCharacter = allowLeadingDigit ? '[A-Za-z0-9_]' : '[A-Za-z_]'
+  return new RegExp(`^${firstCharacter}${spiceModelNameCharacter}*(?:/${spiceModelNameSegment})*$`).test(value)
 }
 const safeTopLevel = new Set(['.title', '.model', '.param', '.func', '.csparam', '.global', '.option', '.options', '.temp', '.ic', '.nodeset', '.save', '.probe', '.meas', '.measure'])
 const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
@@ -696,11 +700,11 @@ function modelFunctionSignaturesForInspectedLibraries<T extends Pick<ModelLibrar
 }
 
 export function parseModelCard(text: string, line: LogicalLine, scope?: string, functions: ReadonlyMap<string, number> = new Map()): SpiceModelDefinition {
-  const akoHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+ako\s*:\s*([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+  const akoHeader = text.match(new RegExp(`^\\.model\\s+(${spiceModelNamePattern})\\s+ako\\s*:\\s*(${spiceModelNamePattern})\\s+([A-Za-z][A-Za-z0-9_]*)(?=\\s|\\(|$)`, 'i'))
   const modelHeader = akoHeader
-    ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+    ?? text.match(new RegExp(`^\\.model\\s+(${spiceModelNamePattern})\\s+([A-Za-z][A-Za-z0-9_]*)(?=\\s|\\(|$)`, 'i'))
   const name = modelHeader?.[1], type = akoHeader?.[3] ?? modelHeader?.[2]
-  if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
+  if (!name || !type || !isValidSpiceModelName(name, true)) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
   const rawParameterSource = withoutInlineComment(text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0))).trim()
   const parameterSource = rawParameterSource.replace(/^\s*\(/, '').replace(/\)\s*$/, '')
   const vdmosChannelFlags = type.toLowerCase() === 'vdmos' ? [...parameterSource.matchAll(/\b(pchan|nchan)\b/gi)] : []
