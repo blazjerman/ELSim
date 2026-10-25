@@ -1,5 +1,9 @@
 # ELSim performance benchmarks
 
+## Firefox live-readout update measurement (2026-10-25)
+
+The 500-component animation benchmark now avoids mounting each component's continuously changing SVG `<title>` unless that component is selected, keyboard-focused, or hovered. Visual animation remains enabled for all visible result-animated parts. On the same local Firefox/i7-12700F setup, DOM mutation records during a full-canvas scrub fell from 4,009 to 3,511 (12.4%); second-frame timing was 176 ms before and 170 ms after. Each value is a single run, and the frame timing does not establish a reliable improvement. The live-readout count stays below 10 for 501 parts and the hovered component still receives its exact current result text. Focused Firefox benchmark and capacitor-charge interaction tests pass using the existing local WASM runtime; no rebuild or Pages workflow ran. This reduces tooltip churn but does not resolve the measured full-canvas animation latency; profiling and further optimization remain open.
+
 ## Quick domain benchmark refresh (2026-10-25)
 
 `npm run benchmark:performance:quick` completed with benchmark version 15 on Node 18.20.4, Linux x64, and the documented i7-12700F host. It used two warmups and seven measured runs with `--skip-engine`; no browser, ngspice, WASM build, or Pages workflow ran. The 5,000-part chain measured 44.133 ms connectivity p95 and 61.918 ms netlist p95; the 5,000-part/4,900-wire grid measured 39.670/55.499 ms; and the 5,000-instance hierarchy measured 77.546/133.139 ms. These remain under the existing 500 ms large-circuit working budget.

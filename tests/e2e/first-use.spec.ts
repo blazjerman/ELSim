@@ -8063,6 +8063,7 @@ test('capacitor plate animation expands with charge from the solved waveform', {
   await expect.poll(async () => Number(await glow.getAttribute('data-charge-level'))).toBeGreaterThan(chargeLevelAt10Ms)
   expect(Number(await glow.getAttribute('data-charge-level'))).toBeGreaterThan(chargeLevelAt10Ms)
   expect(Math.abs(Number(await glow.getAttribute('y1')))).toBeGreaterThan(plateExtentAt10Ms)
+  await capacitor.hover()
   await expect(capacitor.locator(':scope > title')).toContainText('Q = C × V =')
 })
 
