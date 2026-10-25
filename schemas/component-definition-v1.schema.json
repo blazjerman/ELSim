@@ -136,8 +136,8 @@
         "properties": {
           "name": {
             "type": "string",
-            "pattern": "^(?!0$)(?![gG][nN][dD]$)[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,64}$",
-            "maxLength": 64
+            "pattern": "^(?!0$)(?![gG][nN][dD]$)[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$",
+            "maxLength": 512
           },
           "displayName": {
             "type": "string",

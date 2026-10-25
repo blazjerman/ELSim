@@ -268,7 +268,7 @@
         },
         "modelName": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_!#$%\\.\\[\\]-]*(?:/[A-Za-z0-9_!#$%\\.\\[\\]-]+)*$"
         },
         "modelPins": {
           "type": "array",
@@ -276,7 +276,7 @@
           "maxItems": 256,
           "items": {
             "type": "string",
-            "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,64}$"
+            "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$"
           }
         },
         "sheetParameters": {
@@ -372,12 +372,12 @@
         },
         "deviceModel": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_!#$%\\.\\[\\]-]*(?:/[A-Za-z0-9_!#$%\\.\\[\\]-]+)*$"
         },
         "substrateNode": {
           "type": "string",
-          "maxLength": 64,
-          "pattern": "^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$",
+          "maxLength": 512,
+          "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$",
           "description": "Optional labeled substrate node for an ngspice NPN or PNP transistor; omitted means ngspice's default ground substrate."
         },
         "controlSource": {
@@ -1590,7 +1590,7 @@
           "additionalProperties": false,
           "required": ["outputNode", "inputSource", "scale", "points", "startFrequency", "stopFrequency"],
           "properties": {
-            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$" },
             "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
             "scale": { "enum": ["dec", "oct", "lin"] },
             "points": { "type": "integer", "minimum": 1, "maximum": 10000 },
@@ -1603,7 +1603,7 @@
           "additionalProperties": false,
           "required": ["outputNode", "inputSource"],
           "properties": {
-            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$" },
             "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" }
           }
         },
@@ -1612,7 +1612,7 @@
           "additionalProperties": false,
           "required": ["outputNode", "mode"],
           "properties": {
-            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$" },
             "mode": { "enum": ["dc", "ac"] }
           }
         },
@@ -1621,7 +1621,7 @@
           "additionalProperties": false,
           "required": ["outputNode", "inputSource", "roots"],
           "properties": {
-            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$" },
             "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
             "roots": { "enum": ["poles", "zeros", "both"] }
           }
@@ -1631,7 +1631,7 @@
           "additionalProperties": false,
           "required": ["outputNode", "inputSource", "harmonic"],
           "properties": {
-            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$" },
             "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
             "harmonic": { "enum": [2, 3] },
             "mode": { "enum": ["harmonic", "intermodulation"] },

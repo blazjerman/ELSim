@@ -20,7 +20,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["name", "spiceOrder", "x", "y", "orientation"],
       "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 512 },
         "spiceOrder": { "type": "integer", "minimum": 1, "maximum": 256 },
         "x": { "$ref": "#/$defs/coordinate" }, "y": { "$ref": "#/$defs/coordinate" },
         "orientation": { "enum": ["R", "L", "U", "D"] }

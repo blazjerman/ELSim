@@ -1,5 +1,9 @@
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; conditionalDefaultValues?: { sourceLine: number; defaultValue: string }[]; defaultIsExpression?: boolean }
 export const MAX_IMPORTED_IC_PINS = 256
+// The pinned browser ngspice 47 runtime solves node identifiers up to 512
+// characters; a 1024-character token can trap the WASM build. Keep the parser
+// bound aligned with the verified engine limit instead of the old 64-char UI cap.
+export const MAX_SPICE_NODE_NAME_LENGTH = 512
 export type ConditionalModelParameterValue = { sourceLine: number; sourceValue: string; parsed: boolean }
 export type UnparsedModelParameter = { name: string; sourceValue: string; conditionalValues?: ConditionalModelParameterValue[] }
 export type ConditionalOnlyModelParameter = { name: string; conditionalValues: { sourceLine: number; sourceValue: string }[] }
@@ -104,7 +108,7 @@ export function isValidSpiceLibrarySectionName(value: string): boolean {
 // this separate from ELSim's stricter user-facing net-label syntax.
 const forbiddenNodeNameCharacter = /[\s=(),{}'"\u2019\x00-\x1f\x7f]/u
 export function isValidSpiceNodeName(value: string): boolean {
-  return value.length > 0 && value.length <= 64 && !forbiddenNodeNameCharacter.test(value)
+  return value.length > 0 && value.length <= MAX_SPICE_NODE_NAME_LENGTH && !forbiddenNodeNameCharacter.test(value)
 }
 export function isValidSpiceSubcircuitPinName(value: string): boolean {
   return isValidSpiceNodeName(value) && value !== '0' && !/^gnd$/i.test(value)

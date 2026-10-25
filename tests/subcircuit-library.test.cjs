@@ -328,7 +328,7 @@ test('accepts native ngspice punctuation-rich batch node names as ordered subcir
     assert.equal(isValidSpiceNodeName(name), true, name)
     assert.equal(isValidSpiceSubcircuitPinName(name), true, name)
   }
-  for (const name of ['A B', 'A=B', 'A(B', 'A)B', 'A,B', '{A}', "A'B", 'A"B', 'A’B', 'A\u0000B', 'A'.repeat(65)]) {
+  for (const name of ['A B', 'A=B', 'A(B', 'A)B', 'A,B', '{A}', "A'B", 'A"B', 'A’B', 'A\u0000B', 'A'.repeat(513)]) {
     assert.equal(isValidSpiceNodeName(name), false, JSON.stringify(name))
     assert.equal(isValidSpiceSubcircuitPinName(name), false, JSON.stringify(name))
   }
@@ -342,6 +342,16 @@ test('accepts native ngspice punctuation-rich batch node names as ordered subcir
   project.modelAssets = [{ id: 'punctuated', filename: 'punctuated.lib', content, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push({ id: 'punctuated-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: 'PUNCTUATED', modelPins: parsed.subcircuits[0].pins })
   assert.deepEqual(validateProject(project).parts.at(-1).modelPins, ['IN!', 'IN:1', 'OUT#1', 'IN[1]', 'IN%2', 'IN<3>', 'IN~4', 'IN\\5', 'IN`6', 'IN]7'])
+})
+
+test('accepts 512-character native ngspice node and subcircuit pin identifiers', () => {
+  const longPin = `N${'A'.repeat(511)}`
+  const parsed = parseSubcircuitLibrary(`.SUBCKT LONG_PIN ${longPin} OUT\nE1 OUT 0 ${longPin} 0 2\n.ENDS LONG_PIN`)
+  assert.equal(parsed.subcircuits[0].pins[0], longPin)
+  assert.equal(isValidSpiceNodeName(longPin), true)
+  assert.equal(isValidSpiceSubcircuitPinName(longPin), true)
+  assert.equal(isValidSpiceNodeName(`${longPin}A`), false)
+  assert.throws(() => parseSubcircuitLibrary(`.SUBCKT TOO_LONG ${longPin}A OUT\n.ENDS TOO_LONG`), /1–256 unique ordered pins/)
 })
 
 test('accepts ngspice polarity characters in imported subcircuit pin names', () => {

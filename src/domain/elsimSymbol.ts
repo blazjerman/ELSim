@@ -1,5 +1,5 @@
 import type { ImportedSymbol, SymbolPin, SymbolPrimitive } from './ltspiceSymbol'
-import { MAX_IMPORTED_IC_PINS } from './subcircuitLibrary'
+import { MAX_IMPORTED_IC_PINS, MAX_SPICE_NODE_NAME_LENGTH } from './subcircuitLibrary'
 import { svgPathBounds } from './svgPathBounds'
 
 const MAX_TEXT = 1024 * 1024
@@ -87,7 +87,7 @@ export function parseElsimSymbol(source: string, filename = 'Custom symbol.elsym
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${filename}: pin ${index + 1} must be an object.`)
     const item = value as Record<string, unknown>
     onlyKeys(item, ['name', 'spiceOrder', 'x', 'y', 'orientation'], filename, `pin ${index + 1}`)
-    const pinName = text(item.name, filename, `pin ${index + 1} name`, 64).trim()
+    const pinName = text(item.name, filename, `pin ${index + 1} name`, MAX_SPICE_NODE_NAME_LENGTH).trim()
     if (!pinName || pinNames.has(pinName.toLowerCase())) throw new Error(`${filename}: pin names must be non-empty and unique.`)
     if (!Number.isInteger(item.spiceOrder) || (item.spiceOrder as number) < 1 || (item.spiceOrder as number) > MAX_PINS || pinOrders.has(item.spiceOrder as number)) throw new Error(`${filename}: pin SpiceOrder values must be unique integers from 1 to ${MAX_PINS}.`)
     if (item.orientation !== 'R' && item.orientation !== 'L' && item.orientation !== 'U' && item.orientation !== 'D') throw new Error(`${filename}: pin ${pinName} orientation must be R, L, U, or D.`)
@@ -127,7 +127,7 @@ export function createDefaultElsimSymbol(name: string, pinNames: readonly string
   if (!symbolName || symbolName.length > 80 || /[\u0000-\u001f]/.test(symbolName)) throw new Error('A symbol name must contain 1–80 printable characters.')
   if (!pinNames.length || pinNames.length > MAX_PINS) throw new Error(`A symbol needs 1–${MAX_PINS} ordered pins.`)
   const normalizedPins = pinNames.map((pin) => pin.trim())
-  if (normalizedPins.some((pin) => !pin || pin.length > 64) || new Set(normalizedPins.map((pin) => pin.toLowerCase())).size !== normalizedPins.length) throw new Error('Model pins must have unique names of 1–64 characters.')
+  if (normalizedPins.some((pin) => !pin || pin.length > MAX_SPICE_NODE_NAME_LENGTH) || new Set(normalizedPins.map((pin) => pin.toLowerCase())).size !== normalizedPins.length) throw new Error(`Model pins must have unique names of 1–${MAX_SPICE_NODE_NAME_LENGTH} characters.`)
   const sides = pinSides ? [...pinSides] : defaultElsimPinSides(normalizedPins)
   if (sides.length !== normalizedPins.length || sides.some((side) => !['left', 'right', 'top', 'bottom'].includes(side))) {
     throw new Error('Choose a side for every model pin: left, right, top, or bottom.')

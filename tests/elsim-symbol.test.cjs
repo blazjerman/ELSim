@@ -174,3 +174,11 @@ test('native symbol assets validate and persist on a placed imported subcircuit'
   assert.deepEqual(restored.parts.at(-1).symbolPinOffsets, symbol.pins.map(({ x, y }) => [x, y]))
   assert.equal(restored.symbolAssets[0].content, symbolText)
 })
+
+test('generated native symbols preserve long ngspice pin identifiers', () => {
+  const longPin = `N${'A'.repeat(511)}`
+  const source = createDefaultElsimSymbol('Long-pin amplifier', [longPin, 'OUT'])
+  const symbol = parseElsimSymbol(source)
+  assert.equal(symbol.pins[0].name, longPin)
+  assert.equal(symbol.pins[1].name, 'OUT')
+})
