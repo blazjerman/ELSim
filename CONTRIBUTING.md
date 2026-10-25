@@ -6,7 +6,7 @@ Thanks for contributing. Please open an issue before starting a large feature so
 
 Use the shortest check that covers the change; don't run the full browser suite for every edit.
 
-- Domain, netlist, schema, or migration change: `npm test`.
+- Domain, netlist, schema, or migration change: run the affected suite while iterating, for example `ELSIM_TEST_FILES=netlist,subcircuit-library npm test`; run `npm test` for the full unit suite at a milestone.
 - UI-only change: run the relevant focused Firefox test, for example `npm run test:e2e:focus:firefox -- --grep "test title"`. If there is no focused test for the change, use `npm run test:e2e:ui`.
 - Solver-backed workflow change: run the focused Firefox test with the local engine already built. The focused command reuses the running Vite server when available.
 - Run `npm run typecheck` when changing TypeScript types or code shared across modules; run `npm run build` at a milestone or before a release check, not after every small change.

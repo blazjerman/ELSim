@@ -8041,6 +8041,56 @@ test('explicit imported subcircuit override replaces its sampled default in the 
   await expect(netlist).toContainText('.SUBCKT ELSIM_OVERRIDE_p_x1 IN OUT PARAMS: RVAL=2k')
 })
 
+test('documented ngspice word-form parameter operators solve through the browser engine', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createStarterProject()
+  const content = [
+    '.PARAM GLOBAL={1 and 1}',
+    '.FUNC LOGIC(x) {not x or 0}',
+    '.SUBCKT WORD_OP IN OUT PARAMS: GAIN={5 div 2} ENABLE={GLOBAL and 1} FLAG={LOGIC(0)} ODD={5 mod 2}',
+    'R1 IN OUT {1k*GAIN*ENABLE*FLAG*ODD}',
+    '.ENDS WORD_OP',
+  ].join('\n')
+  project.parts = [
+    { id: 'p-v1', kind: 'source', ref: 'V1', value: '5', x: 400, y: 400, rotation: 90 },
+    { id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: '', modelName: 'WORD_OP', modelPins: ['IN', 'OUT'], modelParameters: { GAIN: '{9 div 3}' }, x: 600, y: 400, rotation: 0 },
+    { id: 'p-rload', kind: 'resistor', ref: 'RLOAD', value: '2k', x: 800, y: 400, rotation: 0 },
+  ] as typeof project.parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = []
+  for (const [ref, names] of [['V1', ['IN', '0']], ['X1', ['IN', 'OUT']], ['RLOAD', ['OUT', '0']]] as const) {
+    const part = project.parts.find((candidate) => candidate.ref === ref)!
+    for (const [index, pin] of componentPins(part).entries()) project.netLabels.push({ id: `label-${ref}-${index}`, name: names[index], x: pin.x, y: pin.y, visible: true })
+  }
+  project.modelAssets = [{ id: 'word-ops', filename: 'word-ops.lib', content, sha256: createHash('sha256').update(content).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { ...project.plotSettings, selectedTraceIds: ['v(out)'] }
+  const rootSheet = project.sheets.find((sheet) => sheet.id === project.rootSheetId)!
+  rootSheet.parts = project.parts
+  rootSheet.wires = project.wires
+  rootSheet.junctions = project.junctions
+  rootSheet.netLabels = project.netLabels
+  const validated = validateProject(project)
+
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(OUT)')
+  const outputRow = page.locator('.plot-window').last().locator('.op-table').getByRole('row', { name: /V\(out\)/i })
+  await expect(outputRow).toContainText('2.000000')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText('.PARAM GLOBAL={1 && 1}')
+  await expect(netlist).toContainText('.FUNC LOGIC(x) {! x || 0}')
+  await expect(netlist).toContainText('.SUBCKT WORD_OP IN OUT PARAMS: GAIN={5 \\ 2} ENABLE={GLOBAL && 1} FLAG={LOGIC(0)} ODD={5 % 2}')
+  await expect(netlist).toContainText('X1 IN OUT WORD_OP PARAMS: GAIN={9 \\ 3}')
+  expect(content).toContain('5 div 2')
+})
+
 test('imported LTspice .ic node and inductor values run through ngspice', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

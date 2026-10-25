@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit, withoutInlineComment } from '../domain/subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit, translateNgspiceExpressionOperators, withoutInlineComment } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
@@ -208,7 +208,7 @@ function generateSheetLibrary(project: Project, parentSheetId: string): { text: 
     if (sheet.ports.length && diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length === errorsBeforeSheet) {
       const name = sheetModelName(sheet.id)
       const ports = sheet.ports.map((port) => port.name).join(' ')
-      const parameters = (sheet.parameters ?? []).map((parameter) => `${parameter.name}=${parameter.defaultValue}`)
+      const parameters = (sheet.parameters ?? []).map((parameter) => `${parameter.name}=${translateNgspiceExpressionOperators(parameter.defaultValue)}`)
       definitions.set(sheet.id, `.SUBCKT ${name} ${ports}${parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}${body.length ? `\n${body.join('\n')}` : ''}\n.ENDS ${name}`)
     }
     visiting.delete(sheetId)
@@ -1599,7 +1599,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const nodes = part.modelPins.map((_, index) => pinNet(connectivity, part, index))
       const parameters = definition.parameters.flatMap((parameter) => {
         const override = Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1]
-        return override === undefined ? [] : [`${parameter.name}=${override}`]
+        return override === undefined ? [] : [`${parameter.name}=${translateNgspiceExpressionOperators(override)}`]
       })
       const specializedModelName = stochasticModelNameByPart.get(part.id)
       const multiplier = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''

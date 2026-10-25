@@ -4,8 +4,28 @@ const os = require('node:os')
 const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
-const output = mkdtempSync(path.join(os.tmpdir(), 'elsim-netlist-tests-'))
 const tsc = path.resolve(path.dirname(require.resolve('typescript')), '../bin/tsc')
+const testFiles = [
+  'accessibility-contrast.test.cjs', 'plot-panel-geometry.test.cjs', 'part-ui-state.test.cjs',
+  'component-definitions.test.cjs', 'component-value.test.cjs', 'engine-protocol.test.cjs',
+  'runtime-availability.test.cjs', 'netlist.test.cjs', 'behavioral-expression.test.cjs', 'raw.test.cjs',
+  'probe.test.cjs', 'project-archive.test.cjs', 'project-autosave.test.cjs', 'subcircuit-library.test.cjs',
+  'ltspice-symbol.test.cjs', 'elsim-symbol.test.cjs', 'ltspice-schematic.test.cjs', 'ltspice-export.test.cjs',
+  'result-control.test.cjs', 'parameter-sweep.test.cjs', 'measurements.test.cjs', 'diagnostics.test.cjs',
+  'wire-flow.test.cjs', 'wire-animation.test.cjs', 'simulation-cursor.test.cjs', 'analysis-cursor.test.cjs',
+  'time-axis.test.cjs', 'geometry-edit.test.cjs', 'part-clipboard.test.cjs', 'electrical-check.test.cjs',
+  'hierarchy.test.cjs', 'example-path.test.cjs', 'ngspice-wasm-parity.test.mjs', 'plot.test.cjs',
+  'fourier.test.cjs', 'simulation-presets.test.cjs', 'ngspice-release-check.test.mjs',
+  'ngspice-link-inventory.test.mjs', 'ngspice-xspice-config.test.mjs', 'desktop-preflight.test.mjs',
+]
+const requestedTestFiles = process.env.ELSIM_TEST_FILES?.split(',').map((file) => file.trim()).filter(Boolean)
+const selectedTestFiles = requestedTestFiles?.length
+  ? testFiles.filter((file) => requestedTestFiles.includes(file) || requestedTestFiles.includes(file.replace(/\.test\.(?:cjs|mjs)$/, '')))
+  : testFiles
+if (requestedTestFiles?.some((file) => !testFiles.includes(file) && !testFiles.some((candidate) => candidate.replace(/\.test\.(?:cjs|mjs)$/, '') === file))) {
+  throw new Error(`Unknown ELSIM_TEST_FILES entry. Choose one of: ${testFiles.join(', ')}`)
+}
+const output = mkdtempSync(path.join(os.tmpdir(), 'elsim-netlist-tests-'))
 
 try {
   const compile = spawnSync(process.execPath, [
@@ -74,7 +94,7 @@ try {
   if (compile.status !== 0) {
     process.exitCode = compile.status ?? 1
   } else {
-    const tests = spawnSync(process.execPath, ['--test', '--test-reporter=spec', path.join(__dirname, 'accessibility-contrast.test.cjs'), path.join(__dirname, 'plot-panel-geometry.test.cjs'), path.join(__dirname, 'part-ui-state.test.cjs'), path.join(__dirname, 'component-definitions.test.cjs'), path.join(__dirname, 'component-value.test.cjs'), path.join(__dirname, 'engine-protocol.test.cjs'), path.join(__dirname, 'runtime-availability.test.cjs'), path.join(__dirname, 'netlist.test.cjs'), path.join(__dirname, 'behavioral-expression.test.cjs'), path.join(__dirname, 'raw.test.cjs'), path.join(__dirname, 'probe.test.cjs'), path.join(__dirname, 'project-archive.test.cjs'), path.join(__dirname, 'project-autosave.test.cjs'), path.join(__dirname, 'subcircuit-library.test.cjs'), path.join(__dirname, 'ltspice-symbol.test.cjs'), path.join(__dirname, 'elsim-symbol.test.cjs'), path.join(__dirname, 'ltspice-schematic.test.cjs'), path.join(__dirname, 'ltspice-export.test.cjs'), path.join(__dirname, 'result-control.test.cjs'), path.join(__dirname, 'parameter-sweep.test.cjs'), path.join(__dirname, 'measurements.test.cjs'), path.join(__dirname, 'diagnostics.test.cjs'), path.join(__dirname, 'wire-flow.test.cjs'), path.join(__dirname, 'wire-animation.test.cjs'), path.join(__dirname, 'simulation-cursor.test.cjs'), path.join(__dirname, 'analysis-cursor.test.cjs'), path.join(__dirname, 'time-axis.test.cjs'), path.join(__dirname, 'geometry-edit.test.cjs'), path.join(__dirname, 'part-clipboard.test.cjs'), path.join(__dirname, 'electrical-check.test.cjs'), path.join(__dirname, 'hierarchy.test.cjs'), path.join(__dirname, 'example-path.test.cjs'), path.join(__dirname, 'ngspice-wasm-parity.test.mjs'), path.join(__dirname, 'plot.test.cjs'), path.join(__dirname, 'fourier.test.cjs'), path.join(__dirname, 'simulation-presets.test.cjs'), path.join(__dirname, 'ngspice-release-check.test.mjs'), path.join(__dirname, 'ngspice-link-inventory.test.mjs'), path.join(__dirname, 'ngspice-xspice-config.test.mjs'), path.join(__dirname, 'desktop-preflight.test.mjs')], {
+    const tests = spawnSync(process.execPath, ['--test', '--test-reporter=spec', ...selectedTestFiles.map((file) => path.join(__dirname, file))], {
       cwd: root,
       env: { ...process.env, ELSIM_TEST_BUILD: output, NODE_PATH: [path.join(root, 'node_modules'), process.env.NODE_PATH].filter(Boolean).join(path.delimiter) },
       stdio: 'inherit',

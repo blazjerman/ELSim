@@ -33,8 +33,8 @@ test('inline comments do not begin inside escaped ngspice string literals', () =
 })
 
 test('accepts bounded ngspice parameter operators and expression functions', () => {
-  for (const value of ['1k', '1mil', '1a', '10kOhm', '"input table.csv"', '"C:/models/my table.txt"', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{var(foo)}', '{var("foo")}', '{vec(pi)}', '{vec("pi")}', '{vec("v(out)") + 1}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
-  for (const value of ['"unterminated', '"two"quotes"', '"line\nbreak"', '"' + 'A'.repeat(63) + '"', '{"foo"}', '{sqrt("1")}', '{var()}', '{var(foo, bar)}', '{vec(foo, bar)}', '{vec("pi", 1)}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', '{RLOAD and 1}', '{not RLOAD}', '{RLOAD mod 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+  for (const value of ['1k', '1mil', '1a', '10kOhm', '"input table.csv"', '"C:/models/my table.txt"', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{var(foo)}', '{var("foo")}', '{vec(pi)}', '{vec("pi")}', '{vec("v(out)") + 1}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{1 and 1}', '{1 or 0}', '{not 0}', '{5 div 2}', '{5 mod 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
+  for (const value of ['"unterminated', '"two"quotes"', '"line\nbreak"', '"' + 'A'.repeat(63) + '"', '{"foo"}', '{sqrt("1")}', '{var()}', '{var(foo, bar)}', '{vec(foo, bar)}', '{vec("pi", 1)}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
   // ngspice exposes u/u2/uramp in behavioral-source expressions, but the
   // bundled runtime does not accept them in subcircuit parameter defaults.
   for (const value of ['{u(1)}', '{u2(0.5)}', '{uramp(1)}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
@@ -76,15 +76,28 @@ test('parses native ngspice conditional expressions in subcircuit parameter defa
   ])
 })
 
-test('explains ngspice word-form operators rejected by the bundled runtime', () => {
-  const replacements = { not: '!', and: '&&', or: '||', div: '\\', mod: '%' }
-  for (const [operator, replacement] of Object.entries(replacements)) {
-    assert.throws(
-      () => parseSubcircuitLibrary(`.SUBCKT UNSUPPORTED IN OUT PARAMS: VALUE={1 ${operator} 1}\n.ENDS UNSUPPORTED`),
-      (error) => error.message.includes(`Line 1: parameter VALUE uses the ngspice word-form operator "${operator}"`)
-        && error.message.endsWith(`Replace it with "${replacement}".`),
-    )
-  }
+test('translates documented ngspice word-form operators in imported expressions', () => {
+  const source = [
+    '.PARAM GLOBAL={1 and 1}',
+    '.FUNC LOGIC(x) {not x or 0}',
+    '.MODEL DFAST D(IS={1 mod 2})',
+    '.SUBCKT LOGIC_CELL IN OUT PARAMS: ENABLE={5 div 2}',
+    'B1 OUT 0 V={ENABLE and LOGIC(0)}',
+    '.IF (ENABLE or not 0)',
+    'R1 OUT 0 {ENABLE mod 2}',
+    '.ENDIF',
+    '.ENDS LOGIC_CELL',
+  ].join('\n')
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'ENABLE', defaultValue: '{5 div 2}' }])
+  assert.match(parsed.modelText, /\.PARAM GLOBAL=\{1 && 1\}/)
+  assert.match(parsed.modelText, /\.FUNC LOGIC\(x\) \{! x \|\| 0\}/)
+  assert.match(parsed.modelText, /\.MODEL DFAST D\(IS=\{1 % 2\}\)/)
+  assert.match(parsed.modelText, /PARAMS: ENABLE=\{5 \\ 2\}/)
+  assert.match(parsed.modelText, /B1 OUT 0 V=\{ENABLE && LOGIC\(0\)\}/)
+  assert.match(parsed.modelText, /\.IF \(ENABLE \|\| ! 0\)/)
+  assert.match(parsed.modelText, /R1 OUT 0 \{ENABLE % 2\}/)
+  assert.match(source, /\.PARAM GLOBAL=\{1 and 1\}/)
   const quoted = parseSubcircuitLibrary('.SUBCKT FILE_SOURCE IN OUT PARAMS: NAME="model and data.txt"\n.ENDS FILE_SOURCE')
   assert.equal(quoted.subcircuits[0].parameters[0].defaultValue, '"model and data.txt"')
 })
@@ -113,13 +126,14 @@ test('validates native ngspice Monte Carlo functions without evaluating them', (
 })
 
 test('specializes only the overridden stochastic subcircuit default and preserves source lines', () => {
-  const source = '* random model\n.SUBCKT MC IN OUT PARAMS: RVAL={gauss(1k, 0.1, 3)}\nR1 IN OUT {RVAL}\n.ENDS MC\n'
+  const source = '* random model\n.SUBCKT MC IN OUT PARAMS: RVAL={gauss(1k, 0.1, 3)} DIVISOR={5 div 2}\n.FUNC LOGIC(x) {not x or 0}\nR1 IN OUT {RVAL * DIVISOR * LOGIC(0)}\n.ENDS MC\n'
   const definition = parseSubcircuitLibrary(source).subcircuits[0]
   const specialized = specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', { RVAL: '2k' })
   assert.deepEqual(specialized, [
-    { text: '.SUBCKT ELSIM_OVERRIDE_X1 IN OUT PARAMS: RVAL=2k', sourceLine: 2 },
-    { text: 'R1 IN OUT {RVAL}', sourceLine: 3 },
-    { text: '.ENDS ELSIM_OVERRIDE_X1', sourceLine: 4 },
+    { text: '.SUBCKT ELSIM_OVERRIDE_X1 IN OUT PARAMS: RVAL=2k DIVISOR={5 \\ 2}', sourceLine: 2 },
+    { text: '.FUNC LOGIC(x) {! x || 0}', sourceLine: 3 },
+    { text: 'R1 IN OUT {RVAL * DIVISOR * LOGIC(0)}', sourceLine: 4 },
+    { text: '.ENDS ELSIM_OVERRIDE_X1', sourceLine: 5 },
   ])
   assert.equal(specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', {}), null)
   assert.equal(specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', { OTHER: '2k' }), null)

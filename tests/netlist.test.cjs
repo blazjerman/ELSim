@@ -3373,6 +3373,26 @@ test('imported subcircuits preserve declared .FUNC expressions in validated para
   assert.doesNotMatch(unsafeNetlist.text, /^X1 .*\.end/m)
 })
 
+test('normalizes imported ngspice word-form operators without changing source assets', () => {
+  const project = createStarterProject()
+  const content = [
+    '.PARAM GLOBAL={1 and 1}',
+    '.FUNC LOGIC(x) {not x or 0}',
+    '.SUBCKT WORD_OP IN OUT PARAMS: GAIN={5 div 2} ENABLE={GLOBAL and 1} FLAG={LOGIC(0)} ODD={5 mod 2}',
+    'R1 IN OUT {1k*GAIN*ENABLE*FLAG*ODD}',
+    '.ENDS WORD_OP',
+  ].join('\n')
+  project.modelAssets = [{ id: 'word-ops', filename: 'word-ops.lib', content, sha256: createHash('sha256').update(content).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: '', modelName: 'WORD_OP', modelPins: ['IN', 'OUT'], modelParameters: { GAIN: '{9 div 3}' }, x: 760, y: 350, rotation: 0 })
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^\.PARAM GLOBAL=\{1 && 1\}$/m)
+  assert.match(artifact.text, /^\.FUNC LOGIC\(x\) \{! x \|\| 0\}$/m)
+  assert.match(artifact.text, /^\.SUBCKT WORD_OP IN OUT PARAMS: GAIN=\{5 \\ 2\} ENABLE=\{GLOBAL && 1\} FLAG=\{LOGIC\(0\)\} ODD=\{5 % 2\}$/m)
+  assert.match(artifact.text, /^X1 .* WORD_OP PARAMS: GAIN=\{9 \\ 3\}$/m)
+  assert.equal(project.modelAssets[0].content, content)
+})
+
 test('imported ICs retain and override bracketed ngspice formal parameters', () => {
   const project = createStarterProject()
   const content = 'Bracketed formal parameter fixture\n.SUBCKT GAIN_CELL IN OUT GAIN[1]=2\nE1 OUT 0 IN 0 {GAIN[1]}\n.ENDS GAIN_CELL\n'

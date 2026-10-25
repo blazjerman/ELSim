@@ -70,7 +70,7 @@ export function specializeStochasticSubcircuit(
 
   const parameters = definition.parameters.map((parameter) => {
     const override = Object.entries(overrides).find(([key]) => key.toLowerCase() === parameter.name.toLowerCase())?.[1]
-    return `${parameter.name}=${override ?? parameter.defaultValue}`
+    return `${parameter.name}=${translateNgspiceExpressionOperators(override ?? parameter.defaultValue)}`
   })
   const physical = source.replace(/^\uFEFF/, '').split(/\r?\n/)
   const header = lines[headerIndex]
@@ -79,7 +79,7 @@ export function specializeStochasticSubcircuit(
     text: `.SUBCKT ${name} ${definition.pins.join(' ')}${parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`,
     sourceLine: header.start,
   }]
-  for (let line = header.end + 1; line < closing.start; line += 1) records.push({ text: physical[line - 1], sourceLine: line })
+  for (let line = header.end + 1; line < closing.start; line += 1) records.push({ text: translateLibraryRecordOperators(physical[line - 1]), sourceLine: line })
   const endText = physical[closing.start - 1]
   const endMatch = endText.match(/^(\s*\.ends\s+)([^\s*;]+)(.*)$/i)
   records.push({
@@ -433,17 +433,90 @@ function isLibrarySectionDollar(line: string, dollarIndex: number): boolean {
   return count < 2
 }
 
-function unsupportedParameterWordOperator(value: string): { operator: string; replacement: string } | undefined {
+const verboseNgspiceOperators: Readonly<Record<string, string>> = { not: '!', and: '&&', or: '||', div: '\\', mod: '%' }
+
+function translateVerboseOperatorsInExpression(expression: string): string {
+  let result = ''
+  for (let index = 0; index < expression.length;) {
+    if (expression[index] === '"') {
+      const start = index++
+      while (index < expression.length) {
+        if (expression[index] === '\\' && index + 1 < expression.length) index += 2
+        else if (expression[index++] === '"') break
+      }
+      result += expression.slice(start, index)
+      continue
+    }
+    if (/[A-Za-z_]/.test(expression[index])) {
+      const start = index++
+      while (index < expression.length && /[A-Za-z0-9_!#$%\[\].]/.test(expression[index])) index += 1
+      const token = expression.slice(start, index)
+      result += verboseNgspiceOperators[token.toLowerCase()] ?? token
+      continue
+    }
+    result += expression[index++]
+  }
+  return result
+}
+
+/** Translate documented ngspice expression operators rejected by the browser ngspice 47 build. */
+export function translateNgspiceExpressionOperators(value: string): string {
   const trimmed = value.trim()
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) return undefined
-  const expression = trimmed.startsWith("'") && trimmed.endsWith("'")
-    ? trimmed.slice(1, -1)
-    : trimmed.replace(/^\{(.*)\}$/, '$1')
-  const match = expression.match(/\b(not|and|or|div|mod)\b/i)
-  if (!match) return undefined
-  const operator = match[1].toLowerCase()
-  const replacements: Record<string, string> = { not: '!', and: '&&', or: '||', div: '\\', mod: '%' }
-  return { operator, replacement: replacements[operator] }
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) return value
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) return value.replace(trimmed, `{${translateVerboseOperatorsInExpression(trimmed.slice(1, -1))}}`)
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) return value.replace(trimmed, `'${translateVerboseOperatorsInExpression(trimmed.slice(1, -1))}'`)
+  return value
+}
+
+function translateLibraryRecordOperators(line: string): string {
+  const code = withoutInlineComment(line)
+  if (!code || /^\s*\.title\b/i.test(code)) return line
+  const codeStart = line.indexOf(code)
+  if (codeStart < 0) return line
+  let translated = ''
+  for (let index = 0; index < code.length;) {
+    if (code[index] === '"') {
+      const start = index++
+      while (index < code.length) {
+        if (code[index] === '\\' && index + 1 < code.length) index += 2
+        else if (code[index++] === '"') break
+      }
+      translated += code.slice(start, index)
+      continue
+    }
+    if (code[index] === '{') {
+      const start = index++
+      let depth = 1
+      let quote = ''
+      while (index < code.length && depth > 0) {
+        const character = code[index++]
+        if (quote) {
+          if (character === '\\' && index < code.length) index += 1
+          else if (character === quote) quote = ''
+        } else if (character === '"') quote = character
+        else if (character === '{') depth += 1
+        else if (character === '}') depth -= 1
+      }
+      const region = code.slice(start, index)
+      translated += depth === 0 ? translateNgspiceExpressionOperators(region) : region
+      continue
+    }
+    if (code[index] === "'") {
+      const start = index++
+      while (index < code.length && code[index] !== "'") index += 1
+      if (index < code.length) index += 1
+      translated += translateNgspiceExpressionOperators(code.slice(start, index))
+      continue
+    }
+    translated += code[index++]
+  }
+  const command = /^\s*\.(?:if|elseif)\b/i.exec(code)
+  if (command) {
+    const open = translated.indexOf('(', command[0].length)
+    const close = translated.lastIndexOf(')')
+    if (open >= 0 && close > open) translated = `${translated.slice(0, open + 1)}${translateVerboseOperatorsInExpression(translated.slice(open + 1, close))}${translated.slice(close)}`
+  }
+  return `${line.slice(0, codeStart)}${translated}${line.slice(codeStart + code.length)}`
 }
 
 function parseParameterDefaults(source: string, line: number, functions: ReadonlyMap<string, number>): SubcircuitParameter[] {
@@ -457,11 +530,7 @@ function parseParameterDefaults(source: string, line: number, functions: Readonl
     if (!isValidNgspiceSubcircuitParameterName(match[1])) throw new Error(`Line ${line}: subcircuit parameter name ${match[1]} is malformed.`)
     if (['__proto__', 'constructor', 'prototype'].includes(match[1].toLowerCase())) throw new Error(`Line ${line}: parameter name ${match[1]} is reserved.`)
     if (result.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) throw new Error(`Line ${line}: parameter ${match[1]} is declared more than once.`)
-    if (!isSafeSubcircuitParameterValue(match[2], functions)) {
-      const wordOperator = unsupportedParameterWordOperator(match[2])
-      if (wordOperator) throw new Error(`Line ${line}: parameter ${match[1]} uses the ngspice word-form operator "${wordOperator.operator}", which the browser ngspice 47 runtime does not evaluate in parameter expressions. Replace it with "${wordOperator.replacement}".`)
-      throw new Error(`Line ${line}: parameter ${match[1]} has an unsupported default value.`)
-    }
+    if (!isSafeSubcircuitParameterValue(match[2], functions)) throw new Error(`Line ${line}: parameter ${match[1]} has an unsupported default value.`)
     result.push({ name: match[1], defaultValue: match[2] })
     offset = assignment.lastIndex
   }
@@ -975,7 +1044,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
     const match = tokenPattern.exec(expression)
     if (!match) return false
     offset = tokenPattern.lastIndex
-    if (!/^\s+$/.test(match[0])) tokens.push(match[0])
+    if (!/^\s+$/.test(match[0])) tokens.push(verboseNgspiceOperators[match[0].toLowerCase()] ?? match[0])
     if (tokens.length > 64) return false
   }
   let index = 0
@@ -1389,7 +1458,7 @@ function parseSubcircuitLibraryFromInspection(
   const ranges = [...modelLines.map(({ start, end }) => [start, end] as const), ...subcircuits.map(({ startLine, endLine }) => [startLine, endLine] as const)]
   const retained = new Set<number>()
   for (const [start, end] of ranges) for (let line = start; line <= end; line += 1) retained.add(line)
-  const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: physical[sourceLine - 1] }))
+  const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: translateLibraryRecordOperators(physical[sourceLine - 1]) }))
   const modelText = modelRecords.map(({ text }) => text).join('\n')
   return { subcircuits, models, functions, dependencies, includes, modelText, modelRecords, topLevelParameterRecords }
 }
