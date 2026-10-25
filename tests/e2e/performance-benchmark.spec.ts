@@ -177,6 +177,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   expect(fittedComponentCount).toBe(501)
   const animatedResistors = page.locator('svg.schematic .circuit-part[data-animation-kind="resistor-power"]')
   await expect(animatedResistors).toHaveCount(500)
+  await expect(page.locator('svg.schematic [data-resistor-power-glow]')).toHaveCount(500)
   const lastResistor = page.locator('svg.schematic .circuit-part[data-part-id="animation-bench-r-500"]')
   await expect.poll(async () => Number(await lastResistor.locator('[data-resistor-power-glow]').getAttribute('opacity'))).toBeGreaterThan(0)
   expect(await lastResistor.locator('[data-live-current-polarity]').evaluateAll((nodes) => nodes.map((node) => [node.getAttribute('data-pin'), node.getAttribute('data-polarity'), node.getAttribute('opacity')]))).toEqual([['1', '−', '1'], ['2', '+', '1']])
@@ -195,8 +196,8 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   expect(lastResistorGlowAtEnd).not.toBe(lastResistorGlowAtHome)
   const fullCanvasGlowValuesAfter = await page.locator('[data-resistor-power-glow]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('opacity')))
   const changedGlowCount = fullCanvasGlowValuesAfter.filter((value, index) => value !== fullCanvasGlowValuesBefore[index]).length
-  expect(changedGlowCount).toBeGreaterThan(0)
-  const glowValuesAfterScrub = await page.locator('[data-resistor-power-glow]').evaluateAll((nodes) => [...new Set(nodes.map((node) => node.getAttribute('opacity')))])
+  expect(changedGlowCount).toBe(500)
+  const glowValueCountAfterScrub = await page.locator('[data-resistor-power-glow]').evaluateAll((nodes) => new Set(nodes.map((node) => node.getAttribute('opacity'))).size)
   const fullCanvasScrubMs = performance.now() - fullCanvasStarted
   const fullCanvasMutations = await stopDomMutationCapture(page)
   const fullCanvasFrames = await stopScrubFrameCapture(page)
@@ -213,7 +214,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
     await expect(part.locator(':scope > title')).not.toHaveText(resistorReadoutsAtEnd.get(id) ?? '')
   }
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v7', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, changedGlowCount, glowValuesAfterScrub, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasFrames }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v7', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), changedGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasFrames }, null, 2))
 })
 
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
