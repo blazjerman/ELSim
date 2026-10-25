@@ -2536,13 +2536,15 @@ test('native passive and transmission-line model references resolve across impor
     'L1 IN OUT LMOD',
     'O1 IN 0 OUT 0 LTRAMOD',
     'U1 IN OUT 0 URCMOD L=50u',
+    'U2 AND(2) $G_DPWR $G_DGND IN OUT MISSING_TIMING MISSING_IO',
     '.ENDS NATIVE_NETWORK',
   ].join('\n')
   const input = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
   await input.setInputFiles({ name: 'native-devices.lib', mimeType: 'text/plain', buffer: Buffer.from(deviceFile) })
   const report = page.getByRole('region', { name: 'Model dependency report' })
   const missing = report.getByRole('list', { name: 'Missing model definitions' })
-  for (const model of ['RMOD', 'CMOD', 'LMOD', 'LTRAMOD', 'URCMOD']) await expect(missing).toContainText(model)
+  for (const model of ['RMOD', 'CMOD', 'LMOD', 'LTRAMOD', 'URCMOD', 'MISSING_TIMING']) await expect(missing).toContainText(model)
+  await expect(missing).not.toContainText('MISSING_IO')
 
   await report.getByRole('button', { name: 'Import model library' }).click()
   await input.setInputFiles({
@@ -2551,7 +2553,8 @@ test('native passive and transmission-line model references resolve across impor
       '.MODEL LTRAMOD LTRA(R=1 L=1 G=0 C=1 LEN=1)', '.MODEL URCMOD URC(CPERL=100p RPERL=100k FMAX=10G)',
     ].join('\n')),
   })
-  await expect(report).toHaveCount(0)
+  await expect(report).toContainText('MISSING_TIMING')
+  await expect(report).not.toContainText('MISSING_IO')
 })
 
 test('standalone resistor capacitor and inductor can select imported native models', { tag: '@ui-smoke' }, async ({ page }) => {
