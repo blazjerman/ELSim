@@ -1,0 +1,2195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsim.dev/schemas/project-v10.schema.json",
+  "title": "ELSim project v10",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "name",
+    "updatedAt",
+    "parts",
+    "wires",
+    "junctions",
+    "netLabels",
+    "view",
+    "simulation",
+    "rootSheetId",
+    "sheets",
+    "activeSheetId"
+  ],
+  "properties": {
+    "format": {
+      "const": "elsim-project"
+    },
+    "version": {
+      "const": 10
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "parts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/part"
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/wire"
+      }
+    },
+    "junctions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/point"
+      }
+    },
+    "netLabels": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/netLabel"
+      }
+    },
+    "view": {
+      "$ref": "#/$defs/view"
+    },
+    "simulation": {
+      "$ref": "#/$defs/simulation"
+    },
+    "plotSettings": {
+      "$ref": "#/$defs/plotSettings"
+    },
+    "modelAssets": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/modelAsset"
+      }
+    },
+    "symbolAssets": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/symbolAsset"
+      }
+    },
+    "importedSchematicSource": {
+      "$ref": "#/$defs/ltspiceSchematicSource"
+    },
+    "importedChildSchematicSources": {
+      "type": "array",
+      "maxItems": 63,
+      "items": {
+        "$ref": "#/$defs/ltspiceSchematicSource"
+      }
+    },
+    "rootSheetId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    },
+    "sheets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/sheet"
+      }
+    },
+    "activeSheetId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
+        },
+        "y": {
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
+        }
+      }
+    },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "ref",
+        "value",
+        "x",
+        "y",
+        "rotation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "source",
+            "currentSource",
+            "resistor",
+            "potentiometer",
+            "lamp",
+            "capacitor",
+            "ground",
+            "inductor",
+            "transformer",
+            "transmissionLine",
+            "urcLine",
+            "diode",
+            "zener",
+            "led",
+            "switch",
+            "voltageSwitch",
+            "currentSwitch",
+            "vcvs",
+            "vccs",
+            "cccs",
+            "ccvs",
+            "behavioral",
+            "inverter",
+            "logicGate",
+            "opamp",
+            "npn",
+            "pnp",
+            "nmos",
+            "pmos",
+            "subcircuit",
+            "njfet",
+            "pjfet",
+            "nmesfet",
+            "pmesfet"
+          ]
+        },
+        "componentDefinitionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Stable built-in or content-addressed component definition used by this instance. Older v7 projects may omit it and receive it during validation."
+        },
+        "ref": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "value": {
+          "type": "string"
+        },
+        "acResistance": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional positive resistor value used only in AC analysis; when omitted, the ordinary resistance applies."
+        },
+        "behavioralResistance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Optional native ngspice behavioral resistor expression; may depend on circuit voltages, voltage-source currents, parameters, time, temperature, or frequency."
+        },
+        "behavioralCapacitance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Optional native ngspice behavioral capacitor C= expression; may depend on circuit voltages, voltage-source currents, parameters, time, temperature, or frequency."
+        },
+        "behavioralCharge": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Optional native ngspice behavioral capacitor Q= expression defining charge in coulombs."
+        },
+        "behavioralInductance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Optional native ngspice behavioral inductor L= expression; may depend on circuit voltages, voltage-source currents, parameters, time, temperature, or frequency."
+        },
+        "tc1": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional signed ngspice first-order passive temperature coefficient (TC1)."
+        },
+        "tc2": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional signed ngspice second-order passive temperature coefficient (TC2)."
+        },
+        "tce": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional signed ngspice exponential temperature coefficient (TCE) for resistor-based parts."
+        },
+        "noiseEnabled": {
+          "type": "boolean",
+          "description": "Whether this resistor-based component contributes thermal and flicker noise; omitted means enabled."
+        },
+        "x": {
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
+        },
+        "y": {
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
+        },
+        "rotation": {
+          "enum": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "flipX": {
+          "type": "boolean",
+          "default": false
+        },
+        "modelName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"
+        },
+        "modelPins": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\s=%(),\\[\\]<>~{}'\\u0000-\\u001f\\u007f\\u2019]{1,64}$"
+          }
+        },
+        "sheetParameters": {
+          "type": "object",
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^\\{?[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?\\}?$"
+          }
+        },
+        "modelParameters": {
+          "type": "object",
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^\\{?[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?\\}?$"
+          }
+        },
+        "mosfetGeometry": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 8,
+          "additionalProperties": false,
+          "properties": {
+            "length": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$" },
+            "width": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$" },
+            "drainArea": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$" },
+            "sourceArea": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$" },
+            "drainPerimeter": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$" },
+            "sourcePerimeter": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$" },
+            "drainSquares": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "sourceSquares": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" }
+          },
+          "description": "Optional positive MOSFET channel and junction geometry plus nonnegative drain/source diffusion squares, emitted as native ngspice instance parameters."
+        },
+        "bjtArea": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 3,
+          "additionalProperties": false,
+          "properties": {
+            "emitter": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "base": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "collector": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" }
+          },
+          "description": "Optional positive BJT emitter, base, and collector junction area factors for this transistor instance."
+        },
+        "instanceMultiplier": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Optional positive ngspice passive-device, semiconductor, or subcircuit instance multiplier."
+        },
+        "diodeArea": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional positive ngspice diode junction-area scale; combines multiplicatively with M."
+        },
+        "diodePerimeter": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional positive ngspice diode junction-perimeter scale; combines multiplicatively with M."
+        },
+        "fetAreaFactor": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Optional positive dimensionless ngspice JFET/MESFET instance area factor."
+        },
+        "deviceTemperatureDelta": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$",
+          "description": "Optional ngspice DTEMP offset in degrees Celsius from the circuit temperature."
+        },
+        "deviceTemperature": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$",
+          "description": "Optional absolute ngspice instance TEMP in degrees Celsius; mutually exclusive with deviceTemperatureDelta."
+        },
+        "initialOff": {
+          "type": "boolean",
+          "description": "Ask ngspice to start its DC operating-point iteration with this nonlinear semiconductor device off."
+        },
+        "switchInitialState": {
+          "enum": ["on", "off"],
+          "description": "Optional initial state for an ngspice SW/CSW device when its control begins inside the hysteresis band; defaults to off."
+        },
+        "deviceModel": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"
+        },
+        "substrateNode": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$",
+          "description": "Optional labeled substrate node for an ngspice NPN or PNP transistor; omitted means ngspice's default ground substrate."
+        },
+        "controlSource": {
+          "type": "string",
+          "pattern": "^V[A-Za-z0-9_]*$"
+        },
+        "behavioralOutput": {
+          "enum": [
+            "voltage",
+            "current"
+          ]
+        },
+        "logicOperation": {
+          "enum": ["and", "or", "nand", "nor", "xor", "xnor"]
+        },
+        "logicLow": { "type": "string", "maxLength": 64 },
+        "logicHigh": { "type": "string", "maxLength": 64 },
+        "logicThreshold": { "type": "string", "maxLength": 64 },
+        "behavioralDialect": {
+          "const": "ltspice"
+        },
+        "sourceMode": {
+          "enum": [
+            "pulse",
+            "dc",
+            "pwl",
+            "sine",
+            "exp",
+            "sffm",
+            "am",
+            "trnoise"
+          ],
+          "description": "For transient analysis, sources support pulse, DC, PWL, SINE, EXP, SFFM, and AM. Experimental TRNOISE is supported on voltage sources only. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
+        },
+        "acMagnitude": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional per-source small-signal AC magnitude; overrides the project default for voltage sources and the DC value for current sources."
+        },
+        "acPhase": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional per-source small-signal AC phase in degrees; defaults to zero."
+        },
+        "pulse": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "initial",
+            "delay",
+            "rise",
+            "fall",
+            "width",
+            "period"
+          ],
+          "properties": {
+            "initial": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "delay": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "rise": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "fall": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "width": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "period": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "cycleCount": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Optional nonnegative whole number of pulses; zero or omission means repeat indefinitely."
+            }
+          },
+          "description": "Optional LTspice-compatible voltage or current pulse level, timing, and cycle count; omitted fields use the ELSim default pulse."
+        },
+        "sine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "offset",
+            "amplitude",
+            "frequency",
+            "delay",
+            "damping",
+            "phase"
+          ],
+          "properties": {
+            "offset": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "amplitude": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "frequency": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "delay": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "damping": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "phase": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "description": "Optional voltage/current-source transient SINE settings: offset and amplitude in the source quantity, frequency, delay, damping factor, and phase degrees."
+        },
+        "exp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "initial",
+            "pulsed",
+            "riseDelay",
+            "riseTau",
+            "fallDelay",
+            "fallTau"
+          ],
+          "properties": {
+            "initial": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "pulsed": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "riseDelay": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "riseTau": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "fallDelay": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "fallTau": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "description": "Optional transient EXP source settings: initial and pulsed source quantity, rise delay/time constant, and fall delay/time constant."
+        },
+        "sffm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "offset",
+            "amplitude",
+            "carrierFrequency",
+            "modulationIndex",
+            "signalFrequency"
+          ],
+          "properties": {
+            "offset": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "amplitude": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "carrierFrequency": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "modulationIndex": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "signalFrequency": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "description": "LTspice SFFM source settings: offset, amplitude, carrier frequency, modulation index, and modulating signal frequency."
+        },
+        "am": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["offset", "modulationOffset", "modulationAmplitude", "modulationFrequency", "carrierFrequency", "delay", "modulationPhase", "carrierPhase"],
+          "properties": {
+            "offset": { "type": "string", "maxLength": 64 },
+            "modulationOffset": { "type": "string", "maxLength": 64 },
+            "modulationAmplitude": { "type": "string", "maxLength": 64 },
+            "modulationFrequency": { "type": "string", "maxLength": 64 },
+            "carrierFrequency": { "type": "string", "maxLength": 64 },
+            "delay": { "type": "string", "maxLength": 64 },
+            "modulationPhase": { "type": "string", "maxLength": 64 },
+            "carrierPhase": { "type": "string", "maxLength": 64 }
+          }
+        },
+        "trnoise": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gaussianRms", "timeStep", "flickerExponent", "flickerAmplitude", "rtsAmplitude", "rtsCaptureTime", "rtsEmissionTime"],
+          "properties": {
+            "gaussianRms": { "type": "string", "maxLength": 64, "description": "Gaussian white-noise RMS voltage." },
+            "timeStep": { "type": "string", "maxLength": 64, "description": "Noise sample interval." },
+            "flickerExponent": { "type": "string", "maxLength": 64, "description": "1/f noise exponent, between 0 and 2 when flicker noise is enabled." },
+            "flickerAmplitude": { "type": "string", "maxLength": 64, "description": "1/f noise amplitude." },
+            "rtsAmplitude": { "type": "string", "maxLength": 64, "description": "Random telegraph signal amplitude." },
+            "rtsCaptureTime": { "type": "string", "maxLength": 64, "description": "Mean trap capture time; required when RTS amplitude is nonzero." },
+            "rtsEmissionTime": { "type": "string", "maxLength": 64, "description": "Mean trap emission time; required when RTS amplitude is nonzero." }
+          },
+          "description": "Experimental ngspice transient-noise source settings for voltage sources only."
+        },
+        "pwl": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "time",
+              "voltage"
+            ],
+            "properties": {
+              "time": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "voltage": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          },
+          "description": "Piecewise-linear voltage source points in strictly increasing time order."
+        },
+        "pwlFileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Filename from a user-provided LTspice PWL data file; its parsed point values are stored in the project."
+        },
+        "pwlRepeat": {
+          "enum": [
+            "forever"
+          ],
+          "description": "Repeat a voltage- or current-source PWL point sequence forever."
+        },
+        "pwlRepeatCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31,
+          "description": "Repeat a voltage- or current-source PWL point sequence this many times in total. Finite repeats require matching first and last levels; expanded source tables are limited to 32 points."
+        },
+        "currentPwl": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "time",
+              "current"
+            ],
+            "properties": {
+              "time": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "current": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          },
+          "description": "Piecewise-linear independent current source points in strictly increasing time order."
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ltspice": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "attributes": {
+                  "type": "object",
+                  "maxProperties": 16,
+                  "propertyNames": {
+                    "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 512
+                  }
+                }
+              }
+            }
+          }
+        },
+        "animationNominalPower": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "description": "Nominal electrical power in watts used only to scale the illustrative lamp brightness or resistor power glow."
+        },
+        "polarized": {
+          "type": "boolean",
+          "description": "Render a positive and negative terminal marker on a polarized capacitor."
+        },
+        "turnsRatio": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Positive secondary-to-primary turns ratio for the built-in coupled-inductor transformer."
+        },
+        "coupling": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Magnetic coupling coefficient greater than zero and at most one for the built-in coupled-inductor transformer."
+        },
+        "seriesResistance": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional nonnegative series resistance (ohms) for capacitor ESR or inductor winding loss."
+        },
+        "mutualCoupling": {
+          "type": "object",
+          "required": ["partnerId", "coefficient"],
+          "additionalProperties": false,
+          "properties": {
+            "partnerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "coefficient": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$", "description": "Dimensionless magnetic coupling coefficient greater than zero and at most one; valid only for inductors. The first listed inductor terminals are the dotted terminals." }
+          },
+          "description": "Legacy optional single mutual coupling; project validation upgrades it to mutualCouplings."
+        },
+        "mutualCouplings": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": ["partnerId", "coefficient"],
+            "additionalProperties": false,
+            "properties": {
+              "partnerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "coefficient": { "type": "string", "maxLength": 64, "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$", "description": "Dimensionless magnetic coupling coefficient greater than zero and at most one. The first listed terminal of each inductor is the dotted terminal." }
+            }
+          },
+          "description": "Optional outgoing pairwise couplings to other inductors in this sheet; multiple records allow multi-winding magnetic networks."
+        },
+        "primaryWindingResistance": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional nonnegative series resistance in ohms for a built-in transformer's primary winding."
+        },
+        "secondaryWindingResistance": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional nonnegative series resistance in ohms for a built-in transformer's secondary winding."
+        },
+        "wiperPosition": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Potentiometer wiper fraction from upper terminal to lower terminal, from 0.001 to 0.999."
+        },
+        "transmissionLine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["lengthMode"],
+          "properties": {
+            "lengthMode": { "enum": ["delay", "frequency"] },
+            "delay": { "type": "string", "maxLength": 64 },
+            "frequency": { "type": "string", "maxLength": 64 },
+            "normalizedLength": { "type": "string", "maxLength": 64 }
+          },
+          "description": "ngspice lossless T-line length specified by propagation delay or frequency and normalized electrical length."
+        },
+        "urcLine": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "resistancePerLength": { "type": "string", "maxLength": 64 },
+            "capacitancePerLength": { "type": "string", "maxLength": 64 },
+            "sections": { "type": "string", "maxLength": 64 },
+            "k": { "type": "string", "maxLength": 64 },
+            "fmax": { "type": "string", "maxLength": 64 },
+            "currentPerLength": { "type": "string", "maxLength": 64 },
+            "seriesResistancePerLength": { "type": "string", "maxLength": 64 }
+          },
+          "description": "Per-unit-length parameters and section count for ngspice's native URC distributed RC line."
+        },
+        "symbolAssetId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "symbolPinOffsets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "sheetId": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+        },
+        "sheetPortLayout": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "side",
+              "direction"
+            ],
+            "properties": {
+              "side": {
+                "enum": [
+                  "auto",
+                  "left",
+                  "right",
+                  "top",
+                  "bottom"
+                ]
+              },
+              "direction": {
+                "enum": [
+                  "input",
+                  "output",
+                  "inout"
+                ]
+              }
+            }
+          }
+        },
+        "voltageSwitch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "onResistance": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "offResistance": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "hysteresis": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "description": "Optional voltage-controlled switch parameters; omitted values use 1 \u03a9, 1 G\u03a9, and 0 V defaults."
+        },
+        "currentSwitch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "onResistance": { "type": "string", "maxLength": 64 },
+            "offResistance": { "type": "string", "maxLength": 64 },
+            "hysteresis": { "type": "string", "maxLength": 64 }
+          },
+          "description": "Optional current-controlled switch parameters; omitted values use 1 Ω, 1 GΩ, and 0 A defaults."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "subcircuit"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "modelName",
+              "modelPins"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "symbolAssetId"
+            ]
+          },
+          "then": {
+            "required": [
+              "symbolPinOffsets"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "symbolPinOffsets"
+            ]
+          },
+          "then": {
+            "required": [
+              "symbolAssetId"
+            ]
+          }
+        }
+      ]
+    },
+    "modelAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "filename",
+        "sha256",
+        "content",
+        "licenseStatus",
+        "importedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\\\u0000-\\u001f]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4194304
+        },
+        "selectedSections": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?!;|//)[^\\s\"'`\\x00-\\x1f]+$"
+          }
+        },
+        "licenseStatus": {
+          "const": "unknown"
+        },
+        "importedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "licenseReference": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "rightsNotes": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    },
+    "symbolAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "filename",
+        "sha256",
+        "content",
+        "licenseStatus",
+        "importedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\\\u0000-\\u001f]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 1048576
+        },
+        "licenseStatus": {
+          "const": "unknown"
+        },
+        "importedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "licenseReference": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "rightsNotes": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    },
+    "ltspiceSchematicSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "filename",
+        "originalText"
+      ],
+      "properties": {
+        "format": {
+          "const": "ltspice-asc"
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        },
+        "originalText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10485760
+        },
+        "sourceUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "licenseReference": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "rightsNotes": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    },
+    "wire": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "points"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number",
+                "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
+              },
+              {
+                "type": "number",
+                "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "maxItems": 2,
+          "description": "A wire is one straight connection between two endpoint coordinates. Use multiple wire objects to make a path."
+        }
+      }
+    },
+    "netLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "x",
+        "y"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "description": "SPICE node name for electrical labels, or up to 500 characters of documentation for notes."
+        },
+        "x": {
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
+        },
+        "y": {
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
+        },
+        "visible": {
+          "type": "boolean",
+          "default": true
+        },
+        "kind": {
+          "enum": [
+            "net",
+            "note"
+          ],
+          "description": "Omitted or net names an electrical node; note is non-electrical schematic text."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "note"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^(0|[A-Za-z_][A-Za-z0-9_.$]*)$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zoom",
+        "panX",
+        "panY"
+      ],
+      "properties": {
+        "zoom": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "panX": {
+          "type": "number"
+        },
+        "panY": {
+          "type": "number"
+        }
+      }
+    },
+    "plotSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectedTraceIds",
+        "ranges"
+      ],
+      "properties": {
+        "selectedTraceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ranges": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tran": {
+              "$ref": "#/$defs/plotRange"
+            },
+            "ac": {
+              "$ref": "#/$defs/plotRange"
+            },
+            "dc": {
+              "$ref": "#/$defs/plotRange"
+            },
+            "noise": {
+              "$ref": "#/$defs/plotRange"
+            }
+          }
+        },
+        "detachedWindow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000
+            },
+            "y": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000
+            },
+            "width": {
+              "type": "number",
+              "minimum": 280,
+              "maximum": 4000
+            },
+            "height": {
+              "type": "number",
+              "minimum": 160,
+              "maximum": 3000
+            }
+          }
+        },
+        "panels": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/plotPanel"
+          }
+        }
+      }
+    },
+    "plotPanel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "bounds",
+        "selectedTraceIds",
+        "ranges"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "bounds": {
+          "$ref": "#/$defs/plotWindowBounds"
+        },
+        "selectedTraceIds": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string"
+          }
+        },
+        "ranges": {
+          "$ref": "#/$defs/plotRanges"
+        },
+        "valueRanges": {
+          "$ref": "#/$defs/plotAnalysisValueRanges"
+        },
+        "componentVoltageProbes": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": { "$ref": "#/$defs/componentVoltageProbe" }
+        },
+        "traceReferences": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": { "$ref": "#/$defs/plotTraceReference" }
+        },
+        "traceColors": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+        },
+        "secondCursorValues": {
+          "type": "object",
+          "maxProperties": 4,
+          "additionalProperties": false,
+          "properties": {
+            "tran": { "type": "number" },
+            "ac": { "type": "number" },
+            "dc": { "type": "number" },
+            "noise": { "type": "number" }
+          }
+        },
+        "poleZeroView": {
+          "$ref": "#/$defs/plotComplexPlaneView"
+        }
+      }
+    },
+    "plotComplexPlaneView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["centerReal", "centerImaginary", "zoom"],
+      "properties": {
+        "centerReal": { "type": "number", "minimum": -1e100, "maximum": 1e100 },
+        "centerImaginary": { "type": "number", "minimum": -1e100, "maximum": 1e100 },
+        "zoom": { "type": "number", "minimum": 0.05, "maximum": 100 }
+      }
+    },
+    "componentVoltageProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["partId", "positivePin", "negativePin", "positiveNet", "negativeNet", "positiveVector", "negativeVector", "ref", "vectorRef"],
+      "properties": {
+        "partId": { "type": "string" },
+        "positivePin": { "type": "integer", "minimum": 0 },
+        "negativePin": { "type": "integer", "minimum": -1 },
+        "positiveNet": { "type": "string" },
+        "negativeNet": { "type": "string" },
+        "positiveVector": { "type": "string" },
+        "negativeVector": { "type": "string" },
+        "ref": { "type": "string" },
+        "vectorRef": { "type": "string" },
+        "sheetId": { "type": "string" },
+        "scopeSheetId": { "type": "string" },
+        "instancePath": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
+      }
+    },
+    "plotTraceReference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "sheetId", "scopeSheetId", "instancePath"],
+          "properties": {
+            "kind": { "const": "node" },
+            "name": { "type": "string" },
+            "sheetId": { "type": "string" },
+            "scopeSheetId": { "type": "string" },
+            "instancePath": { "type": "array", "maxItems": 32, "items": { "type": "string" } },
+            "wireId": { "type": "string" },
+            "labelId": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "partId", "sheetId", "scopeSheetId", "instancePath"],
+          "properties": {
+            "kind": { "const": "part-current" },
+            "partId": { "type": "string" },
+            "sheetId": { "type": "string" },
+            "scopeSheetId": { "type": "string" },
+            "instancePath": { "type": "array", "maxItems": 32, "items": { "type": "string" } },
+            "winding": { "enum": ["P", "S"] },
+            "port": { "enum": [1, 2] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "partId", "positivePin", "negativePin", "sheetId", "scopeSheetId", "instancePath"],
+          "properties": {
+            "kind": { "const": "component-voltage" },
+            "partId": { "type": "string" },
+            "positivePin": { "type": "integer", "minimum": 0 },
+            "negativePin": { "type": "integer", "minimum": -1 },
+            "sheetId": { "type": "string" },
+            "scopeSheetId": { "type": "string" },
+            "instancePath": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "plotWindowBounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "y": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "width": {
+          "type": "number",
+          "minimum": 280,
+          "maximum": 4000
+        },
+        "height": {
+          "type": "number",
+          "minimum": 160,
+          "maximum": 3000
+        }
+      }
+    },
+    "plotRanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tran": {
+          "$ref": "#/$defs/plotRange"
+        },
+        "ac": {
+          "$ref": "#/$defs/plotRange"
+        },
+        "dc": {
+          "$ref": "#/$defs/plotRange"
+        },
+        "noise": {
+          "$ref": "#/$defs/plotRange"
+        }
+      }
+    },
+    "plotAnalysisValueRanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tran": { "$ref": "#/$defs/plotUnitValueRanges" },
+        "ac": { "$ref": "#/$defs/plotUnitValueRanges" },
+        "dc": { "$ref": "#/$defs/plotUnitValueRanges" },
+        "noise": { "$ref": "#/$defs/plotUnitValueRanges" }
+      }
+    },
+    "plotUnitValueRanges": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": { "maxLength": 32 },
+      "additionalProperties": { "$ref": "#/$defs/plotValueRange" }
+    },
+    "plotValueRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    },
+    "plotRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "maximum": 1
+        }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analysis",
+        "stopTime",
+        "maxStep"
+      ],
+      "properties": {
+        "analysis": {
+          "enum": [
+            "tran",
+            "op",
+            "ac",
+            "dc",
+            "noise",
+            "tf",
+            "sens",
+            "pz",
+            "disto"
+          ]
+        },
+        "stopTime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxStep": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stochasticSampleCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 1,
+          "description": "Number of independently seeded ngspice runs when statistical expressions are present; the combined run count with parameter stepping cannot exceed 10."
+        },
+        "startSavingTime": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "temperature": {
+          "type": "string",
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$"
+        },
+        "nominalTemperature": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$"
+        },
+        "relativeTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "absoluteCurrentTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "absoluteVoltageTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "minimumConductance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "pivotRelativeTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "pivotAbsoluteTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "dcIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "dcTransferIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "dcSourceSteppingSteps": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "dcGminStepping": { "enum": ["0", "1", "2"] },
+        "dcSkipInitialNewtonIteration": { "type": "boolean" },
+        "transientLowerIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "transientIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "transientTotalIterationLimit": { "type": "string", "pattern": "^\\s*[0-9]+\\s*$" },
+        "transientErrorTolerance": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "trapezoidalDampingFactor": { "type": "string", "maxLength": 64, "pattern": "^\\s*(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:e[+-]?[0-9]+)?\\s*$" },
+        "shuntResistance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "shuntCapacitance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "integrationMethod": {
+          "enum": ["trap", "gear"]
+        },
+        "integrationMaxOrder": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6
+        },
+        "skipAcOperatingPoint": {
+          "type": "boolean"
+        },
+        "noiseSweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "inputSource", "scale", "points", "startFrequency", "stopFrequency"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
+            "scale": { "enum": ["dec", "oct", "lin"] },
+            "points": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "startFrequency": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "stopFrequency": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        },
+        "transferFunction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "inputSource"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" }
+          }
+        },
+        "sensitivity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "mode"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "mode": { "enum": ["dc", "ac"] }
+          }
+        },
+        "poleZero": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "inputSource", "roots"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
+            "roots": { "enum": ["poles", "zeros", "both"] }
+          }
+        },
+        "distortion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "inputSource", "harmonic"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
+            "harmonic": { "enum": [2, 3] },
+            "mode": { "enum": ["harmonic", "intermodulation"] },
+            "intermodProduct": { "enum": ["sum", "difference", "third-order"] },
+            "secondToneRatio": { "type": "string", "maxLength": 32, "pattern": "^(?:0(?:\\.[0-9]+)?|\\.[0-9]+)$", "description": "Ratio F2/F1 used for two-tone intermodulation; must be greater than zero and less than one." }
+          }
+        },
+        "sourceAcMagnitude": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dcSweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "start",
+            "stop",
+            "step"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "minLength": 1
+            },
+            "start": {
+              "type": "string",
+              "minLength": 1
+            },
+            "stop": {
+              "type": "string",
+              "minLength": 1
+            },
+            "step": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "parameterSweeps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "component",
+              "start",
+              "stop",
+              "points"
+            ],
+            "properties": {
+              "component": {
+                "type": "string",
+                "minLength": 1
+              },
+              "parameter": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "sourceParameter": {
+                "enum": [
+                  "pulse.initial",
+                  "pulse.high",
+                  "pulse.delay",
+                  "pulse.rise",
+                  "pulse.fall",
+                  "pulse.width",
+                  "pulse.period",
+                  "pwl.scale",
+                  "pwl.point.1",
+                  "pwl.point.2",
+                  "pwl.point.3",
+                  "pwl.point.4",
+                  "pwl.point.5",
+                  "pwl.point.6",
+                  "pwl.point.7",
+                  "pwl.point.8",
+                  "pwl.point.9",
+                  "pwl.point.10",
+                  "pwl.point.11",
+                  "pwl.point.12",
+                  "pwl.point.13",
+                  "pwl.point.14",
+                  "pwl.point.15",
+                  "pwl.point.16",
+                  "pwl.point.17",
+                  "pwl.point.18",
+                  "pwl.point.19",
+                  "pwl.point.20",
+                  "pwl.point.21",
+                  "pwl.point.22",
+                  "pwl.point.23",
+                  "pwl.point.24",
+                  "pwl.point.25",
+                  "pwl.point.26",
+                  "pwl.point.27",
+                  "pwl.point.28",
+                  "pwl.point.29",
+                  "pwl.point.30",
+                  "pwl.point.31",
+                  "pwl.point.32",
+                  "sine.offset",
+                  "sine.amplitude",
+                  "sine.frequency",
+                  "sine.delay",
+                  "sine.damping",
+                  "sine.phase",
+                  "exp.initial",
+                  "exp.pulsed",
+                  "exp.riseDelay",
+                  "exp.riseTau",
+                  "exp.fallDelay",
+                  "exp.fallTau",
+                  "sffm.offset",
+                  "sffm.amplitude",
+                  "sffm.carrierFrequency",
+                  "sffm.modulationIndex",
+                  "sffm.signalFrequency",
+                  "am.offset",
+                  "am.modulationOffset",
+                  "am.modulationAmplitude",
+                  "am.modulationFrequency",
+                  "am.carrierFrequency",
+                  "am.delay",
+                  "am.modulationPhase",
+                  "am.carrierPhase",
+                  "trnoise.gaussianRms",
+                  "trnoise.timeStep",
+                  "trnoise.flickerExponent",
+                  "trnoise.flickerAmplitude",
+                  "trnoise.rtsAmplitude",
+                  "trnoise.rtsCaptureTime",
+                  "trnoise.rtsEmissionTime"
+                ]
+              },
+              "start": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stop": {
+                "type": "string",
+                "minLength": 1
+              },
+              "points": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 10
+              }
+            }
+          }
+        },
+        "transientMeasurements": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "operation"
+            ],
+            "oneOf": [
+              {
+                "required": ["vector"],
+                "not": { "required": ["expression"] },
+                "properties": { "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ"] } }
+              },
+              {
+                "required": ["expression"],
+                "not": { "required": ["vector"] },
+                "properties": { "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ"] } }
+              },
+              {
+                "required": ["vector", "threshold", "edge"],
+                "properties": { "operation": { "const": "crossing" } },
+                "not": { "anyOf": [{ "required": ["expression"] }, { "required": ["targetVector"] }, { "required": ["targetThreshold"] }, { "required": ["targetEdge"] }, { "required": ["from"] }, { "required": ["to"] }] }
+              },
+              {
+                "required": ["vector", "threshold", "targetVector", "targetThreshold", "edge", "targetEdge"],
+                "properties": { "operation": { "const": "delay" } },
+                "not": { "anyOf": [{ "required": ["expression"] }, { "required": ["from"] }, { "required": ["to"] }] }
+              }
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$"
+              },
+              "operation": {
+                "enum": [
+                  "max",
+                  "min",
+                  "pp",
+                  "avg",
+                  "rms",
+                  "integ",
+                  "crossing",
+                  "delay"
+                ]
+              },
+              "vector": {
+                "type": "string",
+                "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$"
+              },
+              "expression": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "from": {
+                "type": "string",
+                "maxLength": 48
+              },
+              "to": {
+                "type": "string",
+                "maxLength": 48
+              },
+              "threshold": {
+                "type": "string"
+              },
+              "crossingCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9999
+              },
+              "targetVector": {
+                "type": "string",
+                "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$"
+              },
+              "targetThreshold": {
+                "type": "string"
+              },
+              "edge": {
+                "enum": [
+                  "rise",
+                  "fall",
+                  "either"
+                ]
+              },
+              "targetEdge": {
+                "enum": [
+                  "rise",
+                  "fall",
+                  "either"
+                ]
+              },
+              "triggerCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9999
+              },
+              "targetCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9999
+              }
+            }
+          }
+        },
+        "initialConditions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "node",
+                  "voltage"
+                ],
+                "properties": {
+                  "node": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.$]*$"
+                  },
+                  "voltage": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "element",
+                  "voltage"
+                ],
+                "properties": {
+                  "element": {
+                    "type": "string",
+                    "pattern": "^C[A-Za-z0-9_]+$"
+                  },
+                  "voltage": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "diode",
+                  "voltage"
+                ],
+                "properties": {
+                  "diode": {
+                    "type": "string",
+                    "pattern": "^D[A-Za-z0-9_]+$"
+                  },
+                  "voltage": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "element",
+                  "current"
+                ],
+                "properties": {
+                  "element": {
+                    "type": "string",
+                    "pattern": "^L[A-Za-z0-9_]+$"
+                  },
+                  "current": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "transistor",
+                  "vbe",
+                  "vce"
+                ],
+                "properties": {
+                  "transistor": {
+                    "type": "string",
+                    "pattern": "^Q[A-Za-z0-9_]+$"
+                  },
+                  "vbe": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vce": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "fet",
+                  "vds",
+                  "vgs"
+                ],
+                "properties": {
+                  "fet": {
+                    "type": "string",
+                    "pattern": "^(?:M|J|Z)[A-Za-z0-9_]+$"
+                  },
+                  "vds": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vgs": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vbs": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "skipInitialOperatingPoint": {
+          "type": "boolean"
+        },
+        "acSweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scale",
+            "points",
+            "startFrequency",
+            "stopFrequency"
+          ],
+          "properties": {
+            "scale": {
+              "enum": [
+                "dec",
+                "oct",
+                "lin"
+              ]
+            },
+            "points": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "startFrequency": {
+              "type": "string",
+              "minLength": 1
+            },
+            "stopFrequency": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "sheet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "parentSheetId",
+        "parts",
+        "wires",
+        "junctions",
+        "netLabels",
+        "view",
+        "ports"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "parentSheetId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parts": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/part"
+          }
+        },
+        "wires": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "$ref": "#/$defs/wire"
+          }
+        },
+        "junctions": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "$ref": "#/$defs/point"
+          }
+        },
+        "netLabels": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "$ref": "#/$defs/netLabel"
+          }
+        },
+        "view": {
+          "$ref": "#/$defs/view"
+        },
+        "ports": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "side",
+              "direction"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$"
+              },
+              "side": {
+                "enum": [
+                  "auto",
+                  "left",
+                  "right",
+                  "top",
+                  "bottom"
+                ]
+              },
+              "direction": {
+                "enum": [
+                  "input",
+                  "output",
+                  "inout"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "defaultValue"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "defaultValue": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?$"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

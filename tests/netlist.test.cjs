@@ -17,6 +17,19 @@ const { dcSweepPointCount, MAX_DC_SWEEP_POINTS } = require(path.join(build, 'dom
 const { parseNoiseSummaries } = require(path.join(build, 'engine/noiseSummary.js'))
 const { labelSensitivityTraces } = require(path.join(build, 'engine/sensitivity.js'))
 
+test('schematic notes persist but never become electrical labels or generated netlist nodes', () => {
+  const project = createStarterProject()
+  const baseline = analyzeConnectivity(project)
+  project.netLabels.push({ id: 'note-zero-test', kind: 'note', name: '0', x: 310, y: 290, visible: true })
+  project.sheets[0].netLabels = project.netLabels
+  const validated = validateProject(project)
+  const withNote = analyzeConnectivity(validated)
+  assert.equal(withNote.pinNets.get('p-r1:0'), baseline.pinNets.get('p-r1:0'))
+  assert.equal(withNote.labelNets.has('note-zero-test'), false)
+  assert.equal(createNetlistArtifact(validated).text.includes('note-zero-test'), false)
+  assert.equal(validated.netLabels.at(-1).kind, 'note')
+})
+
 test('ngspice sensitivity vectors retain numeric data and get derivative labels', () => {
   const source = { id: 'v(r1)', label: 'V(r1)', unit: 'V', axisLabel: 'Frequency', axisUnit: 'Hz', axis: Float64Array.from([1, 10]), values: Float64Array.from([-0.2, -0.1]), imaginaryValues: Float64Array.from([0.03, 0]) }
   const traces = labelSensitivityTraces([source, { ...source, id: 'v(r1:af)' }, { ...source, id: 'v(r2)' }], 'out')

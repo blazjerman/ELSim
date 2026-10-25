@@ -127,7 +127,9 @@ export type Part = {
 }
 
 export type Wire = { id: string; points: [[number, number], [number, number]] }
-export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean }
+/** Net labels name electrical nodes; note labels are visible, non-electrical schematic text. */
+export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean; kind?: 'net' | 'note' }
+export function isElectricalNetLabel(label: NetLabel): boolean { return label.kind !== 'note' }
 export type PlotRange = { start: number; end: number }
 export type PlotValueRange = { min: number; max: number }
 export type ComponentVoltageProbe = { partId: string; positivePin: number; negativePin: number; positiveNet: string; negativeNet: string; positiveVector: string; negativeVector: string; ref: string; vectorRef: string; sheetId?: string; scopeSheetId?: string; instancePath?: string[] }
@@ -175,7 +177,7 @@ export function sheetModelName(sheetId: string): string {
 
 export type Project = {
   format: 'elsim-project'
-  version: 9
+  version: 10
   name: string
   updatedAt: string
   parts: Part[]
@@ -230,7 +232,7 @@ function snapProjectGeometryToGrid(project: Record<string, unknown>): void {
 
 const starter: Project = {
   format: 'elsim-project',
-  version: 9,
+  version: 10,
   name: 'RC step response',
   updatedAt: new Date().toISOString(),
   parts: [
@@ -328,6 +330,10 @@ function migrateV8(input: Record<string, unknown>): Project {
   return { ...input, version: 9 } as unknown as Project
 }
 
+function migrateV9(input: Record<string, unknown>): Project {
+  return { ...input, version: 10 } as unknown as Project
+}
+
 function migrateV2(input: Record<string, unknown>): Project {
   const project = { ...input, version: 7 } as unknown as Project
   project.rootSheetId = 'sheet-main'
@@ -358,7 +364,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     })
   }
   return {
-    format: 'elsim-project', version: 9,
+    format: 'elsim-project', version: 10,
     name: typeof input.name === 'string' ? input.name : 'Imported project',
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
     parts: oldParts.map(({ nodes: _nodes, ...part }) => part),
@@ -388,8 +394,9 @@ export function validateProject(input: unknown): Project {
   if (data.version === 6 && Array.isArray(data.sheets)) return validateProject(migrateV6(data))
   if (data.version === 7 && Array.isArray(data.sheets)) return validateProject(migrateV7(data))
   if (data.version === 8 && Array.isArray(data.sheets)) return validateProject(migrateV8(data))
-  if (data.version !== 9 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
-    throw new Error('This project format is not supported. Expected ELSim project version 9.')
+  if (data.version === 9 && Array.isArray(data.sheets)) return validateProject(migrateV9(data))
+  if (data.version !== 10 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
+    throw new Error('This project format is not supported. Expected ELSim project version 10.')
   }
   const parsedModelAssets = new Map<string, ReturnType<typeof parseSubcircuitLibrary>>()
   // Normalize hand-edited JSON before any connectivity checks. The app's
@@ -607,7 +614,10 @@ export function validateProject(input: unknown): Project {
   }
   const labelIds = new Set<string>()
   for (const label of data.netLabels as NetLabel[]) {
-    if (!label || typeof label.id !== 'string' || !label.id || labelIds.has(label.id) || typeof label.name !== 'string' || (label.name !== '0' && !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(label.name)) || !Number.isFinite(label.x) || !Number.isFinite(label.y) || (label.visible !== undefined && typeof label.visible !== 'boolean')) {
+    const validName = label?.kind === 'note'
+      ? typeof label.name === 'string' && label.name.trim().length > 0 && label.name.length <= 500 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(label.name)
+      : (label?.kind === undefined || label.kind === 'net') && typeof label?.name === 'string' && (label.name === '0' || /^[A-Za-z_][A-Za-z0-9_.$]*$/.test(label.name))
+    if (!label || typeof label.id !== 'string' || !label.id || labelIds.has(label.id) || !validName || (label.kind !== undefined && !['net', 'note'].includes(label.kind)) || !Number.isFinite(label.x) || !Number.isFinite(label.y) || (label.visible !== undefined && typeof label.visible !== 'boolean')) {
       throw new Error('Project contains a malformed net label.')
     }
     labelIds.add(label.id)
@@ -760,15 +770,15 @@ export function validateProject(input: unknown): Project {
   if (typeof data.name !== 'string' || !data.name.trim() || typeof data.updatedAt !== 'string' || !Number.isFinite(Date.parse(data.updatedAt)) || !simulation || !['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens', 'pz', 'disto'].includes(simulation.analysis) || typeof simulation.stopTime !== 'string' || !simulation.stopTime.trim() || typeof simulation.maxStep !== 'string' || !simulation.maxStep.trim() || !view || !Number.isFinite(view.zoom) || view.zoom <= 0 || !Number.isFinite(view.panX) || !Number.isFinite(view.panY)) throw new Error('Project settings are missing or malformed.')
   if (simulation.analysis === 'ac' && !simulation.acSweep) simulation.acSweep = { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
   if (simulation.stochasticSampleCount !== undefined && (!Number.isInteger(simulation.stochasticSampleCount) || simulation.stochasticSampleCount < 1 || simulation.stochasticSampleCount > 10)) throw new Error('Independent random samples must be an integer from 1 to 10.')
-  if (simulation.analysis === 'noise' && !simulation.noiseSweep) simulation.noiseSweep = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
-  if (simulation.analysis === 'tf' && !simulation.transferFunction) simulation.transferFunction = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1' }
-  if (simulation.analysis === 'disto' && !simulation.distortion) simulation.distortion = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', harmonic: 2 }
-  if (simulation.analysis === 'pz' && !simulation.poleZero) simulation.poleZero = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', roots: 'both' }
+  if (simulation.analysis === 'noise' && !simulation.noiseSweep) simulation.noiseSweep = { outputNode: data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
+  if (simulation.analysis === 'tf' && !simulation.transferFunction) simulation.transferFunction = { outputNode: data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1' }
+  if (simulation.analysis === 'disto' && !simulation.distortion) simulation.distortion = { outputNode: data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', harmonic: 2 }
+  if (simulation.analysis === 'pz' && !simulation.poleZero) simulation.poleZero = { outputNode: data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', roots: 'both' }
   if (simulation.distortion !== undefined && (!simulation.distortion || typeof simulation.distortion.outputNode !== 'string' || typeof simulation.distortion.inputSource !== 'string' || ![2, 3].includes(simulation.distortion.harmonic) || simulation.distortion.mode !== undefined && !['harmonic', 'intermodulation'].includes(simulation.distortion.mode) || simulation.distortion.intermodProduct !== undefined && !['sum', 'difference', 'third-order'].includes(simulation.distortion.intermodProduct) || simulation.distortion.secondToneRatio !== undefined && (!/^(?:0(?:\.[0-9]+)?|\.[0-9]+)$/.test(simulation.distortion.secondToneRatio) || Number(simulation.distortion.secondToneRatio) <= 0 || Number(simulation.distortion.secondToneRatio) >= 1))) throw new Error('Distortion analysis settings are malformed.')
   if (simulation.analysis === 'disto' && (simulation.parameterSweeps?.length ?? 0) > 0) throw new Error('Parameter stepping is not supported during distortion analysis.')
   if (simulation.poleZero !== undefined && (!simulation.poleZero || typeof simulation.poleZero.outputNode !== 'string' || typeof simulation.poleZero.inputSource !== 'string' || !['poles', 'zeros', 'both'].includes(simulation.poleZero.roots))) throw new Error('Pole-zero analysis settings are malformed.')
   if (simulation.analysis === 'pz' && (simulation.parameterSweeps?.length ?? 0) > 0) throw new Error('Parameter stepping is not supported during pole-zero analysis.')
-  if (simulation.analysis === 'sens' && !simulation.sensitivity) simulation.sensitivity = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => label.name !== '0')?.name ?? 'vout', mode: 'dc' }
+  if (simulation.analysis === 'sens' && !simulation.sensitivity) simulation.sensitivity = { outputNode: data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => isElectricalNetLabel(label) && label.name !== '0')?.name ?? 'vout', mode: 'dc' }
   if (simulation.transferFunction !== undefined) {
     const tf = simulation.transferFunction
     if (!tf || typeof tf !== 'object' || typeof tf.outputNode !== 'string' || !tf.outputNode.trim() || tf.outputNode.length > 64 || typeof tf.inputSource !== 'string' || !/^[VI][A-Za-z0-9_]{0,63}$/i.test(tf.inputSource)) throw new Error('Transfer-function settings are malformed.')
@@ -947,7 +957,7 @@ export function validateProject(input: unknown): Project {
       if (measurement && ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && typeof measurement.expression === 'string' && measurement.vector === undefined) {
         try {
           const parsed = parseBehavioralExpression(measurement.expression)
-          const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
+          const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && isElectricalNetLabel(label) && typeof label.name === 'string' ? [label.name] : [])
           const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
           validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
           const unsupportedCurrent = unsupportedBehavioralCurrentReference(measurement.expression, ngspiceCurrentReferences(data.parts as Part[], true))
@@ -989,7 +999,7 @@ export function validateProject(input: unknown): Project {
           ? data.parts.some((part) => (part.kind === 'npn' || part.kind === 'pnp') && part.ref.toLowerCase() === target?.toLowerCase())
           : fetCondition
             ? data.parts.some((part) => ['nmos', 'pmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nvdmos', 'pvdmos'].includes(part.kind) && part.ref.toLowerCase() === target?.toLowerCase())
-            : typeof target === 'string' && /^[A-Za-z_][A-Za-z0-9_.$]*$/.test(target) && data.netLabels.some((label) => label.name.toLowerCase() === target.toLowerCase())
+            : typeof target === 'string' && /^[A-Za-z_][A-Za-z0-9_.$]*$/.test(target) && data.netLabels.some((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === target.toLowerCase())
       const fetPart = fetCondition ? data.parts.find((part) => part.ref.toLowerCase() === target?.toLowerCase()) : undefined
       const fetNeedsBulk = fetPart?.kind === 'nmos' || fetPart?.kind === 'pmos'
       if (fetCondition && 'fet' in condition && (fetNeedsBulk ? typeof condition.vbs !== 'string' || !condition.vbs.trim() : condition.vbs !== undefined)) throw new Error(`${target} MOSFET initial conditions require VDS, VGS, and VBS; three-terminal FET conditions use VDS and VGS.`)
@@ -1075,10 +1085,18 @@ export function validateProject(input: unknown): Project {
     siblings.add(key)
     siblingNames.set(sheet.parentSheetId ?? '', siblings)
     if (sheet.parts.length > 10000 || sheet.wires.length > 20000 || sheet.netLabels.length > 20000 || sheet.junctions.length > 20000) throw new Error(`Sheet ${sheet.name} exceeds the document size limit.`)
+    const sheetLabelIds = new Set<string>()
+    for (const label of sheet.netLabels) {
+      const validName = label?.kind === 'note'
+        ? typeof label.name === 'string' && label.name.trim().length > 0 && label.name.length <= 500 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(label.name)
+        : (label?.kind === undefined || label.kind === 'net') && typeof label?.name === 'string' && (label.name === '0' || /^[A-Za-z_][A-Za-z0-9_.$]*$/.test(label.name))
+      if (!label || typeof label.id !== 'string' || !label.id || sheetLabelIds.has(label.id) || !validName || (label.kind !== undefined && !['net', 'note'].includes(label.kind)) || !Number.isFinite(label.x) || !Number.isFinite(label.y) || (label.visible !== undefined && typeof label.visible !== 'boolean')) throw new Error(`Sheet ${sheet.name} contains a malformed net label or note.`)
+      sheetLabelIds.add(label.id)
+    }
     const ports = new Set<string>()
     const portIds = new Set<string>()
     for (const port of sheet.ports) {
-      if (!port || typeof port.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(port.id) || portIds.has(port.id) || typeof port.name !== 'string' || !/^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(port.name) || ports.has(port.name.toLowerCase()) || !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase())) throw new Error(`Sheet ${sheet.name} has a malformed port ${port?.name ?? '(missing name)'}. Ports must expose unique labeled nodes.`)
+      if (!port || typeof port.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(port.id) || portIds.has(port.id) || typeof port.name !== 'string' || !/^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(port.name) || ports.has(port.name.toLowerCase()) || !sheet.netLabels.some((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === port.name.toLowerCase())) throw new Error(`Sheet ${sheet.name} has a malformed port ${port?.name ?? '(missing name)'}. Ports must expose unique labeled nodes.`)
       if (port.side !== undefined && !['auto', 'left', 'right', 'top', 'bottom'].includes(port.side) || port.direction !== undefined && !['input', 'output', 'inout'].includes(port.direction)) throw new Error(`Sheet ${sheet.name} has invalid port placement metadata.`)
       port.side ??= 'auto'; port.direction ??= 'inout'
       ports.add(port.name.toLowerCase())

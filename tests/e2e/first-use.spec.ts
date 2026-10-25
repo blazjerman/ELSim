@@ -1600,6 +1600,35 @@ test('net-label context actions resolve from the SVG target', { tag: '@ui-smoke'
   await expect(menu.getByRole('menuitem', { name: 'Edit net label' })).toBeVisible()
 })
 
+test('schematic notes can be placed and edited without becoming electrical net labels', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const svg = page.locator('svg.schematic')
+  await page.getByRole('button', { name: 'Add non-electrical schematic note' }).click()
+  await svg.click({ position: { x: 80, y: 80 } })
+  const editor = page.getByLabel('Add schematic note')
+  await editor.fill('Power stage\nReview current path')
+  await page.getByRole('button', { name: 'Apply' }).click()
+  await waitForProjectAutosave(page)
+
+  const note = page.locator('.canvas-note[data-note-id]')
+  await expect(note).toContainText('Power stage')
+  await expect(note).toContainText('Review current path')
+  const project = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const savedNote = project.netLabels.find((label: { kind?: string; name: string }) => label.kind === 'note' && label.name === 'Power stage\nReview current path')
+  expect(savedNote).toBeTruthy()
+  expect(project.netLabels.filter((label: { kind?: string }) => label.kind !== 'note')).toHaveLength(2)
+
+  await note.click({ button: 'right' })
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  const noteEditor = page.getByLabel('Note text')
+  await expect(noteEditor).toBeVisible()
+  await noteEditor.fill('Power stage checked')
+  await expect(note).toContainText('Power stage checked')
+  await waitForProjectAutosave(page)
+  const editedProject = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  expect(editedProject.netLabels.some((label: { kind?: string; name: string }) => label.kind === 'note' && label.name === 'Power stage checked')).toBe(true)
+})
+
 test('schematic context menu stays inside the canvas near the phone viewport edge', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.setViewportSize({ width: 390, height: 640 })

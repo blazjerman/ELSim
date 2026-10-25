@@ -65,12 +65,14 @@ const CanvasNetLabel = memo(function CanvasNetLabel({ label, selected, tool, onP
   onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
   onSelect: (id: string, additive?: boolean) => void
 }) {
-  return <g data-net-label-id={label.id} className={`canvas-label${selected ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`Net label ${label.name}`} aria-pressed={selected} aria-keyshortcuts="Enter Space ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => {
+  const note = label.kind === 'note'
+  const lines = note ? label.name.split('\n') : [label.name]
+  return <g data-net-label-id={label.id} data-note-id={note ? label.id : undefined} className={`canvas-label${note ? ' canvas-note' : ''}${selected ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`${note ? 'Schematic note' : 'Net label'} ${label.name}`} aria-pressed={selected} aria-keyshortcuts="Enter Space ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault(); event.stopPropagation(); onSelect(label.id)
   }} onPointerDown={(event) => onPointerDown(event, label.id)} onClick={(event) => {
     if (tool === 'select') { event.stopPropagation(); onSelect(label.id, event.shiftKey || event.ctrlKey || event.metaKey) }
-  }}><text x={label.x + 9} y={label.y - 9} stroke="transparent" strokeWidth="30" pointerEvents="all">{label.name}</text></g>
+  }}><text x={label.x + 9} y={label.y - 9} stroke="transparent" strokeWidth="30" pointerEvents="all">{lines.map((line, index) => <tspan key={index} x={label.x + 9} dy={index ? 16 : 0}>{line}</tspan>)}</text></g>
 })
 
 const CanvasNetLabelLayer = memo(function CanvasNetLabelLayer({ labels, selectedIds, tool, viewportLeft, viewportTop, viewportRight, viewportBottom, onPointerDown, onSelect }: {
@@ -95,8 +97,8 @@ const CanvasNetLabelLayer = memo(function CanvasNetLabelLayer({ labels, selected
   const labelViewportIndex = useMemo(() => createViewportIndex(visibleLabelItems, (label) => ({
     left: label.x + 9,
     top: label.y - 9,
-    right: label.x + 9 + label.name.length * 9,
-    bottom: label.y - 9,
+    right: label.x + 9 + Math.max(...label.name.split('\n').map((line) => line.length)) * 9,
+    bottom: label.y - 9 + (label.kind === 'note' ? (label.name.split('\n').length - 1) * 16 : 0),
   })), [visibleLabelItems])
   const visibleLabels = labelViewportIndex({ left: viewportLeft - margin, top: viewportTop - margin, right: viewportRight + margin, bottom: viewportBottom + margin }, focusedLabelId)
   return <>{visibleLabels.map((label) => <CanvasNetLabel key={label.id} label={label} selected={selectedIdSet.has(label.id)} tool={tool} onPointerDown={onPointerDown} onSelect={onSelect}/>)}</>
@@ -839,7 +841,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
   const [hoveredWireId, setHoveredWireId] = useState<string>()
   const lastHoverPointerTargetRef = useRef<EventTarget | null>(null)
   const [wireEndpointAnnouncement, setWireEndpointAnnouncement] = useState('')
-  const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
+  const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string; kind: 'net' | 'note' } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | { kind: 'label'; id: string; x: number; y: number; node?: string } | null>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
@@ -1178,7 +1180,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
   }
   const labelAtPoint = (point: { x: number; y: number }) => labelsNear({
     left: point.x - 1, top: point.y - 1, right: point.x + 1, bottom: point.y + 1,
-  }).find((label) => Math.hypot(label.x - point.x, label.y - point.y) < 1)
+  }).find((label) => label.kind !== 'note' && Math.hypot(label.x - point.x, label.y - point.y) < 1)
   const contextWireLabel = contextMenu?.kind === 'wire' ? labelAtPoint(contextMenu.point) : undefined
   const canvasClick = (event: MouseEvent<SVGSVGElement>) => {
     if (tool === 'probe') {
@@ -1204,7 +1206,12 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
       const target = resolveNode(point)
       if (!target) { setNotice('Place a net label on a component pin or wire.'); return }
       const existing = labelAtPoint(target)
-      setLabelDraft({ x: target.x, y: target.y, id: existing?.id, name: existing?.name ?? 'net' })
+      setLabelDraft({ x: target.x, y: target.y, id: existing?.id, name: existing?.name ?? 'net', kind: 'net' })
+      return
+    }
+    if (tool === 'note') {
+      const point = pointFromEvent(event)
+      setLabelDraft({ x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y), name: '', kind: 'note' })
       return
     }
     if (tool === 'wire') return
@@ -1690,19 +1697,27 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
     event.preventDefault()
     if (!labelDraft) return
     const name = labelDraft.name.trim()
-    if (!/^(0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(name)) { setNotice('Use a SPICE net name: start with a letter or underscore.'); return }
+    if (labelDraft.kind === 'note' && (!name || name.length > 500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(name))) { setNotice('Enter a note up to 500 characters.'); return }
+    if (labelDraft.kind === 'net' && !/^(0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(name)) { setNotice('Use a SPICE net name: start with a letter or underscore.'); return }
+    const labelId = labelDraft.id ?? `${labelDraft.kind === 'note' ? 'note' : 'label'}-${crypto.randomUUID()}`
     setProject((current) => ({ ...current, netLabels: labelDraft.id
       ? current.netLabels.map((label) => label.id === labelDraft.id ? { ...label, name } : label)
-      : [...current.netLabels, { id: `label-${crypto.randomUUID()}`, name, x: labelDraft.x, y: labelDraft.y, visible: true }] }))
-    setSelection(labelDraft.id ? { kind: 'label', id: labelDraft.id } : null)
-    setNotice(labelDraft.id ? `Net label renamed to ${name}.` : `Net label ${name} added.`)
+      : [...current.netLabels, { id: labelId, name, x: labelDraft.x, y: labelDraft.y, visible: true, ...(labelDraft.kind === 'note' ? { kind: 'note' as const } : {}) }] }))
+    if (labelDraft.kind === 'note') {
+      setSelectedNetLabelIds([labelId])
+      setSelectedPartIds([])
+      setSelectedWireIds([])
+    }
+    setSelection(labelDraft.id || labelDraft.kind === 'note' ? { kind: 'label', id: labelId } : null)
+    setNotice(labelDraft.kind === 'note' ? (labelDraft.id ? 'Schematic note updated.' : 'Schematic note added.') : (labelDraft.id ? `Net label renamed to ${name}.` : `Net label ${name} added.`))
     setLabelDraft(null)
   }
   const viewBox = `${viewportLeft} ${viewportTop} ${viewWidth} ${viewHeight}`
   const statusInstruction = tool === 'wire' ? 'Drag anywhere to place a wire'
     : tool === 'probe' ? 'Click a wire or component to add a trace'
       : tool === 'junction' ? 'Click a crossing to connect or disconnect it'
-        : tool === 'label' ? 'Click a node or grid point to add a net label'
+      : tool === 'label' ? 'Click a node or grid point to add a net label'
+        : tool === 'note' ? 'Click anywhere to place a schematic note'
           : pendingComponent ? 'Click to place · R rotates · Esc cancels'
             : 'Blank drag: L→R contains, R→L touches · Shift/Ctrl adds'
   const statusDetails = tool === 'select' && !pendingComponent
@@ -1796,7 +1811,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
   const wireConnectionDots = useMemo(() => wireConnectionDotCache(project, pinLocations), [pinLocations, project.wires, wireConnectionDotCache])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
-      <div className="canvas-toolset"><IconButton title="Select and move (M)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => { onClearPendingComponent(); setSelectedWireId(null); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }}><Cable size={16}/></IconButton><IconButton title="Place or edit net label on the schematic toolbar (;)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (?)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (=)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize, 100, symbolsById))}><Scan size={15}/></IconButton></div>
+      <div className="canvas-toolset"><IconButton title="Select and move (M)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => { onClearPendingComponent(); setSelectedWireId(null); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }}><Cable size={16}/></IconButton><IconButton title="Place or edit net label on the schematic toolbar (;)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Add non-electrical schematic note" active={tool === 'note'} onClick={() => { onClearPendingComponent(); setTool('note') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (?)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (=)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize, 100, symbolsById))}><Scan size={15}/></IconButton></div>
       <div className="canvas-status" role="status" aria-live="polite" title={statusDetails}><span className="status-dot"/><span className="canvas-status-copy">{statusInstruction}</span><span className="status-separator">·</span><span className="canvas-grid-status">Grid 10 px</span></div>
     </div>
     <svg key={documentSessionId} ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}${pendingComponent ? ' component-placement-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire segments and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onClickCapture={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; event.preventDefault(); event.stopPropagation(); return } if (!pendingComponent || tool !== 'select') return; const point = pointFromEvent(event); onPlaceComponent(pendingComponent, snapToEditorGrid(point.x), snapToEditorGrid(point.y), pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation); event.preventDefault(); event.stopPropagation() }} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event); beginBoxSelection(event) }} onPointerMove={(event) => { updatePlacementPreview(event); moveDrag(event); updateSchematicHover(event.target) }} onPointerUp={endDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onKeyDown={(event) => {
@@ -1841,8 +1856,11 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
         if (!label) { setContextMenu(null); return }
         setSelection({ kind: 'label', id: label.id })
         setSelectedNetLabelIds([label.id])
-        const node = label.name === '0' ? undefined : label.name
-        setContextMenu({ kind: 'label', id: label.id, x, y, ...(node ? { node } : {}) })
+        if (label.kind === 'note') setContextMenu(null)
+        else {
+          const node = label.name === '0' ? undefined : label.name
+          setContextMenu({ kind: 'label', id: label.id, x, y, ...(node ? { node } : {}) })
+        }
       } else if (partElement?.dataset.partId) {
         const id = partElement.dataset.partId
         setSelection({ kind: 'part', id })
@@ -1938,17 +1956,17 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
         {contextPart.kind === 'switch' && <button role="menuitem" onClick={() => { togglePart(contextPart.id); setContextMenu(null) }}>Switch {contextPart.value.toLowerCase() === 'on' ? 'off' : 'on'}</button>}
       </> : contextMenu.kind === 'label' ? <>
         <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, labelId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
-        <button role="menuitem" onClick={() => { const label = labelsById.get(contextMenu.id); if (label) setLabelDraft({ id: label.id, name: label.name, x: label.x, y: label.y }); setContextMenu(null) }}>Edit net label</button>
+        <button role="menuitem" onClick={() => { const label = labelsById.get(contextMenu.id); if (label) setLabelDraft({ id: label.id, name: label.name, x: label.x, y: label.y, kind: 'net' }); setContextMenu(null) }}>Edit net label</button>
       </> : contextMenu.kind === 'wire' ? <>
         <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, wireId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
-        <button role="menuitem" onClick={() => { setLabelDraft({ ...contextMenu.point, id: contextWireLabel?.id, name: contextWireLabel?.name ?? contextMenu.node ?? 'net' }); setContextMenu(null) }}>{contextWireLabel ? 'Edit net label' : 'Add net label'}</button>
+        <button role="menuitem" onClick={() => { setLabelDraft({ ...contextMenu.point, id: contextWireLabel?.id, name: contextWireLabel?.name ?? contextMenu.node ?? 'net', kind: 'net' }); setContextMenu(null) }}>{contextWireLabel ? 'Edit net label' : 'Add net label'}</button>
         <button role="menuitem" onClick={() => { setSelectedWireIds([contextMenu.id]); setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null); setContextMenu(null); window.requestAnimationFrame(() => svg.current?.querySelector<SVGGElement>(`.wire-line[data-wire-id="${CSS.escape(contextMenu.id)}"]`)?.focus()) }}>Select wire</button>
       </> : null}
       </div>
       {contextPart && contextPinNames.length > 2 && <div className="context-pin-picker" role="group" aria-label={`Voltage between pins for ${contextPart.ref}`}><strong>Voltage between pins</strong><label>Positive<select aria-label="Positive voltage pin" value={contextPinPair.positive} onChange={(event) => setContextPinPair((pair) => ({ ...pair, positive: Number(event.target.value) }))}>{contextPinNames.map((name, index) => <option key={`${name}-${index}`} value={index}>{index + 1} · {name}</option>)}</select></label><label>Negative<select aria-label="Negative voltage pin" value={contextPinPair.negative} onChange={(event) => setContextPinPair((pair) => ({ ...pair, negative: Number(event.target.value) }))}>{contextPinNames.map((name, index) => <option key={`${name}-${index}`} value={index}>{index + 1} · {name}</option>)}</select></label><button disabled={contextPinPair.positive === contextPinPair.negative} onClick={() => { onProbeVoltage(contextPart.id, contextPinPair.positive, contextPinPair.negative); setContextMenu(null) }}>Plot pin-to-pin voltage</button></div>}
       {contextPart?.kind === 'transformer' && currentProbesUnavailable ? <div className="context-menu-note" role="note">AC and noise results do not include winding-current traces. Run a transient or DC analysis to probe current.</div> : contextPart && contextPart.kind !== 'ground' && contextPart.kind !== 'transformer' && currentProbesUnavailable ? <div className="context-menu-note" role="note">AC and noise results do not include component-current traces. Run a transient or DC analysis to probe current.</div> : null}
     </div>}
-    {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
+    {labelDraft && <form className={`label-editor${labelDraft.kind === 'note' ? ' note-editor' : ''}`} onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.kind === 'note' ? (labelDraft.id ? 'Edit schematic note' : 'Add schematic note') : (labelDraft.id ? 'Rename net label' : 'Name this net')}</label><div>{labelDraft.kind === 'note' ? <textarea id="net-label-name" autoFocus maxLength={500} rows={4} value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/> : <input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/>}<button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">{labelDraft.kind === 'note' ? 'Notes are for documentation and never connect to the circuit.' : 'Same names connect the same electrical node. Use a letter, underscore, or 0.'}</small></form>}
       <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span><span>Scroll to zoom · Space/middle-drag to pan</span><span>{project.parts.length} components</span></div>
   </div>
 }

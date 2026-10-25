@@ -1,6 +1,6 @@
 import { componentPins, pointOnSegment, subcircuitPinOffsets } from './geometry'
 import { analyzeConnectivity, pinNet } from './connectivity'
-import { validateProject, type Part, type PartKind, type Project, type ProjectSheet } from './project'
+import { isElectricalNetLabel, validateProject, type Part, type PartKind, type Project, type ProjectSheet } from './project'
 import { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds } from './subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 
@@ -571,7 +571,7 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
   }
   const ports = new Map(sheet.ports.map((port) => [port.name.toLowerCase(), port]))
   const emittedPorts = new Set<string>()
-  for (const label of sheet.netLabels) {
+  for (const label of sheet.netLabels.filter(isElectricalNetLabel)) {
     const x = checkCoordinate(label.x, label.id, blockers), y = checkCoordinate(label.y, label.id, blockers)
     rows.push(`FLAG ${x} ${y} ${label.name}`)
     const port = ports.get(label.name.toLowerCase())
@@ -684,7 +684,7 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       }
     }
     const connectivity = analyzeConnectivity({ ...project, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels })
-    const existingLabelNames = new Set(sheet.netLabels.map((label) => label.name.toLowerCase()))
+    const existingLabelNames = new Set(sheet.netLabels.filter(isElectricalNetLabel).map((label) => label.name.toLowerCase()))
     const generatedLabelByNet = new Map<string, string>()
     const labelForCapacitorPin = (part: Part, pinIndex: number): string => {
       const net = pinNet(connectivity, part, pinIndex)
@@ -864,6 +864,9 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
     return { files: [], losses, blockers: [{ sourceId: 'project', message: error instanceof Error ? error.message : 'Project validation failed.' }], includedAssets, requiresUnknownLicenseConfirmation: false }
   }
   const sheets = project.sheets
+  for (const sheet of sheets) for (const label of sheet.netLabels) if (!isElectricalNetLabel(label)) {
+    blockers.push({ sourceId: label.id, message: `Schematic notes are not supported by LTspice export. The note “${label.name.slice(0, 80)}” is preserved in the native project; remove it before exporting.` })
+  }
   const basenameBySheet = new Map<string, string>()
   const usedPaths = new Set<string>()
   for (const sheet of sheets) {
@@ -899,7 +902,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
     includedAssets.push({ filename: asset.filename, sha256: asset.sha256, licenseStatus: asset.licenseStatus, ...(asset.sourceUrl ? { sourceUrl: asset.sourceUrl } : {}), ...(asset.licenseReference ? { licenseReference: asset.licenseReference } : {}), ...(asset.rightsNotes ? { rightsNotes: asset.rightsNotes } : {}) })
   }
   for (const sheet of sheets) {
-    if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })
+    if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })
     for (const part of sheet.parts) {
       if (part.kind === 'voltageSwitch') blockers.push({ sourceId: part.id, message: 'Voltage-controlled switch export is not implemented.' })
       if (part.kind === 'currentSwitch') blockers.push({ sourceId: part.id, message: 'Current-controlled switch export is not implemented.' })
@@ -911,7 +914,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
         try {
           if (part.value.includes('^')) throw new Error('uses ^, which LTspice treats as boolean XOR while this ngspice engine treats it as exponentiation; rewrite it explicitly before export.')
           const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
-          validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name))
+          validateBehavioralReferences(parsed.references, sheet.netLabels.filter(isElectricalNetLabel).map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name))
           const renamedSwitchReference = parsed.references.components.find((reference) => sheet.parts.some((candidate) => candidate.kind === 'switch' && candidate.ref.toLowerCase() === reference.toLowerCase()))
           if (renamedSwitchReference) throw new Error(`references current through ${renamedSwitchReference}, but fixed-state switches export under generated resistor references, so that current reference would change.`)
           losses.push({ severity: 'warning', sourceId: part.id, title: 'Behavioral expression passed through to LTspice', explanation: 'The B-source output and validated expression are preserved directly. Review LTspice function and operator semantics for this expression before relying on numeric equivalence.' })

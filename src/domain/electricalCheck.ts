@@ -1,7 +1,7 @@
 import { analyzeConnectivity } from './connectivity'
 import type { Connectivity } from './connectivity'
 import { componentPins } from './geometry'
-import type { Part, Project } from './project'
+import { isElectricalNetLabel, type Part, type Project } from './project'
 import { componentMagnitude, spiceDimensionMagnitude } from './componentValue'
 import { analyzeModelDependencies, coupledLineConductorCount, inspectCoupledLineMatrices, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { behavioralCurrentReferenceError, ngspiceCurrentReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
@@ -286,7 +286,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         const expression = part.behavioralCapacitance ?? part.behavioralCharge ?? ''
         if (!expression.trim() || part.behavioralCapacitance !== undefined && part.behavioralCharge !== undefined || part.deviceModel || part.seriesResistance !== undefined || part.instanceMultiplier !== undefined) throw new Error('Behavioral capacitance requires one C= or Q= expression and cannot be combined with an imported model, series resistance, or multiplier.')
         const parsed = parseBehavioralExpression(expression)
-        validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, sheet.netLabels.filter(isElectricalNetLabel).map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(sheet.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
@@ -298,7 +298,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       try {
         if (!part.behavioralResistance.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
         const parsed = parseBehavioralExpression(part.behavioralResistance)
-        validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, sheet.netLabels.filter(isElectricalNetLabel).map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceCurrentReferences(sheet.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
@@ -310,7 +310,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       try {
         if (!part.behavioralInductance.trim() || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
         const parsed = parseBehavioralExpression(part.behavioralInductance)
-        validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, sheet.netLabels.filter(isElectricalNetLabel).map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralInductance, ngspiceCurrentReferences(sheet.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
@@ -318,7 +318,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({ id: `invalid-behavioral-inductor:${sheet.id}:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral inductor in ${sheet.name}`, detail, partId: topLevelInstanceId })
       }
     }
-    const sheetLabelNames = new Set(sheet.netLabels.map((label) => label.name.trim()))
+    const sheetLabelNames = new Set(sheet.netLabels.filter(isElectricalNetLabel).map((label) => label.name.trim()))
     appendMultipleBlockOutputIssues(sheet, sheetConnectivity, topLevelInstanceId)
     for (const [index, diagnostic] of sheetConnectivity.diagnostics.entries()) issues.push({
       id: `connectivity:${sheet.id}:${index}`,
@@ -328,7 +328,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       partId: topLevelInstanceId,
     })
     for (const part of sheet.parts) {
-      if ((part.kind === 'npn' || part.kind === 'pnp') && part.substrateNode && part.substrateNode !== '0' && !sheet.netLabels.some((label) => label.name.toLowerCase() === part.substrateNode!.toLowerCase())) issues.push({
+      if ((part.kind === 'npn' || part.kind === 'pnp') && part.substrateNode && part.substrateNode !== '0' && !sheet.netLabels.some((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === part.substrateNode!.toLowerCase())) issues.push({
         id: `missing-bjt-substrate-node:${sheet.id}:${part.id}`,
         severity: 'warning',
         title: `${part.ref} substrate node ${part.substrateNode} is not labeled in ${sheet.name}`,
@@ -362,7 +362,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
         validateBehavioralReferences(
           parsed.references,
-          sheet.netLabels.map((label) => label.name),
+          sheet.netLabels.filter(isElectricalNetLabel).map((label) => label.name),
           sheet.parts.map((candidate) => candidate.ref),
           (sheet.parameters ?? []).map((parameter) => parameter.name),
           [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()],
@@ -452,7 +452,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
   }
 
-  const projectLabelNames = new Set(project.netLabels.map((label) => label.name.trim()))
+  const projectLabelNames = new Set(project.netLabels.filter(isElectricalNetLabel).map((label) => label.name.trim()))
   for (const wire of project.wires) {
     const net = connectivity.wireNets.get(wire.id)
     const connectedToPart = net === '0' || (net !== undefined && pinsByNet.has(net))
@@ -491,7 +491,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       try {
         if (!part.behavioralResistance.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
         const parsed = parseBehavioralExpression(part.behavioralResistance)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
@@ -504,7 +504,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         const expression = part.behavioralCapacitance ?? part.behavioralCharge ?? ''
         if (!expression.trim() || part.behavioralCapacitance !== undefined && part.behavioralCharge !== undefined || part.deviceModel || part.seriesResistance !== undefined || part.instanceMultiplier !== undefined) throw new Error('Behavioral capacitance requires one C= or Q= expression and cannot be combined with an imported model, series resistance, or multiplier.')
         const parsed = parseBehavioralExpression(expression)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
@@ -516,7 +516,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       try {
         if (!part.behavioralInductance.trim() || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
         const parsed = parseBehavioralExpression(part.behavioralInductance)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralInductance, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
@@ -542,7 +542,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         if (part.behavioralDialect !== 'ltspice') {
           const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceCurrentReferences(project.parts))
           if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))

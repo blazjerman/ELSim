@@ -1,5 +1,5 @@
 import { componentPins, pointOnSegment, wireNetAt } from './geometry'
-import type { Part, Project } from './project'
+import { isElectricalNetLabel, type Part, type Project } from './project'
 
 export type Connectivity = {
   pinNets: Map<string, string>
@@ -164,6 +164,7 @@ function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: str
   }
 
   for (const label of project.netLabels) {
+    if (!isElectricalNetLabel(label)) continue
     const token = `label:${label.id}`
     dsu.add(token)
     if (label.name.trim().toLowerCase() === '0') dsu.union(token, groundToken)
@@ -175,6 +176,7 @@ function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: str
 
   const labelsByName = new Map<string, string>()
   for (const label of project.netLabels) {
+    if (!isElectricalNetLabel(label)) continue
     const key = label.name.trim().toLowerCase()
     const token = `label:${label.id}`
     const prior = labelsByName.get(key)
@@ -244,7 +246,7 @@ export function analyzeConnectivity(project: Project): Connectivity {
     wireNets.set(wire.id, nameByRoot.get(dsu.find(wireToken(wire.id))) ?? `n${autoIndex++}`)
   }
   const labelNets = new Map<string, string>()
-  for (const label of project.netLabels) labelNets.set(label.id, nameByRoot.get(dsu.find(`label:${label.id}`)) ?? '0')
+  for (const label of project.netLabels) if (isElectricalNetLabel(label)) labelNets.set(label.id, nameByRoot.get(dsu.find(`label:${label.id}`)) ?? '0')
   return { pinNets, pinLabels, wireNets, labelNets, diagnostics }
 }
 
@@ -267,6 +269,7 @@ export function hasSameElectricalConnectivity(before: Project, after: Project): 
     for (const pin of pins) add(connectivity.pinNets.get(`${pin.partId}:${pin.index}`), `pin:${pin.partId}:${pin.index}`)
     for (const wire of project.wires) add(connectivity.wireNets.get(wire.id), `wire:${wire.id}`)
     for (const label of project.netLabels) {
+      if (!isElectricalNetLabel(label)) continue
       const attachedPin = pins.find((pin) => Math.hypot(pin.x - label.x, pin.y - label.y) <= 8)
       const attachedWire = wireNetAt(project, { x: label.x, y: label.y }, 1e-3)
       const attachedNet = attachedPin ? connectivity.pinNets.get(`${attachedPin.partId}:${attachedPin.index}`)

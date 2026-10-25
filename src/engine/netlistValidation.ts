@@ -1,6 +1,6 @@
 import { analyzeConnectivity } from '../domain/connectivity'
 import type { Connectivity } from '../domain/connectivity'
-import type { Project } from '../domain/project'
+import { isElectricalNetLabel, type Project } from '../domain/project'
 import { MAX_FINITE_PWL_POINTS, MAX_SOURCE_PWL_POINTS, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import {
@@ -153,13 +153,13 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
   } else if (project.simulation.analysis === 'tf') {
     const settings = project.simulation.transferFunction ?? { outputNode: '', inputSource: '' }
     const resolved = connectivity ?? analyzeConnectivity(project)
-    const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const output = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     if (!output || resolved.labelNets.get(output.id) === '0') add('tfOutput', 'Choose a labeled, non-ground output node for transfer-function analysis.')
     if (!independentSources.some((part) => part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())) add('tfSource', 'Choose an independent voltage or current input source.')
   } else if (project.simulation.analysis === 'pz') {
     const settings = project.simulation.poleZero ?? { outputNode: '', inputSource: '', roots: 'both' as const }
     const resolved = connectivity ?? analyzeConnectivity(project)
-    const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const output = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     if (!output || resolved.labelNets.get(output.id) === '0') add('pzOutput', 'Choose a labeled, non-ground output node for pole-zero analysis.')
     const source = independentSources.find((part) => part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
     if (!source) add('pzSource', 'Choose an independent voltage or current input source.')
@@ -168,7 +168,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
   } else if (project.simulation.analysis === 'sens') {
     const settings = project.simulation.sensitivity ?? { outputNode: '', mode: 'dc' as const }
     const resolved = connectivity ?? analyzeConnectivity(project)
-    const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const output = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     if (!output || resolved.labelNets.get(output.id) === '0') add('sensOutput', 'Choose a labeled, non-ground output node for sensitivity analysis.')
     if (!['dc', 'ac'].includes(settings.mode)) add('sensMode', 'Choose DC or AC sensitivity analysis.')
     if (settings.mode === 'ac') {
@@ -191,7 +191,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
   } else if (project.simulation.analysis === 'disto') {
     const settings = project.simulation.distortion ?? { outputNode: '', inputSource: '', harmonic: 2 as const }
     const resolved = connectivity ?? analyzeConnectivity(project)
-    const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const output = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     if (!output || resolved.labelNets.get(output.id) === '0') add('distoOutput', 'Choose a labeled, non-ground output node for distortion analysis.')
     const source = independentSources.find((part) => part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
     if (!source) add('distoSource', 'Choose an independent voltage or current source as the distortion input.')
@@ -217,7 +217,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
   } else if (project.simulation.analysis === 'noise') {
     const sweep = project.simulation.noiseSweep ?? { outputNode: '', inputSource: '', scale: 'dec' as const, points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
     const resolved = connectivity ?? analyzeConnectivity(project)
-    const output = project.netLabels.find((label) => label.name.toLowerCase() === sweep.outputNode.trim().toLowerCase())
+    const output = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === sweep.outputNode.trim().toLowerCase())
     if (!output || resolved.labelNets.get(output.id) === '0') add('noiseOutput', 'Choose a labeled non-ground output node for noise analysis.')
     if (!independentSources.some((part) => part.ref.toLowerCase() === sweep.inputSource.trim().toLowerCase())) add('noiseSource', 'Choose an independent voltage or current source as the noise input.')
     if (!['dec', 'oct', 'lin'].includes(sweep.scale)) add('noiseScale', 'Choose a decade, octave, or linear noise sweep.')

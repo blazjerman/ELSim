@@ -1,6 +1,6 @@
 import type { Project } from '../domain/project'
 
-export type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
+export type ToolMode = 'select' | 'wire' | 'label' | 'note' | 'probe' | 'junction'
 export type Selection = { kind: 'part' | 'label'; id: string } | null
 export type SheetSelectionState = { selection: Selection; partIds: string[]; wireIds: string[]; labelIds: string[] }
 export type HoveredSchematicObject = { kind: 'part' | 'wire' | 'label'; id: string } | null

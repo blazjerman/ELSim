@@ -42,8 +42,10 @@ globalThis.DecompressionStream = class TestDecompressionStream {
 const { verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
-test('project ZIP archive is deterministic and round-trips the complete v9 project', async () => {
+test('project ZIP archive is deterministic and round-trips the complete v10 project', async () => {
   const project = createStarterProject()
+  project.netLabels.push({ id: 'archive-note', kind: 'note', name: 'Review pin order\nKeep this annotation non-electrical.', x: 1200, y: 680, visible: true })
+  project.sheets = project.sheets.map((sheet) => sheet.id === project.rootSheetId ? { ...sheet, netLabels: project.netLabels } : sheet)
   project.simulation.analysis = 'ac'
   project.simulation.stochasticSampleCount = 4
   project.parts[1].flipX = true
@@ -84,6 +86,7 @@ test('project ZIP archive is deterministic and round-trips the complete v9 proje
   project.parts[4].componentDefinitionId = 'elsim.current-source'
   project.sheets[0].parts = project.parts
   assert.deepEqual(restored, project)
+  assert.equal(restored.netLabels.find((label) => label.id === 'archive-note').kind, 'note')
   assert.deepEqual(restored.plotSettings.panels[0].secondCursorValues, { tran: 0.004, ac: 1200, dc: -2.5, noise: 50 })
   assert.deepEqual(restored.plotSettings.panels[0].componentVoltageProbes, project.plotSettings.panels[0].componentVoltageProbes)
   assert.deepEqual(restored.plotSettings.panels[0].traceReferences, project.plotSettings.panels[0].traceReferences)
@@ -156,7 +159,7 @@ test('v2 projects migrate to a root sheet and validate nested sheet ownership', 
   delete old.rootSheetId
   delete old.sheets
   const migrated = validateProject(old)
-  assert.equal(migrated.version, 9)
+  assert.equal(migrated.version, 10)
   assert.equal(migrated.rootSheetId, 'sheet-main')
   assert.equal(migrated.sheets.length, 1)
   assert.deepEqual(migrated.sheets[0].parts, migrated.parts)
@@ -175,36 +178,50 @@ test('v2 projects migrate to a root sheet and validate nested sheet ownership', 
   assert.throws(() => validateProject(duplicateName), /already used in this hierarchy/)
 })
 
+test('v9 projects migrate to v10 without changing electrical labels and accept non-electrical notes', () => {
+  const prior = structuredClone(createStarterProject())
+  prior.version = 9
+  for (const label of prior.netLabels) delete label.kind
+  prior.sheets[0].netLabels = structuredClone(prior.netLabels)
+  const migrated = validateProject(prior)
+  assert.equal(migrated.version, 10)
+  assert.deepEqual(migrated.netLabels.map(({ kind }) => kind), [undefined, undefined])
+  const withNote = structuredClone(migrated)
+  withNote.netLabels.push({ id: 'note-migrated', kind: 'note', name: 'Read the output here', x: 470, y: 320, visible: true })
+  withNote.sheets[0].netLabels = structuredClone(withNote.netLabels)
+  assert.equal(validateProject(withNote).netLabels.at(-1).kind, 'note')
+})
+
 test('v3 migration and active child-sheet scene round-trip', async () => {
   const current = createStarterProject()
   const v3 = structuredClone(current)
   v3.version = 3
   delete v3.activeSheetId
   const migrated = validateProject(v3)
-  assert.equal(migrated.version, 9)
+  assert.equal(migrated.version, 10)
   assert.equal(migrated.activeSheetId, migrated.rootSheetId)
   const v4 = structuredClone(current)
   v4.version = 4
   delete v4.sheets[0].ports
   const migratedV4 = validateProject(v4)
-  assert.equal(migratedV4.version, 9)
+  assert.equal(migratedV4.version, 10)
   assert.deepEqual(migratedV4.sheets[0].ports, [])
   assert.deepEqual(migratedV4.sheets[0].parameters, [])
   const v5 = structuredClone(current)
   v5.version = 5
   delete v5.sheets[0].parameters
   const migratedV5 = validateProject(v5)
-  assert.equal(migratedV5.version, 9)
+  assert.equal(migratedV5.version, 10)
   assert.deepEqual(migratedV5.sheets[0].parameters, [])
   const v6 = structuredClone(current)
   v6.version = 6
   const migratedV6 = validateProject(v6)
-  assert.equal(migratedV6.version, 9)
+  assert.equal(migratedV6.version, 10)
   assert.deepEqual(migratedV6.sheets[0].ports, [])
   const v8 = structuredClone(current)
   v8.version = 8
   const migratedV8 = validateProject(v8)
-  assert.equal(migratedV8.version, 9)
+  assert.equal(migratedV8.version, 10)
   assert.equal(migratedV8.simulation.stochasticSampleCount, undefined)
   assert.equal(validateProject({ ...structuredClone(current), simulation: { ...current.simulation, stochasticSampleCount: 10 } }).simulation.stochasticSampleCount, 10)
   for (const invalidCount of [0, 11, 1.5, '3']) {
@@ -338,8 +355,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const malformedNoiseRange = structuredClone(restored)
   malformedNoiseRange.plotSettings.panels = [{ id: 'plot-invalid-noise-range', bounds: { x: 0, y: 0, width: 640, height: 360 }, selectedTraceIds: [], ranges: { noise: { start: 0.8, end: 0.2 } } }]
   assert.throws(() => validateProject(malformedNoiseRange), /Plot panel view range is malformed/)
-  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v9.schema.json'), 'utf8'))
-  assert.equal(schema.properties.version.const, 9)
+  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v10.schema.json'), 'utf8'))
+  assert.equal(schema.properties.version.const, 10)
   assert.deepEqual([schema.$defs.simulation.properties.stochasticSampleCount.minimum, schema.$defs.simulation.properties.stochasticSampleCount.maximum], [1, 10])
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('sens'))
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('pz'))

@@ -1,6 +1,6 @@
 import { componentPins, pointOnSegment } from './geometry'
 import type { Connectivity } from './connectivity'
-import type { Part, Project, Wire } from './project'
+import { isElectricalNetLabel, type Part, type Project, type Wire } from './project'
 
 export type WireCurrentFlow = { forward: boolean; magnitude: number }
 export type WireCurrentFlowSegment = WireCurrentFlow & { points: [number, number][] }
@@ -97,7 +97,7 @@ export function createWireCurrentFlowSampler(
     ...project.wires.flatMap((wire) => wire.points.map(([x, y]) => [{ x, y } as const, coordinateKey({ x, y })] as const)),
     ...pins.map(({ pin }) => [{ x: pin.x, y: pin.y } as const, coordinateKey(pin)] as const),
     ...project.junctions.map((point) => [point, coordinateKey(point)] as const),
-    ...project.netLabels.map(({ x, y }) => [{ x, y } as const, coordinateKey({ x, y })] as const),
+    ...project.netLabels.filter(isElectricalNetLabel).map(({ x, y }) => [{ x, y } as const, coordinateKey({ x, y })] as const),
   ].map(([point, key]) => [key, point] as const))
   const candidatePoints = [...candidatePointMap.values()]
   const pointsByX = new Map<string, typeof candidatePoints>(), pointsByY = new Map<string, typeof candidatePoints>()

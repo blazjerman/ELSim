@@ -38,7 +38,7 @@ import { nextRef, referencePrefixForKind } from '../domain/referenceDesignator'
 import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
-import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type TransientMeasurementPatch } from '../domain/project'
+import { createStarterProject, isElectricalNetLabel, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type TransientMeasurementPatch } from '../domain/project'
 import { validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlistValidation'
 import { assertProjectFileWithinLimit } from '../domain/projectFileLimits'
 import { updatePartUiState } from './partUiState'
@@ -168,7 +168,7 @@ function BlockParameterOverride({ name, defaultValue, value, onCommit, scope = '
 }
 
 function BjtSubstrateNodeEditor({ part, labels, onChange }: { part: Part; labels: Project['netLabels']; onChange: (patch: Partial<Part>) => void }) {
-  const nodes = [...new Map(labels.filter((label) => label.name !== '0').map((label) => [label.name.toLowerCase(), label.name])).values()]
+  const nodes = [...new Map(labels.filter((label) => isElectricalNetLabel(label) && label.name !== '0').map((label) => [label.name.toLowerCase(), label.name])).values()]
   const hasStoredNode = part.substrateNode && !nodes.some((node) => node.toLowerCase() === part.substrateNode!.toLowerCase())
   return <>
     <label className="field-label">BJT substrate node<select aria-label={`Substrate node for ${part.ref}`} value={part.substrateNode ?? ''} onChange={(event) => onChange({ substrateNode: event.target.value || undefined })}>
@@ -1260,7 +1260,7 @@ export default function App() {
   const availableSheetPortNodeNames = useMemo(() => {
     if (!activeSheet) return []
     const existingPorts = new Set(activeSheet.ports.map((port) => port.name.toLowerCase()))
-    return [...new Set(activeSheet.netLabels.map((label) => label.name).filter((name) => !existingPorts.has(name.toLowerCase())))]
+    return [...new Set(activeSheet.netLabels.filter(isElectricalNetLabel).map((label) => label.name).filter((name) => !existingPorts.has(name.toLowerCase())))]
   }, [activeSheet?.netLabels, activeSheet?.ports])
   const sheetsContainingActive = useMemo(() => {
     const containing = new Set<string>([project.activeSheetId])
@@ -1464,11 +1464,11 @@ export default function App() {
     const existing = current.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
     return { ...current, simulation: { ...current.simulation, dcSweep: changedQuantity ? defaults : { ...existing, source: sourceRef } } }
   })
-  const labeledNodeNames = useMemo(() => [...new Set(project.netLabels.filter((label) => connectivity.labelNets.get(label.id) !== '0').map((label) => label.name))], [project.netLabels, connectivity])
+  const labeledNodeNames = useMemo(() => [...new Set(project.netLabels.filter((label) => isElectricalNetLabel(label) && connectivity.labelNets.get(label.id) !== '0').map((label) => label.name))], [project.netLabels, connectivity])
   const changeAnalysis = (analysis: Project['simulation']['analysis']) => setProject((current) => {
     if (analysis !== 'noise' && analysis !== 'tf' && analysis !== 'sens' && analysis !== 'pz' && analysis !== 'disto') return { ...current, simulation: { ...current.simulation, analysis } }
     const resolved = analyzeConnectivity(current)
-    const nodes = [...new Set(current.netLabels.filter((label) => resolved.labelNets.get(label.id) !== '0').map((label) => label.name))]
+    const nodes = [...new Set(current.netLabels.filter((label) => isElectricalNetLabel(label) && resolved.labelNets.get(label.id) !== '0').map((label) => label.name))]
     const sources = current.parts.filter((part) => part.kind === 'source' || part.kind === 'currentSource')
     if (analysis === 'tf') {
       const existing = current.simulation.transferFunction
@@ -2111,7 +2111,7 @@ export default function App() {
     const sources = resolved.parts
     const pastedIds = sources.map(() => `p-${crypto.randomUUID()}`)
     const pastedWires = clipboard.wires.map((wire) => ({ id: `w-${crypto.randomUUID()}`, points: [[wire.points[0][0] + offsetX, wire.points[0][1] + offsetY], [wire.points[1][0] + offsetX, wire.points[1][1] + offsetY]] as [[number, number], [number, number]] }))
-    const pastedLabels = clipboard.netLabels.map((label) => ({ ...label, id: `label-${crypto.randomUUID()}`, x: label.x + offsetX, y: label.y + offsetY }))
+    const pastedLabels = clipboard.netLabels.map((label) => ({ ...label, id: `${label.kind === 'note' ? 'note' : 'label'}-${crypto.randomUUID()}`, x: label.x + offsetX, y: label.y + offsetY }))
     const lastPartId = pastedIds.at(-1)
     const lastLabel = pastedLabels.at(-1)
     const pastedWireIds = pastedWires.map((wire) => wire.id)
@@ -2172,7 +2172,7 @@ export default function App() {
     if (lastPartId) {
       setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'} and ${pastedWires.length} attached wire segments. Ends at unselected parts stay open; net labels are not copied.`)
     } else if (lastLabel) {
-      setNotice(`Pasted net label ${lastLabel.name}. Same-name labels on this sheet connect to the same electrical node.`)
+      setNotice(lastLabel.kind === 'note' ? 'Pasted schematic note.' : `Pasted net label ${lastLabel.name}. Same-name labels on this sheet connect to the same electrical node.`)
     } else if (pastedWires.length) {
       setNotice(`Pasted ${pastedWires.length} wire segment${pastedWires.length === 1 ? '' : 's'}. Open endpoints stay unconnected until they touch another pin or wire.`)
     }
@@ -2207,7 +2207,7 @@ export default function App() {
     setHoveredSchematicObject(null)
   }
   const renameSelectedLabel = (name: string) => {
-    if (!selectedLabel) return
+    if (!selectedLabel || !isElectricalNetLabel(selectedLabel)) return
     const value = name.trim()
     if (!/^(0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(value)) { setNotice('Use a SPICE net name: start with a letter or underscore.'); return }
     setProject((current) => ({ ...current, netLabels: current.netLabels.map((label) => label.id === selectedLabel.id ? { ...label, name: value } : label) }))
@@ -2297,8 +2297,8 @@ export default function App() {
         if (!partIds.length && !wireIds.length && copiedParts.current.netLabels.length) {
           const labels = copiedParts.current.netLabels
           setNotice(labels.length === 1
-            ? `Copied net label ${labels[0].name}. Pasting it keeps the same name; same-name labels on this sheet connect.`
-            : `Copied ${labels.length} net labels. Pasting keeps their names; same-name labels on this sheet connect.`)
+            ? labels[0].kind === 'note' ? 'Copied schematic note. Pasting preserves its text.' : `Copied net label ${labels[0].name}. Pasting it keeps the same name; same-name labels on this sheet connect.`
+            : `Copied ${labels.filter((label) => label.kind !== 'note').length} net labels and ${labels.filter((label) => label.kind === 'note').length} schematic notes. Pasting preserves their electrical/documentation roles.`)
           return
         }
         const copiedDescription = partIds.length
@@ -3095,7 +3095,7 @@ export default function App() {
   const updateInitialCondition = (index: number, value: InitialCondition) => setProject((current) => ({ ...current, simulation: { ...current.simulation, initialConditions: (current.simulation.initialConditions ?? []).map((condition, item) => item === index ? value : condition) } }))
   const addInitialCondition = () => setProject((current) => {
     const conditions = current.simulation.initialConditions ?? []
-    const nodes = [...new Set(current.netLabels.map((label) => label.name).filter((node) => node !== '0'))]
+    const nodes = [...new Set(current.netLabels.filter(isElectricalNetLabel).map((label) => label.name).filter((node) => node !== '0'))]
     const node = nodes.find((candidate) => !conditions.some((condition) => 'node' in condition && condition.node.toLowerCase() === candidate.toLowerCase()))
     if (!node || conditions.length >= 8) return current
     return { ...current, simulation: { ...current.simulation, initialConditions: [...conditions, { node, voltage: '0 V' }] } }
@@ -3546,9 +3546,9 @@ export default function App() {
           <div className="form-section"><div className="form-section-title">APPEARANCE</div><button className="wide-select" onClick={rotateSelected}>Orientation <span>{selected.rotation}° <RotateCw size={13}/></span></button><button className="wide-select flip-control" onClick={flipSelected}>Flip horizontally <span>{selected.flipX ? 'Flipped' : 'Normal'} <FlipHorizontal2 size={13}/></span></button><div className="field-hint">Orientation keeps electrical pin indexes stable. If moving attached wires would change connectivity, reroute them before applying the change.</div></div>
           <div className="inspector-bottom"><button onClick={duplicateSelected}><Copy size={14}/> Duplicate</button><button className="delete-action" onClick={deleteSelectedParts}><Trash2 size={14}/> Delete part</button></div>
         </> : selectedLabel ? <>
-          <div className="selected-part-card"><span className="selected-part-icon icon-label"><Bookmark size={17}/></span><div><strong>Net label</strong><span>Shared SPICE node name</span></div></div>
-          <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Net name<input value={selectedLabel.name} onChange={(event) => renameSelectedLabel(event.target.value)}/></label><div className="field-hint">Labels with the same name connect electrically across this sheet.</div></div>
-          <div className="inspector-bottom"><button className="delete-action" onClick={deleteSelection}><Trash2 size={14}/> Delete label</button></div>
+          <div className="selected-part-card"><span className="selected-part-icon icon-label"><Bookmark size={17}/></span><div><strong>{selectedLabel.kind === 'note' ? 'Schematic note' : 'Net label'}</strong><span>{selectedLabel.kind === 'note' ? 'Non-electrical annotation' : 'Shared SPICE node name'}</span></div></div>
+          <div className="form-section"><div className="form-section-title">{selectedLabel.kind === 'note' ? 'ANNOTATION' : 'IDENTIFICATION'}</div><label className="field-label">{selectedLabel.kind === 'note' ? 'Note text' : 'Net name'}{selectedLabel.kind === 'note' ? <textarea maxLength={500} rows={5} value={selectedLabel.name} onChange={(event) => setProject((current) => ({ ...current, netLabels: current.netLabels.map((label) => label.id === selectedLabel.id ? { ...label, name: event.target.value } : label) }))}/> : <input value={selectedLabel.name} onChange={(event) => renameSelectedLabel(event.target.value)}/>}</label><div className="field-hint">{selectedLabel.kind === 'note' ? 'This note is saved with the project and has no electrical effect.' : 'Labels with the same name connect electrically across this sheet.'}</div></div>
+          <div className="inspector-bottom"><button className="delete-action" onClick={deleteSelection}><Trash2 size={14}/> Delete {selectedLabel.kind === 'note' ? 'note' : 'label'}</button></div>
         </> : <>
         <div className="project-summary"><div className="summary-row"><span>Project</span><strong>{project.name}</strong></div><div className="summary-row"><span>Format</span><strong>ELSim JSON · v{project.version}</strong></div><div className="summary-row"><span>Sheets</span><strong>{project.sheets.length}</strong></div><div className="summary-row"><span>Components</span><strong>{project.parts.length}</strong></div></div>
           <div className="form-section">

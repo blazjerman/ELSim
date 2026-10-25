@@ -1,5 +1,5 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
-import { sheetModelName, type Part, type Project } from '../domain/project'
+import { isElectricalNetLabel, sheetModelName, type Part, type Project } from '../domain/project'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit, translateNgspiceExpressionOperators, withoutInlineComment } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { behavioralCurrentReferenceError, ngspiceCurrentReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
@@ -231,7 +231,7 @@ function hierarchicalSaveVectors(project: Project): string[] {
     if (!sheet) return
     const nextAncestry = new Set(ancestry).add(sheetId)
     const ports = new Set(sheet.ports.map((port) => port.name.toLowerCase()))
-    for (const label of path.length ? sheet.netLabels : []) {
+    for (const label of path.length ? sheet.netLabels.filter(isElectricalNetLabel) : []) {
       const name = label.name.trim()
       if (!name || name === '0' || ports.has(name.toLowerCase())) continue
       saves.add(`.save v(${[...path, name].join('.')})`)
@@ -908,7 +908,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
   const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
-  const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
+  const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.filter(isElectricalNetLabel).map((label) => label.name)].map((name) => name.toLowerCase()))
   const usedModelNames = new Set([...importedDeviceModels.map((model) => model.name.toLowerCase()), ...subcircuitsByName.keys(), ...usedReferences, ...usedNodes, 'ddefault', 'dzener', 'elsim_internal_sw'])
   const stochasticModelNameByPart = new Map<string, string>()
   const stochasticModelCopies: { asset: (typeof modelAssets)[number]; name: string; lines: NonNullable<ReturnType<typeof specializeStochasticSubcircuit>> }[] = []
@@ -1009,7 +1009,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       try {
         if (!part.behavioralResistance?.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
         const parsed = parseBehavioralExpression(part.behavioralResistance)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         behavioralResistanceValue = `R={${translateBehavioralExpression(part.behavioralResistance)}}`
@@ -1027,7 +1027,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const expression = part.behavioralCapacitance ?? part.behavioralCharge ?? ''
         if (!expression.trim() || expression.length > 256 || part.deviceModel || part.seriesResistance !== undefined || part.instanceMultiplier !== undefined) throw new Error('Behavioral capacitance requires one C= or Q= expression and cannot be combined with an imported model, series resistance, or multiplier.')
         const parsed = parseBehavioralExpression(expression)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         behavioralCapacitorValue = `${part.behavioralCharge !== undefined ? 'Q' : 'C'}={${translateBehavioralExpression(expression)}}`
@@ -1044,7 +1044,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const expression = part.behavioralInductance ?? ''
         if (!expression.trim() || expression.length > 256 || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
         const parsed = parseBehavioralExpression(expression)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         behavioralInductorValue = `L={${translateBehavioralExpression(expression)}}`
@@ -1575,7 +1575,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'npn' || part.kind === 'pnp') {
       const base = pinNet(connectivity, part, 1)
       const emitter = pinNet(connectivity, part, 2)
-      const substrateLabel = part.substrateNode ? project.netLabels.find((label) => label.name.toLowerCase() === part.substrateNode!.toLowerCase()) : undefined
+      const substrateLabel = part.substrateNode ? project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === part.substrateNode!.toLowerCase()) : undefined
       const substrate = substrateLabel ? connectivity.labelNets.get(substrateLabel.id) : part.substrateNode
       const expectedModelType = part.kind === 'npn' ? 'npn' : 'pnp'
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
@@ -1834,7 +1834,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const expression = `${low} + (${high} - ${low}) * (${booleanExpression})`
       try {
         const parsed = parseBehavioralExpression(expression)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         const translated = translateBehavioralExpression(expression)
         append(`${part.ref} ${pinNet(connectivity, part, part.kind === 'inverter' ? 1 : 2)} 0 V={${translated}}`, part.id, 'component')
       } catch (error) {
@@ -1846,7 +1846,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         if (part.behavioralDialect !== 'ltspice') {
           const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceCurrentReferences(project.parts))
           if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
@@ -2094,7 +2094,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   }
   if (project.simulation.analysis === 'pz') {
     const settings = project.simulation.poleZero ?? { outputNode: '', inputSource: '', roots: 'both' as const }
-    const outputLabel = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const outputLabel = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     const outputNet = outputLabel ? connectivity.labelNets.get(outputLabel.id) : undefined
     const inputSource = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
     const inputPositive = inputSource ? pinNet(connectivity, inputSource, 0) : undefined
@@ -2118,7 +2118,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   } else if (project.simulation.analysis === 'tf') {
     const settings = project.simulation.transferFunction ?? { outputNode: '', inputSource: '' }
-    const outputLabel = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const outputLabel = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     const outputNet = outputLabel ? connectivity.labelNets.get(outputLabel.id) : undefined
     const inputSource = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
     if (!outputLabel || !outputNet || outputNet === '0' || !inputSource) {
@@ -2128,7 +2128,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     } else append(`.tf V(${outputNet}) ${inputSource.ref}`, 'analysis:tf', 'analysis')
   } else if (project.simulation.analysis === 'sens') {
     const settings = project.simulation.sensitivity ?? { outputNode: '', mode: 'dc' as const }
-    const outputLabel = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const outputLabel = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     const outputNet = outputLabel ? connectivity.labelNets.get(outputLabel.id) : undefined
     const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
     const start = spiceFrequency(sweep.startFrequency), stop = spiceFrequency(sweep.stopFrequency)
@@ -2154,7 +2154,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const sweep = project.simulation.noiseSweep ?? { outputNode: '', inputSource: '', scale: 'dec' as const, points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
     const start = spiceFrequency(sweep.startFrequency), stop = spiceFrequency(sweep.stopFrequency)
     const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.inputSource.trim().toLowerCase())
-    const output = project.netLabels.find((label) => label.name.toLowerCase() === sweep.outputNode.trim().toLowerCase())
+    const output = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === sweep.outputNode.trim().toLowerCase())
     const outputNet = output ? connectivity.labelNets.get(output.id) : undefined
     if (!output || !outputNet || outputNet === '0' || !source || !['dec', 'oct', 'lin'].includes(sweep.scale) || !Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000 || !start || !stop || Number(start) <= 0 || Number(stop) <= Number(start)) {
       const message = 'Noise analysis needs a labeled non-ground output node, an independent input source, a supported scale, 1–10,000 points, and positive increasing frequencies.'
@@ -2165,7 +2165,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const settings = project.simulation.distortion ?? { outputNode: '', inputSource: '', harmonic: 2 as const }
     const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
     const start = spiceFrequency(sweep.startFrequency), stop = spiceFrequency(sweep.stopFrequency)
-    const output = project.netLabels.find((label) => label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
+    const output = project.netLabels.find((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === settings.outputNode.trim().toLowerCase())
     const outputNet = output ? connectivity.labelNets.get(output.id) : undefined
     const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === settings.inputSource.trim().toLowerCase())
     const secondToneRatio = settings.secondToneRatio ?? '0.49'
@@ -2223,7 +2223,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     const normalized = condition.voltage.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/v$/i, '')
     const value = spiceScalar(normalized, '')
-    const knownNode = project.netLabels.some((label) => label.name.toLowerCase() === condition.node.toLowerCase())
+    const knownNode = project.netLabels.some((label) => isElectricalNetLabel(label) && label.name.toLowerCase() === condition.node.toLowerCase())
     if (!knownNode || !value || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(condition.node)) {
       const message = `Initial voltage for ${cleanComment(condition.node)} must reference a labeled node and a valid voltage.`
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
@@ -2252,7 +2252,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     if (!delay && typeof measurement.expression === 'string') {
       try {
         const parsed = parseBehavioralExpression(measurement.expression)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((part) => part.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        validateBehavioralReferences(parsed.references, project.netLabels.filter(isElectricalNetLabel).map((label) => label.name), project.parts.map((part) => part.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         const unsupportedCurrent = unsupportedBehavioralCurrentReference(measurement.expression, ngspiceCurrentReferences(project.parts, true))
         if (unsupportedCurrent) throw new Error(`I(${unsupportedCurrent}) is not supported in transient measurement expressions; use I() with a voltage-source reference.`)
         validExpression = true

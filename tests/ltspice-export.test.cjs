@@ -47,6 +47,15 @@ test('packages generated export files as a deterministic, path-safe ZIP', () => 
   assert.throws(() => createFilesZip(Array.from({ length: 257 }, (_, index) => ({ path: `file-${index}.asc`, content: '' }))), /too many files/i)
 })
 
+test('LTspice export rejects native schematic notes instead of treating them as electrical flags', async () => {
+  const project = createStarterProject()
+  project.netLabels.push({ id: 'export-note', kind: 'note', name: 'Do not connect', x: 400, y: 500, visible: true })
+  project.sheets[0].netLabels = project.netLabels
+  const output = await exportLtspiceProject(project)
+  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'export-note' && /Schematic notes are not supported/.test(blocker.message)))
+  assert.ok(output.files.every((file) => !file.content.includes('FLAG 400 500 Do not connect')))
+})
+
 test('current sources export and reimport as I devices with ampere values', async () => {
   const project = createStarterProject()
   const currentSource = { id: 'current-source', kind: 'currentSource', ref: 'I1', value: '2 mA', x: 520, y: 400, rotation: 0 }

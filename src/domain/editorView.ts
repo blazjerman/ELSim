@@ -29,7 +29,12 @@ export function fitEditorView(project: Pick<Project, 'parts' | 'wires' | 'netLab
     }
   }
   for (const wire of project.wires) for (const [x, y] of wire.points) include(x, y)
-  for (const label of project.netLabels) include(label.x, label.y)
+  for (const label of project.netLabels) {
+    include(label.x, label.y)
+    if (label.kind === 'note') {
+      include(label.x + 9 + Math.max(...label.name.split('\n').map((line) => line.length)) * 9, label.y + (label.name.split('\n').length - 1) * 16)
+    }
+  }
   if (minX === Number.POSITIVE_INFINITY) return { ...project.view, zoom: 1, panX: 0, panY: 0 }
   const zoom = Math.max(.1, Math.min(2.5,
     viewport.width / Math.max(1, maxX - minX + padding * 2),
