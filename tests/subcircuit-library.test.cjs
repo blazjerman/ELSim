@@ -1539,10 +1539,33 @@ test('warns when ngspice E-source logic gates require unavailable XSPICE models'
     [4, 'ngspice E-source logic gate needs an unavailable XSPICE model'],
     [5, 'ngspice E-source logic gate needs an unavailable XSPICE model'],
     [6, 'ngspice E-source logic gate needs an unavailable XSPICE model'],
+    [7, 'ngspice E/G-source TABLE needs an unavailable XSPICE model'],
   ])
   assert.match(warnings[0].impact, /rewrites E-source AND\/OR\/NAND\/NOR forms to the XSPICE multi_input_pwl code model/)
   assert.match(warnings[0].suggestion, /does not replace its logic behavior/)
   assert.equal(source.includes('EAND OUT 0 AND(2)'), true)
+})
+
+test('warns when native E/G TABLE sources expand to unavailable XSPICE transfer models', () => {
+  const source = [
+    '* E1 OUT 0 TABLE {V(IN)} is only a comment',
+    '.SUBCKT lookup IN OUT',
+    'E1 OUT 0 TABLE {V(IN)} = (0,0) (1,2)',
+    'E2 OUT 0 IN 0 TABLE = (0,0) (1,2)',
+    'G1 OUT 0 TABLE {V(IN)} = (0,0) (1,1m)',
+    'G2 OUT 0 IN 0 TABLE = (0,0) (1,1m)',
+    'E3 OUT 0 IN 0 2',
+    '.ENDS lookup',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [3, 'ngspice E/G-source TABLE needs an unavailable XSPICE model'],
+    [4, 'ngspice E/G-source TABLE needs an unavailable XSPICE model'],
+    [5, 'ngspice E/G-source TABLE needs an unavailable XSPICE model'],
+    [6, 'ngspice E/G-source TABLE needs an unavailable XSPICE model'],
+  ])
+  assert.match(warnings[0].impact, /xfer_e\*\/xfer_g\* XSPICE code models/)
+  assert.match(warnings[0].suggestion, /does not substitute another transfer behavior/)
 })
 
 test('explains that browser ngspice omits the XSPICE models required by digital U devices', () => {

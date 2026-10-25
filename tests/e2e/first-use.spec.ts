@@ -8637,13 +8637,32 @@ test('imported ngspice E-source logic warning identifies missing XSPICE and open
   await expect(warnings).toContainText('does not replace its logic behavior')
   await expect(warnings).toContainText('xspice-logic.lib:2')
   await expect(warnings).toContainText('xspice-logic.lib:3')
-  await expect(warnings).not.toContainText('xspice-logic.lib:4')
+  await expect(warnings).toContainText('xspice-logic.lib:4')
+  await expect(warnings).toContainText('ngspice E/G-source TABLE needs an unavailable XSPICE model')
   await expect(warnings).not.toContainText('xspice-logic.lib:5')
   await warnings.getByRole('button', { name: 'Review source line 2' }).click()
   const sourceViewer = page.locator('.model-source-viewer')
   const reviewedLine = sourceViewer.locator('li').nth(1)
   await expect(reviewedLine).toBeFocused()
   await expect(reviewedLine).toContainText('EAND OUT 0 AND(2)')
+})
+
+test('imported ngspice E/G TABLE warning identifies missing XSPICE and opens its source line', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const source = '.SUBCKT lookup IN OUT\nE1 OUT 0 TABLE {V(IN)} = (0,0) (1,2)\nG1 OUT 0 TABLE {V(IN)} = (0,0) (1,1m)\nE2 OUT 0 VALUE={V(IN)*2}\n.ENDS lookup'
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'xspice-table.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice E/G-source TABLE needs an unavailable XSPICE model')
+  await expect(warnings).toContainText('xfer_e*/xfer_g* XSPICE code models')
+  await expect(warnings).toContainText('xspice-table.lib:2')
+  await expect(warnings).toContainText('xspice-table.lib:3')
+  await expect(warnings).not.toContainText('xspice-table.lib:4')
+  await warnings.getByRole('button', { name: 'Review source line 2' }).click()
+  const sourceViewer = page.locator('.model-source-viewer')
+  const reviewedLine = sourceViewer.locator('li').nth(1)
+  await expect(reviewedLine).toBeFocused()
+  await expect(reviewedLine).toContainText('E1 OUT 0 TABLE {V(IN)}')
 })
 
 test('imported ngspice digital U-device warning explains missing XSPICE models and opens its source line', { tag: '@ui-smoke' }, async ({ page }) => {
