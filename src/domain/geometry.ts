@@ -1,5 +1,6 @@
 import type { Part, Project, Wire } from './project'
 import { componentDefinitionFor } from './componentDefinitions'
+import { MAX_IMPORTED_IC_PINS } from './subcircuitLibrary'
 
 export type Point = { x: number; y: number }
 export type PinLocation = Point & { partId: string; index: number }
@@ -265,7 +266,7 @@ export function retainConnectedJunctions(junctions: readonly Point[], wires: rea
 }
 
 export function subcircuitPinOffsets(count: number, layout?: Part['sheetPortLayout']): [number, number][] {
-  if (!Number.isInteger(count) || count < 1 || count > 64) return []
+  if (!Number.isInteger(count) || count < 1 || count > MAX_IMPORTED_IC_PINS) return []
   if (layout?.length === count && layout.some((port) => port.side !== 'auto')) {
     const result = new Array<[number, number]>(count)
     const sides = ['left', 'right', 'top', 'bottom'] as const

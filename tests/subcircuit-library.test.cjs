@@ -1091,6 +1091,16 @@ test('accepts native ngspice punctuation in model identifiers', () => {
   assert.deepEqual(subcircuitReport.resolved.map(({ modelName }) => modelName), subcircuitNames)
 })
 
+test('imports subcircuits with up to 256 ordered pins and rejects larger interfaces', () => {
+  const pins = Array.from({ length: 256 }, (_, index) => `P${index + 1}`)
+  const source = `.SUBCKT WIDE ${pins.join(' ')}\nR1 P1 P256 1k\n.ENDS WIDE`
+  const definition = parseSubcircuitLibrary(source).subcircuits[0]
+  assert.equal(definition.pins.length, 256)
+  assert.deepEqual(definition.pins, pins)
+  const tooWide = Array.from({ length: 257 }, (_, index) => `P${index + 1}`)
+  assert.throws(() => parseSubcircuitLibrary(`.SUBCKT TOO_WIDE ${tooWide.join(' ')}\n.ENDS TOO_WIDE`), /1–256 unique ordered pins/)
+})
+
 test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {
   const source = [
     '.SUBCKT AMP IN OUT gain=2 RLOAD = 10k FILE="input table.txt"',

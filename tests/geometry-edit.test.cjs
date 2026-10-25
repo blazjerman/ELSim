@@ -385,7 +385,7 @@ test('fit view centers and bounds distant parts, wire points, and labels', () =>
 
 test('fit view handles the maximum-size schematic without argument-limit failures', () => {
   const project = createStarterProject()
-  const modelPins = Array.from({ length: 64 }, (_, index) => `P${index + 1}`)
+  const modelPins = Array.from({ length: 256 }, (_, index) => `P${index + 1}`)
   project.parts = Array.from({ length: 3000 }, (_, index) => ({
     id: `large-block-${index}`,
     kind: 'subcircuit',

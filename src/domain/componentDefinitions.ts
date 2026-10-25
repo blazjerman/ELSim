@@ -1,5 +1,5 @@
 import type { PartKind } from './project'
-import type { SubcircuitDefinition } from './subcircuitLibrary'
+import { MAX_IMPORTED_IC_PINS, type SubcircuitDefinition } from './subcircuitLibrary'
 import { translateVoltageSwitchModel } from './voltageSwitchModel'
 
 export type ComponentPinDefinition = { name: string; displayName?: string; direction: 'passive' | 'input' | 'output' | 'inout'; spiceOrder: number }
@@ -447,7 +447,7 @@ export function importedSubcircuitComponentDefinition(
   provenance: { assetId: string; filename: string; sha256: string; siblingModelNames?: readonly string[] },
 ): ComponentDefinition {
   if (!/^[0-9a-f]{64}$/i.test(provenance.sha256)) throw new Error('Imported component definition needs a valid model-library SHA-256.')
-  if (!subcircuit.name || subcircuit.name.length > 128 || subcircuit.pins.length < 1 || subcircuit.pins.length > 64) throw new Error('Imported component definition has an invalid model name or pin count.')
+  if (!subcircuit.name || subcircuit.name.length > 128 || subcircuit.pins.length < 1 || subcircuit.pins.length > MAX_IMPORTED_IC_PINS) throw new Error('Imported component definition has an invalid model name or pin count.')
   return Object.freeze({
     // Keep existing IDs stable unless this library contains a colliding slug.
     // When it does, append an escaped name so each imported definition remains

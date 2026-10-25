@@ -163,6 +163,8 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     }
   }
   const definitionSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8'))
+  assert.equal(definitionSchema.properties.pins.maxItems, 256)
+  assert.equal(definitionSchema.properties.pins.items.properties.spiceOrder.maximum, 256)
   assert.ok(definitionSchema.properties.symbolVariants)
   assert.ok(definitionSchema.properties.symbolAnimations)
   assert.equal(new RegExp(definitionSchema.properties.symbolAnimations.propertyNames.pattern).test('brightness.power'), true)
@@ -244,9 +246,9 @@ test('imported subcircuits become content-addressed component definitions with o
   assert.equal(definition.help, componentDefinitionFor('subcircuit').help)
   assert.deepEqual(definition.provenance, provenance)
   const pinPattern = new RegExp(JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8')).properties.pins.items.properties.name.pattern, 'u')
-  const punctuationPins = ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+']
+  const punctuationPins = ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+', 'IN%2', 'IN[1]', 'IN<2>', 'IN~3', 'IN\\4', 'IN`5', 'IN]6']
   for (const pin of punctuationPins) assert.equal(pinPattern.test(pin), true, pin)
-  for (const pin of ['0', 'GND', 'A B', 'A=B', 'A%B', '[A]', '<A>', 'A~B', '{A}', "A'B", 'A’B']) assert.equal(pinPattern.test(pin), false, pin)
+  for (const pin of ['0', 'GND', 'A B', 'A=B', 'A(B', 'A)B', 'A,B', '{A}', "A'B", 'A’B']) assert.equal(pinPattern.test(pin), false, pin)
   const punctuationDefinition = importedSubcircuitComponentDefinition(
     parseSubcircuitLibrary('.SUBCKT AMP IN! IN:1 OUT#1\nE1 OUT#1 0 IN! IN:1 2\n.ENDS AMP').subcircuits[0],
     provenance,

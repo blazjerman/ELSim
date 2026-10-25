@@ -32,6 +32,8 @@ const symbolDocument = {
 test('native symbol parser preserves ordered pins and supported vector geometry', () => {
   const schema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/elsim-symbol-v1.schema.json'), 'utf8'))
   assert.equal(schema.properties.format.const, 'elsim-symbol')
+  assert.equal(schema.properties.pins.maxItems, 256)
+  assert.equal(schema.$defs.pin.properties.spiceOrder.maximum, 256)
   const symbol = parseElsimSymbol(JSON.stringify(symbolDocument), 'amp.elsym')
   assert.equal(symbol.name, 'Teaching amplifier')
   assert.deepEqual(symbol.pins.map(({ spiceOrder, name }) => [spiceOrder, name]), [[1, 'IN+'], [2, 'IN-'], [3, 'VCC'], [4, 'VEE'], [5, 'OUT']])
@@ -140,10 +142,12 @@ test('generated symbol pin-side overrides require one supported side per pin', (
   assert.throws(() => createDefaultElsimSymbol('AMP', ['IN', 'OUT'], ['left', 'diagonal']), /Choose a side for every model pin/)
 })
 
-test('default ELSim symbols reject empty, duplicate, or oversized pin lists', () => {
-  assert.throws(() => createDefaultElsimSymbol('IC', []), /needs 1–64 ordered pins/)
+test('default ELSim symbols support large imported ICs and reject over-limit pin lists', () => {
+  assert.throws(() => createDefaultElsimSymbol('IC', []), /needs 1–256 ordered pins/)
   assert.throws(() => createDefaultElsimSymbol('IC', ['IN', 'in']), /unique names/)
-  assert.throws(() => createDefaultElsimSymbol('IC', Array.from({ length: 65 }, (_, index) => `P${index + 1}`)), /needs 1–64 ordered pins/)
+  const largeSymbol = parseElsimSymbol(createDefaultElsimSymbol('LARGE_IC', Array.from({ length: 128 }, (_, index) => `P${index + 1}`)))
+  assert.equal(largeSymbol.pins.length, 128)
+  assert.throws(() => createDefaultElsimSymbol('IC', Array.from({ length: 257 }, (_, index) => `P${index + 1}`)), /needs 1–256 ordered pins/)
   assert.throws(() => createDefaultElsimSymbol(' '.repeat(81), ['IN']), /symbol name/)
 })
 

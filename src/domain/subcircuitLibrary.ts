@@ -1,4 +1,5 @@
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; conditionalDefaultValues?: { sourceLine: number; defaultValue: string }[]; defaultIsExpression?: boolean }
+export const MAX_IMPORTED_IC_PINS = 256
 export type ConditionalModelParameterValue = { sourceLine: number; sourceValue: string; parsed: boolean }
 export type UnparsedModelParameter = { name: string; sourceValue: string; conditionalValues?: ConditionalModelParameterValue[] }
 export type ConditionalOnlyModelParameter = { name: string; conditionalValues: { sourceLine: number; sourceValue: string }[] }
@@ -1407,8 +1408,8 @@ function parseSubcircuitLibraryFromInspection(
         throw new Error(`Line ${line.start}: .SUBCKT ${name} uses node 0 or GND as an external pin, but ngspice treats both as global ground rather than a connectable IC pin. Keep ground inside the model or rename the pin if it represents a separate signal.`)
       }
       const validPin = options.allowGroundPins ? isValidSpiceNodeName : isValidSpiceSubcircuitPinName
-      if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !validPin(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
-        throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
+      if (pins.length < 1 || pins.length > MAX_IMPORTED_IC_PINS || pins.some((pin) => !validPin(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
+        throw new Error(`Line ${line.start}: ${name} must declare 1–${MAX_IMPORTED_IC_PINS} unique ordered pins before PARAMS: .`)
       }
       const scopes = [...activeSubcircuits.map(({ name }) => name), name]
       const scopedArities = functionAritiesForScopes(functionArities, scopes, scopedFunctions)

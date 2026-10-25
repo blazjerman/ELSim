@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, MAX_IMPORTED_IC_PINS, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { behavioralCurrentReferenceError, ngspiceCurrentReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, deviceModelTypeMatches, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId, supportsDeviceTemperatureDelta, supportsInitialOff } from './componentDefinitions'
@@ -177,7 +177,7 @@ export function sheetModelName(sheetId: string): string {
 
 export type Project = {
   format: 'elsim-project'
-  version: 10
+  version: 11
   name: string
   updatedAt: string
   parts: Part[]
@@ -232,7 +232,7 @@ function snapProjectGeometryToGrid(project: Record<string, unknown>): void {
 
 const starter: Project = {
   format: 'elsim-project',
-  version: 10,
+  version: 11,
   name: 'RC step response',
   updatedAt: new Date().toISOString(),
   parts: [
@@ -334,6 +334,10 @@ function migrateV9(input: Record<string, unknown>): Project {
   return { ...input, version: 10 } as unknown as Project
 }
 
+function migrateV10(input: Record<string, unknown>): Project {
+  return { ...input, version: 11 } as unknown as Project
+}
+
 function migrateV2(input: Record<string, unknown>): Project {
   const project = { ...input, version: 7 } as unknown as Project
   project.rootSheetId = 'sheet-main'
@@ -364,7 +368,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     })
   }
   return {
-    format: 'elsim-project', version: 10,
+    format: 'elsim-project', version: 11,
     name: typeof input.name === 'string' ? input.name : 'Imported project',
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
     parts: oldParts.map(({ nodes: _nodes, ...part }) => part),
@@ -395,8 +399,9 @@ export function validateProject(input: unknown): Project {
   if (data.version === 7 && Array.isArray(data.sheets)) return validateProject(migrateV7(data))
   if (data.version === 8 && Array.isArray(data.sheets)) return validateProject(migrateV8(data))
   if (data.version === 9 && Array.isArray(data.sheets)) return validateProject(migrateV9(data))
-  if (data.version !== 10 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
-    throw new Error('This project format is not supported. Expected ELSim project version 10.')
+  if (data.version === 10 && Array.isArray(data.sheets)) return validateProject(migrateV10(data))
+  if (data.version !== 11 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
+    throw new Error('This project format is not supported. Expected ELSim project version 11.')
   }
   const parsedModelAssets = new Map<string, ReturnType<typeof parseSubcircuitLibrary>>()
   // Normalize hand-edited JSON before any connectivity checks. The app's
@@ -594,11 +599,11 @@ export function validateProject(input: unknown): Project {
     }
     if (candidate.behavioralDialect !== undefined && candidate.kind !== 'behavioral') throw new Error(`${candidate.ref} has a behavioral dialect on a non-behavioral component.`)
     if ((candidate.kind === 'npn' || candidate.kind === 'pnp') && (!/^[1-9]\d{0,3}$/.test(candidate.value) || Number(candidate.value) > 1000)) throw new Error(`${candidate.ref} forward beta must be an integer from 1 to 1000.`)
-    if (candidate.kind === 'subcircuit' && (typeof candidate.modelName !== 'string' || !isValidSpiceModelName(candidate.modelName, true) || !Array.isArray(candidate.modelPins) || candidate.modelPins.length < 1 || candidate.modelPins.length > 64 || candidate.modelPins.some((pin) => typeof pin !== 'string' || !isValidSpiceNodeName(pin)))) throw new Error(`${candidate.ref} has malformed subcircuit model or ordered pins.`)
+    if (candidate.kind === 'subcircuit' && (typeof candidate.modelName !== 'string' || !isValidSpiceModelName(candidate.modelName, true) || !Array.isArray(candidate.modelPins) || candidate.modelPins.length < 1 || candidate.modelPins.length > MAX_IMPORTED_IC_PINS || candidate.modelPins.some((pin) => typeof pin !== 'string' || !isValidSpiceNodeName(pin)))) throw new Error(`${candidate.ref} has malformed subcircuit model or ordered pins.`)
     if (candidate.sheetId !== undefined && (candidate.kind !== 'subcircuit' || typeof candidate.sheetId !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(candidate.sheetId))) throw new Error(`${candidate.ref} has a malformed sheet block reference.`)
     if (candidate.sheetPortLayout !== undefined && (candidate.kind !== 'subcircuit' || !candidate.sheetId || !Array.isArray(candidate.sheetPortLayout) || candidate.sheetPortLayout.length < 1 || candidate.sheetPortLayout.length > 64 || candidate.sheetPortLayout.some((entry) => !entry || !['auto', 'left', 'right', 'top', 'bottom'].includes(entry.side) || !['input', 'output', 'inout'].includes(entry.direction)))) throw new Error(`${candidate.ref} has a malformed sheet port layout.`)
     if (candidate.symbolAssetId !== undefined && (typeof candidate.symbolAssetId !== 'string' || !candidate.symbolAssetId)) throw new Error(`${candidate.ref} has a malformed imported symbol reference.`)
-    if (candidate.symbolPinOffsets !== undefined && (!candidate.symbolAssetId || !Array.isArray(candidate.symbolPinOffsets) || candidate.symbolPinOffsets.length < 1 || candidate.symbolPinOffsets.length > 64 || candidate.symbolPinOffsets.some((point) => !Array.isArray(point) || point.length !== 2 || !point.every((coordinate) => Number.isFinite(coordinate) && Math.abs(coordinate) <= 100000)))) throw new Error(`${candidate.ref} has malformed imported symbol pin coordinates.`)
+    if (candidate.symbolPinOffsets !== undefined && (!candidate.symbolAssetId || !Array.isArray(candidate.symbolPinOffsets) || candidate.symbolPinOffsets.length < 1 || candidate.symbolPinOffsets.length > MAX_IMPORTED_IC_PINS || candidate.symbolPinOffsets.some((point) => !Array.isArray(point) || point.length !== 2 || !point.every((coordinate) => Number.isFinite(coordinate) && Math.abs(coordinate) <= 100000)))) throw new Error(`${candidate.ref} has malformed imported symbol pin coordinates.`)
   }
   for (const part of data.parts as Part[]) if (part.kind === 'potentiometer') {
     const generatedReferences = [`R${part.ref}_A`, `R${part.ref}_B`].map((ref) => ref.toLowerCase())

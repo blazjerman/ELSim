@@ -42,7 +42,7 @@ globalThis.DecompressionStream = class TestDecompressionStream {
 const { verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
-test('project ZIP archive is deterministic and round-trips the complete v10 project', async () => {
+test('project ZIP archive is deterministic and round-trips the complete v11 project', async () => {
   const project = createStarterProject()
   project.netLabels.push({ id: 'archive-note', kind: 'note', name: 'Review pin order\nKeep this annotation non-electrical.', x: 1200, y: 680, visible: true })
   project.sheets = project.sheets.map((sheet) => sheet.id === project.rootSheetId ? { ...sheet, netLabels: project.netLabels } : sheet)
@@ -159,7 +159,7 @@ test('v2 projects migrate to a root sheet and validate nested sheet ownership', 
   delete old.rootSheetId
   delete old.sheets
   const migrated = validateProject(old)
-  assert.equal(migrated.version, 10)
+  assert.equal(migrated.version, 11)
   assert.equal(migrated.rootSheetId, 'sheet-main')
   assert.equal(migrated.sheets.length, 1)
   assert.deepEqual(migrated.sheets[0].parts, migrated.parts)
@@ -178,13 +178,13 @@ test('v2 projects migrate to a root sheet and validate nested sheet ownership', 
   assert.throws(() => validateProject(duplicateName), /already used in this hierarchy/)
 })
 
-test('v9 projects migrate to v10 without changing electrical labels and accept non-electrical notes', () => {
+test('v9 projects migrate through v10 to v11 without changing electrical labels and retain notes', () => {
   const prior = structuredClone(createStarterProject())
   prior.version = 9
   for (const label of prior.netLabels) delete label.kind
   prior.sheets[0].netLabels = structuredClone(prior.netLabels)
   const migrated = validateProject(prior)
-  assert.equal(migrated.version, 10)
+  assert.equal(migrated.version, 11)
   assert.deepEqual(migrated.netLabels.map(({ kind }) => kind), [undefined, undefined])
   const withNote = structuredClone(migrated)
   withNote.netLabels.push({ id: 'note-migrated', kind: 'note', name: 'Read the output here', x: 470, y: 320, visible: true })
@@ -198,30 +198,30 @@ test('v3 migration and active child-sheet scene round-trip', async () => {
   v3.version = 3
   delete v3.activeSheetId
   const migrated = validateProject(v3)
-  assert.equal(migrated.version, 10)
+  assert.equal(migrated.version, 11)
   assert.equal(migrated.activeSheetId, migrated.rootSheetId)
   const v4 = structuredClone(current)
   v4.version = 4
   delete v4.sheets[0].ports
   const migratedV4 = validateProject(v4)
-  assert.equal(migratedV4.version, 10)
+  assert.equal(migratedV4.version, 11)
   assert.deepEqual(migratedV4.sheets[0].ports, [])
   assert.deepEqual(migratedV4.sheets[0].parameters, [])
   const v5 = structuredClone(current)
   v5.version = 5
   delete v5.sheets[0].parameters
   const migratedV5 = validateProject(v5)
-  assert.equal(migratedV5.version, 10)
+  assert.equal(migratedV5.version, 11)
   assert.deepEqual(migratedV5.sheets[0].parameters, [])
   const v6 = structuredClone(current)
   v6.version = 6
   const migratedV6 = validateProject(v6)
-  assert.equal(migratedV6.version, 10)
+  assert.equal(migratedV6.version, 11)
   assert.deepEqual(migratedV6.sheets[0].ports, [])
   const v8 = structuredClone(current)
   v8.version = 8
   const migratedV8 = validateProject(v8)
-  assert.equal(migratedV8.version, 10)
+  assert.equal(migratedV8.version, 11)
   assert.equal(migratedV8.simulation.stochasticSampleCount, undefined)
   assert.equal(validateProject({ ...structuredClone(current), simulation: { ...current.simulation, stochasticSampleCount: 10 } }).simulation.stochasticSampleCount, 10)
   for (const invalidCount of [0, 11, 1.5, '3']) {
@@ -355,8 +355,10 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const malformedNoiseRange = structuredClone(restored)
   malformedNoiseRange.plotSettings.panels = [{ id: 'plot-invalid-noise-range', bounds: { x: 0, y: 0, width: 640, height: 360 }, selectedTraceIds: [], ranges: { noise: { start: 0.8, end: 0.2 } } }]
   assert.throws(() => validateProject(malformedNoiseRange), /Plot panel view range is malformed/)
-  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v10.schema.json'), 'utf8'))
-  assert.equal(schema.properties.version.const, 10)
+  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v11.schema.json'), 'utf8'))
+  assert.equal(schema.properties.version.const, 11)
+  assert.equal(schema.$defs.part.properties.modelPins.maxItems, 256)
+  assert.equal(schema.$defs.part.properties.symbolPinOffsets.maxItems, 256)
   assert.deepEqual([schema.$defs.simulation.properties.stochasticSampleCount.minimum, schema.$defs.simulation.properties.stochasticSampleCount.maximum], [1, 10])
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('sens'))
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('pz'))
@@ -367,8 +369,9 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.deepEqual(schema.$defs.simulation.properties.poleZero.properties.roots.enum, ['poles', 'zeros', 'both'])
   assert.deepEqual(schema.$defs.simulation.properties.sensitivity.properties.mode.enum, ['dc', 'ac'])
   const modelPinPattern = new RegExp(schema.$defs.part.properties.modelPins.items.pattern, 'u')
-  for (const pin of ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+', 'GND']) assert.equal(modelPinPattern.test(pin), true, pin)
-  for (const pin of ['A B', 'A=B', 'A%B', 'A(B', 'A)B', 'A,B', '[A]', '<A>', 'A~B', '{A}', "A'B", 'A’B', 'A'.repeat(65)]) assert.equal(modelPinPattern.test(pin), false, JSON.stringify(pin))
+  for (const pin of ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+', 'IN[1]', 'IN%2', 'IN<3>', 'IN~4', 'IN\\5', 'IN`6', 'IN]7', 'GND']) assert.equal(modelPinPattern.test(pin), true, pin)
+
+  for (const pin of ['A B', 'A=B', 'A(B', 'A)B', 'A,B', '{A}', "A'B", 'A’B', 'A'.repeat(65)]) assert.equal(modelPinPattern.test(pin), false, JSON.stringify(pin))
   const sectionPattern = new RegExp(schema.$defs.modelAsset.properties.selectedSections.items.pattern)
   assert.equal(sectionPattern.test('$cash'), true)
   assert.equal(sectionPattern.test('A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\\R'), true)
@@ -425,7 +428,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.part.properties.noiseEnabled.type, 'boolean')
   assert.deepEqual(schema.$defs.part.properties.switchInitialState.enum, ['on', 'off'])
   const legacySchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
-  assert.equal(legacySchema.$defs.part.properties.modelPins.items.pattern, schema.$defs.part.properties.modelPins.items.pattern)
+  const previousSchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v10.schema.json'), 'utf8'))
+  assert.equal(legacySchema.$defs.part.properties.modelPins.items.pattern, previousSchema.$defs.part.properties.modelPins.items.pattern)
   assert.equal(legacySchema.$defs.modelAsset.properties.selectedSections.items.pattern, schema.$defs.modelAsset.properties.selectedSections.items.pattern)
   for (let version = 2; version <= 8; version++) {
     const projectSchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, `../schemas/project-v${version}.schema.json`), 'utf8'))
@@ -495,6 +499,22 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.deepEqual(schema.$defs.part.properties.pulse.required, ['initial', 'delay', 'rise', 'fall', 'width', 'period'])
   assert.deepEqual(schema.$defs.sheet.properties.ports.items.properties.side.enum, ['auto', 'left', 'right', 'top', 'bottom'])
   assert.ok(schema.$defs.part.properties.sheetPortLayout)
+})
+
+test('v10 project files migrate cleanly to the expanded v11 imported-IC pin limit', () => {
+  const oldProject = structuredClone(createStarterProject())
+  oldProject.version = 10
+  const current = validateProject(oldProject)
+  assert.equal(current.version, 11)
+  assert.deepEqual(current.parts, oldProject.parts)
+
+  const pins = Array.from({ length: 128 }, (_, index) => `P${index + 1}`)
+  const modelContent = `.SUBCKT WIDE ${pins.join(' ')}\nR1 P1 P128 1k\n.ENDS WIDE`
+  current.modelAssets = [{ id: 'wide-model', filename: 'wide.lib', sha256: '0'.repeat(64), content: modelContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  current.parts.push({ id: 'wide-instance', kind: 'subcircuit', ref: 'X1', value: 'WIDE', modelName: 'WIDE', modelPins: pins, x: 300, y: 200, rotation: 0 })
+  const withWideIc = validateProject(current)
+  assert.equal(withWideIc.parts.at(-1).modelPins.length, 128)
+  assert.equal(withWideIc.version, 11)
 })
 
 test('capacitor initial voltage survives project archive round-trip', async () => {

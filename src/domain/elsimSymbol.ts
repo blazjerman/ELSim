@@ -1,9 +1,10 @@
 import type { ImportedSymbol, SymbolPin, SymbolPrimitive } from './ltspiceSymbol'
+import { MAX_IMPORTED_IC_PINS } from './subcircuitLibrary'
 import { svgPathBounds } from './svgPathBounds'
 
 const MAX_TEXT = 1024 * 1024
 const MAX_PRIMITIVES = 2000
-const MAX_PINS = 64
+const MAX_PINS = MAX_IMPORTED_IC_PINS
 const MAX_COORDINATE = 100_000
 export type ElsimPinSide = 'left' | 'right' | 'top' | 'bottom'
 const ALLOWED_PATH = /^[MmLlHhVvCcSsQqTtAaZz0-9eE+.,\s-]+$/

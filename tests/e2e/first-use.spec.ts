@@ -3736,6 +3736,25 @@ test('native ngspice numeric-leading IC names and pins import and generate a val
   expect(netlist).toMatch(/X1 .* 74HC00m/)
 })
 
+test('large imported ICs preserve all ordered pins when placed', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const pins = Array.from({ length: 80 }, (_, index) => `P${index + 1}`)
+  const modelLibrary = `.SUBCKT HIGH_PIN ${pins.join(' ')}\nR1 P1 P80 1k\n.ENDS HIGH_PIN\n`
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'high-pin.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from high-pin\.lib/)).toBeVisible()
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'HIGH_PIN' })
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => {
+    const part = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
+    return { pinCount: part?.modelPins?.length, pinNames: [part?.modelPins?.[0], part?.modelPins?.at(-1)] }
+  })).toEqual({ pinCount: 80, pinNames: ['P1', 'P80'] })
+})
+
 test('subcircuit parameter defaults can call functions from an imported include library', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const input = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
