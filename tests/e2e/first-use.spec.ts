@@ -7010,6 +7010,10 @@ test('behavioral inductor expression runs in ngspice @ngspice', async ({ page })
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.locator('.result-stale-warning')).toHaveCount(0)
+  const inductor = page.locator('.circuit-part[data-part-id="rlc-l1"]')
+  await inductor.hover()
+  await expect(inductor.locator(':scope > title')).toContainText('nominal-L energy estimate')
+  await expect(inductor.locator(':scope > title')).toContainText('not actual stored energy for a behavioral inductor')
 })
 
 test('resistor AC value is editable, saved, and generated as an AC-only override @ui-smoke', async ({ page }) => {
