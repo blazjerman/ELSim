@@ -3,6 +3,7 @@ const { mkdtempSync, rmSync } = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { selectUnitTestFiles } = require('../tools/unit-test-selection.cjs')
+const { unitTestBuildEntries } = require('../tools/unit-test-build-entries.cjs')
 
 const root = path.resolve(__dirname, '..')
 const tsc = path.resolve(path.dirname(require.resolve('typescript')), '../bin/tsc')
@@ -34,7 +35,8 @@ if (listOnly) {
 const output = mkdtempSync(path.join(os.tmpdir(), 'elsim-netlist-tests-'))
 
 try {
-  const compile = spawnSync(process.execPath, [
+  const buildEntries = unitTestBuildEntries(selectedTestFiles, __dirname, path.join(root, 'src'))
+  const compile = buildEntries.length ? spawnSync(process.execPath, [
     tsc,
     '--target', 'ES2022',
     '--module', 'CommonJS',
@@ -43,61 +45,9 @@ try {
     '--outDir', output,
     '--noEmit', 'false',
     '--skipLibCheck',
-    path.join(root, 'src/engine/netlist.ts'),
-    path.join(root, 'src/engine/runtimeAvailability.ts'),
-    path.join(root, 'src/engine/raw.ts'),
-    path.join(root, 'src/engine/csv.ts'),
-    path.join(root, 'src/engine/plot.ts'),
-    path.join(root, 'src/engine/fourier.ts'),
-    path.join(root, 'src/engine/resultControl.ts'),
-    path.join(root, 'src/engine/noiseSummary.ts'),
-    path.join(root, 'src/engine/sensitivity.ts'),
-    path.join(root, 'src/engine/sweep.ts'),
-    path.join(root, 'src/engine/measurements.ts'),
-    path.join(root, 'src/engine/diagnostics.ts'),
-    path.join(root, 'src/engine/contract.ts'),
-    path.join(root, 'src/engine/sweep.ts'),
-    path.join(root, 'src/engine/netlistGeneration.ts'),
-    path.join(root, 'src/domain/geometry.ts'),
-    path.join(root, 'src/domain/dcSweep.ts'),
-    path.join(root, 'src/domain/wireFlow.ts'),
-    path.join(root, 'src/ui/wireAnimation.ts'),
-    path.join(root, 'src/ui/simulationCursor.ts'),
-    path.join(root, 'src/ui/analysisCursor.ts'),
-    path.join(root, 'src/ui/partUiState.ts'),
-    path.join(root, 'src/ui/timeAxis.ts'),
-    path.join(root, 'src/ui/plotPanelGeometry.ts'),
-    path.join(root, 'src/domain/connectivity.ts'),
-    path.join(root, 'src/domain/electricalCheck.ts'),
-    path.join(root, 'src/domain/probe.ts'),
-    path.join(root, 'src/domain/hierarchyProbe.ts'),
-    path.join(root, 'src/domain/hierarchyNavigation.ts'),
-    path.join(root, 'src/domain/sheetDefinition.ts'),
-    path.join(root, 'src/domain/project.ts'),
-    path.join(root, 'src/domain/projectAutosave.ts'),
-    path.join(root, 'src/domain/componentDefinitions.ts'),
-    path.join(root, 'src/domain/componentValue.ts'),
-    path.join(root, 'src/domain/parameterSweepTargets.ts'),
-    path.join(root, 'src/domain/sourcePwl.ts'),
-    path.join(root, 'src/domain/examples.ts'),
-    path.join(root, 'src/domain/examplePath.ts'),
-    path.join(root, 'src/domain/partClipboard.ts'),
-    path.join(root, 'src/domain/editorView.ts'),
-    path.join(root, 'src/domain/sceneEdit.ts'),
-    path.join(root, 'src/domain/simulationPresets.ts'),
-    path.join(root, 'src/domain/behavioralExpression.ts'),
-    path.join(root, 'src/domain/modelDialectDiagnostics.ts'),
-    path.join(root, 'src/domain/projectArchive.ts'),
-    path.join(root, 'src/domain/connectivity.ts'),
-    path.join(root, 'src/domain/subcircuitLibrary.ts'),
-    path.join(root, 'src/domain/ngspiceAko.ts'),
-    path.join(root, 'src/domain/ltspiceSymbol.ts'),
-    path.join(root, 'src/domain/elsimSymbol.ts'),
-    path.join(root, 'src/domain/symbolAsset.ts'),
-    path.join(root, 'src/domain/ltspiceSchematic.ts'),
-    path.join(root, 'src/domain/ltspiceExport.ts'),
-  ], { cwd: root, stdio: 'inherit' })
-  if (compile.status !== 0) {
+    ...buildEntries,
+  ], { cwd: root, stdio: 'inherit' }) : null
+  if (compile && compile.status !== 0) {
     process.exitCode = compile.status ?? 1
   } else {
     const tests = spawnSync(process.execPath, ['--test', '--test-reporter=spec', ...selectedTestFiles.map((file) => path.join(__dirname, file))], {
