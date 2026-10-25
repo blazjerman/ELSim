@@ -579,6 +579,27 @@ test('reports passive and transmission-line references with an incompatible impo
   assert.equal(checkCircuit(project).some((item) => item.id.startsWith('incompatible-model-dependency:')), false)
 })
 
+test('reports a missing TXL model LENGTH on the affected imported IC', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{
+    id: 'txl-lib', filename: 'txl.lib', sha256: '2'.repeat(64),
+    content: '.SUBCKT AMP IN OUT\nY1 IN 0 OUT 0 TXL_BAD LEN=2\n.ENDS AMP\n.MODEL TXL_BAD TXL(R=1 L=1 G=0 C=1)\n',
+    licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z',
+  }]
+  const instance = { id: 'amp-instance', kind: 'subcircuit', ref: 'X1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 }
+  project.parts.push(instance)
+  project.sheets[0].parts = project.parts
+
+  const issue = checkCircuit(project).find((item) => item.id.startsWith('missing-txl-length:'))
+  assert.equal(issue?.partId, instance.id)
+  assert.equal(issue?.title, 'TXL_BAD has no LENGTH parameter')
+  assert.match(issue?.detail ?? '', /TXL models require LENGTH even when a Y instance supplies LEN/)
+  assert.match(issue?.detail ?? '', /txl\.lib at line 4/)
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: project.modelAssets[0].content.replace('C=1)', 'C=1 LENGTH=1)') }
+  assert.equal(checkCircuit(project).some((item) => item.id.startsWith('missing-txl-length:')), false)
+})
+
 test('reports a malformed imported CPL matrix on the placed IC that uses it', () => {
   const project = createStarterProject()
   const content = [

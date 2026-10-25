@@ -607,6 +607,47 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
           }
         }
       }
+      const parsedTxlModelsByAsset = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['models']>()
+      const reportedTxlLengthIssues = new Set<string>()
+      for (const dependency of dependencies.resolved) {
+        if (dependency.kind !== 'device' || dependency.targetModelType?.toLowerCase() !== 'txl') continue
+        let models = parsedTxlModelsByAsset.get(dependency.targetAssetId)
+        if (!models) {
+          const asset = project.modelAssets.find((candidate) => candidate.id === dependency.targetAssetId)
+          if (!asset) continue
+          try {
+            models = parseSubcircuitLibrary(asset.content, asset.selectedSections).models
+            parsedTxlModelsByAsset.set(asset.id, models)
+          } catch {
+            // The library parser reports syntax errors separately; do not mask them
+            // with a secondary diagnostic from a partial model parse.
+            continue
+          }
+        }
+        const model = models.find((candidate) => !candidate.scope && candidate.name.toLowerCase() === dependency.modelName.toLowerCase())
+        // AKO models inherit parameters from their base model; without resolving
+        // the full cross-library base chain, an omitted local LENGTH is ambiguous.
+        if (!model || model.akoBaseName) continue
+        const variants = [model, ...(model.conditionalVariants ?? []).map(({ model: variant }) => variant)]
+        const missingLengthLines = variants.filter((variant) =>
+          !variant.parameters.some(({ name }) => name.toLowerCase() === 'length')
+          && !variant.unparsedParameters?.some(({ name }) => name.toLowerCase() === 'length'),
+        )
+        if (!missingLengthLines.length) continue
+        const filename = assets.get(dependency.targetAssetId) ?? 'the imported model'
+        for (const partId of instancesByDefinition.get(dependency.owner.toLowerCase()) ?? []) for (const variant of missingLengthLines) {
+          const id = `missing-txl-length:${dependency.targetAssetId}:${variant.startLine}:${dependency.modelName.toLowerCase()}:${partId}`
+          if (reportedTxlLengthIssues.has(id)) continue
+          reportedTxlLengthIssues.add(id)
+          issues.push({
+            id,
+            severity: 'warning',
+            title: `${dependency.modelName} has no LENGTH parameter`,
+            detail: `ngspice TXL models require LENGTH even when a Y instance supplies LEN. Add LENGTH=<value> to ${filename} at line ${variant.startLine}.`,
+            partId,
+          })
+        }
+      }
       for (const chain of dependencies.recursiveChains) {
         const chainNames = new Set(chain.map((name) => name.toLowerCase()))
         const affectedIds = new Set([...chainNames].flatMap((name) => [...(instancesByDefinition.get(name) ?? [])]))
