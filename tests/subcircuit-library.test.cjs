@@ -1240,14 +1240,14 @@ test('distinguishes unsupported MOSFET bins from native ngspice BSIM3 bins', () 
 })
 
 test('expands native AKO model chains across imported libraries without changing source assets', () => {
-  const base = { id: 'base', filename: 'base.lib', content: '.MODEL BASE D(Is=1n N=1)\n' }
-  const child = { id: 'child', filename: 'child.lib', content: '.MODEL CHILD AKO:BASE D(IS=2n)\n.MODEL GRANDCHILD AKO:CHILD D(N=2)\n' }
+  const base = { id: 'base', filename: 'base.lib', content: '.MODEL D#BASE D(Is=1n N=1)\n' }
+  const child = { id: 'child', filename: 'child.lib', content: '.MODEL D!CHILD AKO:D#BASE D(IS=2n)\n.MODEL D[2] AKO:D!CHILD D(N=2)\n' }
   const entries = [base, child].map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) }))
   const result = expandNgspiceAkoModels(entries)
   assert.deepEqual(result.issues, [])
-  assert.equal(result.cards.get('child:1'), '.model CHILD D(IS=2n N=1)')
-  assert.equal(result.cards.get('child:2'), '.model GRANDCHILD D(IS=2n N=2)')
-  assert.equal(child.content, '.MODEL CHILD AKO:BASE D(IS=2n)\n.MODEL GRANDCHILD AKO:CHILD D(N=2)\n')
+  assert.equal(result.cards.get('child:1'), '.model D!CHILD D(IS=2n N=1)')
+  assert.equal(result.cards.get('child:2'), '.model D[2] D(IS=2n N=2)')
+  assert.equal(child.content, '.MODEL D!CHILD AKO:D#BASE D(IS=2n)\n.MODEL D[2] AKO:D!CHILD D(N=2)\n')
 })
 
 test('expands scoped AKO models locally and through enclosing subcircuit scopes', () => {

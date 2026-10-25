@@ -8846,26 +8846,26 @@ test('native ngspice AKO models import and simulate after cross-library expansio
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'ako-base.lib', mimeType: 'text/plain', buffer: Buffer.from([
-      '.MODEL DBAS D(Is=1n N=1)',
+      '.MODEL D#BAS D(Is=1n N=1)',
       '.IF (1mil == 25.4u && 5kOhm > 1k && sqrt(4) == 2 && 2 <> 3)',
-      '.MODEL DBRANCH D(IS=5n N=2)',
+      '.MODEL D%BRANCH D(IS=5n N=2)',
       '.ELSE',
-      '.MODEL DBRANCH D(IS=7n N=3)',
+      '.MODEL D%BRANCH D(IS=7n N=3)',
       '.ENDIF',
     ].join('\n') + '\n'),
   })
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'ako-child.lib', mimeType: 'text/plain', buffer: Buffer.from([
-      '.MODEL DCHILD AKO:DBAS D(IS=2n)',
+      '.MODEL D!CHILD AKO:D#BAS D(IS=2n)',
       '.IF (1mil = 25.4u && 5kOhm > 1k && sqrt(4) = 2 && 2 != 3)',
-      '.MODEL DCOND AKO:DBRANCH D(IS=4n)',
+      '.MODEL D$COND AKO:D%BRANCH D(IS=4n)',
       '.ELSE',
-      '.MODEL DCOND AKO:DBRANCH D(IS=8n)',
+      '.MODEL D$COND AKO:D%BRANCH D(IS=8n)',
       '.ENDIF',
       '.SUBCKT LOCAL_DIODE A K',
-      '.MODEL LOCAL_BASE D(IS=3n N=2)',
-      '.MODEL LOCAL_CHILD AKO:LOCAL_BASE D(IS=4n)',
+      '.MODEL LOCAL[BASE] D(IS=3n N=2)',
+      '.MODEL LOCAL[CHILD] AKO:LOCAL[BASE] D(IS=4n)',
       '.ENDS LOCAL_DIODE',
     ].join('\n') + '\n'),
   })
@@ -8874,10 +8874,10 @@ test('native ngspice AKO models import and simulate after cross-library expansio
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
-  await expect(netlist).toContainText(/^\.model DCHILD D\(IS=2n N=1\)$/m)
-  await expect(netlist).toContainText(/^\.model DCOND D\(IS=4n N=2\)$/m)
-  await expect(netlist).toContainText(/^\.model DCOND D\(IS=8n N=3\)$/m)
-  await expect(netlist).toContainText(/^\.model LOCAL_CHILD D\(IS=4n N=2\)$/m)
+  await expect(netlist).toContainText(/^\.model D!CHILD D\(IS=2n N=1\)$/m)
+  await expect(netlist).toContainText(/^\.model D\$COND D\(IS=4n N=2\)$/m)
+  await expect(netlist).toContainText(/^\.model D\$COND D\(IS=8n N=3\)$/m)
+  await expect(netlist).toContainText(/^\.model LOCAL\[CHILD\] D\(IS=4n N=2\)$/m)
   await expect(netlist).not.toContainText(/AKO:/i)
 })
 
