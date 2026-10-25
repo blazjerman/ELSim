@@ -479,10 +479,9 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const secondCursorIndex = secondCursorValue === undefined || !axis?.length ? null : nearestAxisIndex(axis, secondCursorValue, 0, axis.length - 1)
   const sampledTraceById = useMemo(() => {
     const sampled = new Map<string, { indices: number[]; range: [number, number] | null }>()
-    for (const id of selectedIds) {
-      const index = traceIndexById.get(id)
+    for (const trace of shown) {
+      const index = traceIndexById.get(trace.id)
       if (index === undefined) continue
-      const trace = traces[index]
       const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
       const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
       const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
@@ -491,7 +490,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       sampled.set(trace.id, { indices, range })
     }
     return sampled
-  }, [selectedIds, traceIndexById, traces, minTime, maxTime])
+  }, [shown, traceIndexById, traces, minTime, maxTime])
   const sampledTraceData = useMemo(() => {
     const indicesById = new Map<string, number[]>()
     const rangeByUnit = new Map<string, [number, number]>()
