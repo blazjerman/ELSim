@@ -358,6 +358,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v11.schema.json'), 'utf8'))
   assert.equal(schema.properties.version.const, 11)
   assert.equal(schema.$defs.part.properties.modelPins.maxItems, 256)
+  assert.equal(schema.$defs.part.properties.thermalNode.maxLength, 512)
   assert.match(schema.$defs.part.properties.modelPins.items.pattern, /\{1,512\}/)
   assert.equal(schema.$defs.part.properties.sheetParameters.additionalProperties.maxLength, 512)
   assert.equal(schema.$defs.part.properties.modelParameters.additionalProperties.maxLength, 512)

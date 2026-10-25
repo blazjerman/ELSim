@@ -380,6 +380,12 @@
           "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$",
           "description": "Optional labeled substrate node for an ngspice NPN or PNP transistor; omitted means ngspice's default ground substrate."
         },
+        "thermalNode": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^[^\\s=(),{}'\"\\u0000-\\u001f\\u007f\\u2019]{1,512}$",
+          "description": "Optional ngspice HICUM/L2 fifth terminal node for an NPN or PNP transistor; omitted leaves the thermal terminal unconnected."
+        },
         "controlSource": {
           "type": "string",
           "pattern": "^V[A-Za-z0-9_]*$"

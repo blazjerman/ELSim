@@ -18,6 +18,8 @@ Project v11 raises the maximum ordered pin count for imported ICs and custom sym
 
 Imported ngspice `.SUBCKT` and `.MODEL` identifiers are accepted up to 8,192 characters, the largest model-name length verified with the pinned browser engine. Imported IC component IDs stay bounded and content-addressed; when names collide after display-slug normalization, the model's source line distinguishes them. Older projects with prior escaped-name collision IDs migrate during project validation.
 
+NPN and PNP parts may store optional `substrateNode` and `thermalNode` SPICE node names, each up to 512 characters. `substrateNode` selects ngspice's optional fourth Q-device node; `thermalNode` selects the fifth node exposed by HICUM/L2 models. If a thermal node is selected without a substrate node, netlisting explicitly inserts ground (`0`) in the fourth position. Thermal self-heating requires an HICUM/L2 model configured for it and an appropriate thermal network; the field alone does not enable or calculate self-heating.
+
 Imported subcircuit defaults, reusable-sheet parameter defaults, and instance overrides accept validated SPICE values up to 512 characters and 256 expression tokens. Project validation checks the safe expression grammar; the JSON schema enforces the shared length limit.
 
 Project v10 adds optional `kind: "note"` entries to `netLabels`. A note stores its text in `name` (up to 500 characters) and its snapped schematic position in `x` and `y`. Notes are visible, selectable, movable, editable, and preserved in native project archives. They never name or connect electrical nodes, participate in circuit validation, or produce simulation vectors. Omitted `kind` and `kind: "net"` retain the electrical net-label behavior of earlier project versions.
