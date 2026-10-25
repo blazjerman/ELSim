@@ -25,7 +25,7 @@ test('result control saves device currents needed for probes and visualizations'
     '.end',
   ].join('\n')
   const instrumented = addResultControl(netlist)
-  assert.match(instrumented, /^\.save all @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @W1\[i\] @F1\[i\] @H1\[i\] @M1\[id\] @M1\[ig\] @M1\[is\] @M1\[ib\] @B1\[i\]$/m)
+  assert.match(instrumented, /^\.save @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @W1\[i\] @F1\[i\] @H1\[i\] @M1\[id\] @M1\[ig\] @M1\[is\] @M1\[ib\] @B1\[i\]$/m)
   assert.match(instrumented, /\.control\nset filetype=binary\ntran 1u 1m\nwrite \/result\.raw all\nquit\n\.endc\n\.end\n$/)
 })
 
@@ -178,31 +178,31 @@ test('result control computes expression measurements in each sweep case', () =>
 
 test('controlled sources have their branch currents saved for probing', () => {
   const control = addResultControl('E1 out 0 cp cn 2\nG1 g 0 cp cn 1m\n.tran 1u 1m\n.end')
-  assert.match(control, /^\.save all @E1\[i\] @G1\[i\]$/m)
+  assert.match(control, /^\.save @E1\[i\] @G1\[i\]$/m)
 })
 
 test('behavioral inductor current uses the native branch vector instead of @L[i]', () => {
   const control = addResultControl('V1 in 0 1\nL1 in out L={5m+5m*exp(-abs(I(V1))/50m)}\n.tran 1u 1m\n.end')
-  assert.match(control, /^\.save all i\(L1\)$/m)
+  assert.match(control, /^\.save i\(L1\)$/m)
   assert.doesNotMatch(control, /@L1\[i\]/i)
 })
 
 test('BJT and MOSFET models save device current using ngspice-specific vectors', () => {
   const control = addResultControl('Q1 c b e ELSIM_MODEL_Q1\n.model ELSIM_MODEL_Q1 NPN(BF=100)\n.tran 1u 1m\n.end')
-  assert.match(control, /^\.save all @Q1\[ic\] @Q1\[ib\] @Q1\[ie\]$/m)
+  assert.match(control, /^\.save @Q1\[ic\] @Q1\[ib\] @Q1\[ie\]$/m)
   const mosfet = addResultControl('M1 d g s b ELSIM_MODEL_M1\n.tran 1u 1m\n.end')
-  assert.match(mosfet, /^\.save all @M1\[id\] @M1\[ig\] @M1\[is\] @M1\[ib\]$/m)
+  assert.match(mosfet, /^\.save @M1\[id\] @M1\[ig\] @M1\[is\] @M1\[ib\]$/m)
   const jfet = addResultControl('J1 d g s ELSIM_MODEL_J1\n.tran 1u 1m\n.end')
-  assert.match(jfet, /^\.save all @J1\[id\] @J1\[ig\] @J1\[is\]$/m)
+  assert.match(jfet, /^\.save @J1\[id\] @J1\[ig\] @J1\[is\]$/m)
   const mesfet = addResultControl('V__ELSIM_Z1_D d __d 0\nZ1 __d g s ELSIM_MODEL_Z1\n.tran 1u 1m\n.end')
-  assert.match(mesfet, /^\.save all @Z1\[is\]$/m)
+  assert.match(mesfet, /^\.save @Z1\[is\]$/m)
   const vdmos = addResultControl('M2 drain gate 0 NPOWER\n.model NPOWER VDMOS Nchan VTO=2 KP=1\n.op\n.end')
-  assert.match(vdmos, /^\.save all @M2\[id\]$/m)
+  assert.match(vdmos, /^\.save @M2\[id\]$/m)
   assert.doesNotMatch(vdmos, /@M2\[(?:ig|is|ib)\]/i)
 })
 
 test('result control does not emit unscoped current saves for subcircuit definitions', () => {
   const control = addResultControl('XLOAD in out LOAD\n.SUBCKT LOAD IN OUT\nRIN IN MID 1k\nC1 MID OUT 1u\n.ENDS LOAD\n.tran 1u 1m\n.end')
-  assert.match(control, /^\.save all$/m)
+  assert.doesNotMatch(control, /^\.save\b/m)
   assert.doesNotMatch(control, /@RIN\[i\]|@C1\[i\]/)
 })

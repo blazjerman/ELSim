@@ -202,7 +202,11 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     return [`meas tran ELSIM_${measurement.id}${suffix} ${measurement.operation} ${measurement.vector}${rangeOptions(measurement)}`]
   }
   const measurementRows = analysisType !== 'tran' || parameterSweep.length ? [] : measurements.filter((measurement) => measurement.operation !== 'crossing' && !hasSourceCurrentVector(measurement) && (measurement.operation !== 'integ' || typeof measurement.expression === 'string')).map((measurement) => `.meas tran ELSIM_${measurement.id} ${measurement.operation === 'delay' ? `TRIG ${measurement.vector} VAL=${threshold(measurement.threshold, measurement.vector)} ${measurement.edge === 'either' ? 'CROSS' : measurement.edge.toUpperCase()}=${measurement.triggerCount ?? 1} TARG ${measurement.targetVector} VAL=${threshold(measurement.targetThreshold, measurement.targetVector)} ${measurement.targetEdge === 'either' ? 'CROSS' : measurement.targetEdge.toUpperCase()}=${measurement.targetCount ?? 1}` : `${measurement.operation} ${typeof measurement.expression === 'string' ? `par('${measurement.expression}')` : measurement.vector ?? ''}${rangeOptions(measurement)}`}`)
-  const save = analysisType === 'ac' || analysisType === 'noise' ? [] : [`.save all${deviceCurrents.length ? ` ${deviceCurrents.join(' ')}` : ''}`]
+  // Node voltages are emitted as explicit project-derived `.save` cards by
+  // netlistGeneration. Keep only the device-current vectors that ELSim exposes
+  // here; `.save all` also retains ngspice's internal vectors and needlessly
+  // inflates memory on long transient runs.
+  const save = analysisType === 'ac' || analysisType === 'noise' || !deviceCurrents.length ? [] : [`.save ${deviceCurrents.join(' ')}`]
   if (stochasticSeed !== undefined && (!Number.isSafeInteger(stochasticSeed) || stochasticSeed < 1 || stochasticSeed > 2_147_483_647)) throw new Error('Ngspice stochastic seed must be an integer from 1 to 2147483647.')
   const commands = ['.control', ...(stochasticSeed === undefined ? [] : [`setseed ${stochasticSeed}`, 'reset']), 'set filetype=binary']
   if (parameterSweep.length) {

@@ -55,6 +55,7 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^R1 vin vout 1k$/m)
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
+  assert.match(artifact.text, /^\.save v\(vin\) v\(vout\)$/m)
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 

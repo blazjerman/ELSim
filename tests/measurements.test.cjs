@@ -260,7 +260,7 @@ test('project measurements validate, persist in project JSON, and enter the gene
   assert.doesNotMatch(controlled, /\.meas tran ELSIM_SourceCurrent/)
   assert.match(controlled, /meas tran ELSIM_PeakOutput max V\(vout\) FROM=2m TO=8m/i)
   assert.doesNotMatch(controlled, /meas tran ELSIM_Charge integ/i)
-  assert.match(controlled, /\.save all .*@i1\[current\]/i)
+  assert.match(controlled, /\.save .*@i1\[current\]/i)
   reloaded.simulation.analysis = 'ac'
   assert.throws(() => validateProject(reloaded), /require transient analysis/)
 })
