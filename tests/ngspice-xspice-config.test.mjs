@@ -9,7 +9,7 @@ import test from 'node:test'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const helper = path.join(root, 'tools/configure-ngspice-xspice-subdirs.py')
 
-test('static ngspice builds remove the GPL table model and optional XSPICE Verilog/VHDL adapters', () => {
+test('static ngspice builds exclude compiled XSPICE models and optional Verilog/VHDL adapters', () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'elsim-xspice-config-'))
   const makefile = path.join(directory, 'Makefile')
   const icmDirectory = path.join(directory, 'icm')
