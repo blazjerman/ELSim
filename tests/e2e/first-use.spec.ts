@@ -377,9 +377,8 @@ test('native distributed RC line can be placed, configured, and netlisted', { ta
   await page.getByRole('button', { name: /^Add Distributed RC line/ }).click()
   const svg = page.locator('svg.schematic')
   const target = await svg.evaluate((element) => {
-    const point = (element as SVGSVGElement).createSVGPoint(); point.x = 700; point.y = 200
-    const screen = point.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
-    return { x: screen.x, y: screen.y }
+    const bounds = element.getBoundingClientRect()
+    return { x: bounds.left + bounds.width * 0.8, y: bounds.top + bounds.height * 0.15 }
   })
   await page.mouse.click(target.x, target.y)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'urcLine')?.ref)).toBe('URC1')
