@@ -31,7 +31,7 @@ const MUTUAL_INDUCTOR_DOT_GEOMETRY = [{ kind: 'circle', cx: -42, cy: -7, r: 3.5,
 const LOGIC_OUTPUT_PART_KINDS: ReadonlySet<PartKind> = new Set(['inverter', 'logicGate'])
 const TRANSISTOR_CHANNEL_PART_KINDS: ReadonlySet<PartKind> = new Set(['nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet'])
 const DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS: ReadonlySet<PartKind> = new Set(['npn', 'pnp', ...TRANSISTOR_CHANNEL_PART_KINDS])
-const CURRENT_POLARITY_MARKER_PART_KINDS: ReadonlySet<PartKind> = new Set(['resistor', 'lamp', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'currentSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral'])
+const CURRENT_POLARITY_MARKER_PART_KINDS: ReadonlySet<PartKind> = new Set(['resistor', 'capacitor', 'lamp', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'currentSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral'])
 
 const CanvasConnectionDotLayer = memo(function CanvasConnectionDotLayer({ dots, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
   dots: { x: number; y: number }[]
@@ -237,7 +237,7 @@ const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView(
   }
   if (primitive.kind === 'text') {
     const currentPolarity = isCurrentPolarityPrimitive(primitive)
-    const liveCurrentPolarity = primitive.className?.split(/\s+/).some((name) => name === 'resistor-current-polarity-live' || name === 'inductor-current-polarity-live') ?? false
+    const liveCurrentPolarity = primitive.className?.split(/\s+/).some((name) => name === 'resistor-current-polarity-live' || name === 'capacitor-current-polarity-live' || name === 'inductor-current-polarity-live') ?? false
     return <text className={primitive.className} x={primitive.x} y={primitive.y} transform={currentPolarity && rotation ? `rotate(${-rotation} ${primitive.x} ${primitive.y})` : undefined} data-pin={primitive.pin} data-polarity={currentPolarity ? primitive.text : undefined} data-live-current-polarity={currentPolarity && primitive.pin !== undefined ? true : undefined} opacity={liveCurrentPolarity ? 0 : undefined} aria-hidden={liveCurrentPolarity ? true : undefined} fill={common.stroke} stroke="none" pointerEvents="none">{primitive.text}{currentPolarity && primitive.pin !== undefined && <title>{liveCurrentPolarity ? `Pin ${primitive.pin}: polarity follows current through this component` : `Pin ${primitive.pin}: conventional current ${primitive.text === '+' ? 'flows out' : 'flows in'}`}</title>}</text>
   }
   const transistorCurrent = primitive.className === 'transistor-current-indicator'
@@ -284,7 +284,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   // simulation cursor, but hundreds of off-focus SVG <title> nodes no longer
   // need their text replaced on every scrub/playback frame.
   const showSampleTitle = selected || focusable || hovered
-  const sharedFrameAnimation = part.kind === 'resistor' || part.kind === 'inductor' || part.kind === 'transformer'
+  const sharedFrameAnimation = part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor' || part.kind === 'transformer'
   const sampleRequested = animate && (sharedFrameAnimation ? selected || hovered : RESULT_ANIMATED_PART_KINDS.has(part.kind) || selected || hovered)
   const animationSample = useSimulationCursorWhen(sampleRequested)
   const { voltage, current, secondaryCurrent, capacitorCharge: sampledCapacitorCharge, switchClosed, logicOutput } = useMemo(() => sampleRequested ? componentSample(part, animationSample) : {}, [sampleRequested, animationSample, componentSample, part])
@@ -323,11 +323,12 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     : EMPTY_SUBCIRCUIT_PIN_OFFSETS, [part.kind, part.modelPins?.length, part.sheetPortLayout])
   const potentiometerPosition = Number(part.wiperPosition ?? '0.5')
   const potentiometerWiperY = -24 + potentiometerPosition * 48
-  const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'currentSwitch' ? switchClosed ? 'on' : 'off' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : part.kind === 'currentSource' && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : part.kind === 'capacitor' && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS.has(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
+  const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'currentSwitch' ? switchClosed ? 'on' : 'off' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : part.kind === 'currentSource' && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : part.kind === 'capacitor' && !animate && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS.has(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
   const currentPolarityGeometry = useMemo<readonly ComponentSymbolPrimitive[]>(() => {
-    if ((part.kind === 'resistor' || part.kind === 'inductor') && animate) {
-      const pin1X = part.flipX ? 31 : -31
-      const liveClass = part.kind === 'resistor' ? 'resistor-current-polarity-live' : 'inductor-current-polarity inductor-current-polarity-live'
+    if ((part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') && animate) {
+      const offset = part.kind === 'capacitor' ? 24 : 31
+      const pin1X = part.flipX ? offset : -offset
+      const liveClass = part.kind === 'resistor' ? 'resistor-current-polarity-live' : part.kind === 'capacitor' ? 'capacitor-current-polarity capacitor-current-polarity-live' : 'inductor-current-polarity inductor-current-polarity-live'
       return [
         { kind: 'text', className: `component-current-polarity ${liveClass}`, x: pin1X, y: -18, text: '−', pin: 1 },
         { kind: 'text', className: `component-current-polarity ${liveClass}`, x: -pin1X, y: -18, text: '+', pin: 2 },
@@ -346,7 +347,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
       { kind: 'text', className: 'component-current-polarity', x: pin2X, y: -18, text: pin2Polarity, pin: 2 },
     ]
   }, [part.kind, part.flipX, currentNegative, hasCurrentDirection, animate])
-  const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
+  const capacitorChargeGeometry = part.kind === 'capacitor' && (animate || voltage !== undefined) ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
   const hasPowerGlow = (part.kind === 'resistor' && animate) || lampGlow > 0 || resistorPowerGlow > 0
   const powerGlowGeometry = hasPowerGlow ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
@@ -482,26 +483,32 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
   useEffect(() => {
     if (!animationEnabled) return
     const profileAnimation = import.meta.env.DEV && new URLSearchParams(window.location.search).has('profile-animation')
-    // Uninspected resistors, inductors, and transformers otherwise each
+    // Uninspected animated parts otherwise each
     // subscribe and reconcile their full SVG subtree on every cursor frame.
     // Keep their nodes mounted and update only result-driven attributes from
     // one shared listener. Resolve SVG nodes once per mounted viewport.
     const groups = document.querySelectorAll<SVGGElement>('svg.schematic .circuit-part[data-animation-kind$="-result"]')
-    const animatedParts = Array.from(groups, (group) => ({
-      group,
-      part: partsById.get(group.dataset.partId ?? ''),
-      kind: group.dataset.animationKind,
-      powerGlow: group.querySelector<SVGCircleElement>('[data-resistor-power-glow]'),
-      inductorGlow: group.querySelector<SVGPathElement>('[data-inductor-current-glow]'),
-      transformerPrimaryGlow: group.querySelector<SVGPathElement>('[data-transformer-primary-current-glow]'),
-      transformerSecondaryGlow: group.querySelector<SVGPathElement>('[data-transformer-secondary-current-glow]'),
-      markers: Array.from(group.querySelectorAll<SVGTextElement>('[data-live-current-polarity]')),
-    })).filter((entry): entry is typeof entry & { part: Part } => entry.part !== undefined)
+    const animatedParts = Array.from(groups, (group) => {
+      const part = partsById.get(group.dataset.partId ?? '')
+      return {
+        group,
+        part,
+        kind: group.dataset.animationKind,
+        powerGlow: group.querySelector<SVGCircleElement>('[data-resistor-power-glow]'),
+        inductorGlow: group.querySelector<SVGPathElement>('[data-inductor-current-glow]'),
+        transformerPrimaryGlow: group.querySelector<SVGPathElement>('[data-transformer-primary-current-glow]'),
+        transformerSecondaryGlow: group.querySelector<SVGPathElement>('[data-transformer-secondary-current-glow]'),
+        capacitorPlates: Array.from(group.querySelectorAll<SVGLineElement>('[data-charge-level]')),
+        capacitance: part?.kind === 'capacitor' ? componentMagnitude(part.value, 'capacitor') ?? Number.NaN : Number.NaN,
+        seriesResistance: part?.kind === 'capacitor' ? componentMagnitude(part.seriesResistance ?? '0 Ω', 'resistor') ?? Number.NaN : 0,
+        markers: Array.from(group.querySelectorAll<SVGTextElement>('[data-live-current-polarity]')),
+      }
+    }).filter((entry): entry is typeof entry & { part: Part } => entry.part !== undefined)
     const updateResistorAnimation = () => {
       const profileStartedAt = profileAnimation ? performance.now() : 0
       const sampleIndex = getSimulationCursor()
-      for (const { part, kind, powerGlow, inductorGlow, transformerPrimaryGlow, transformerSecondaryGlow, markers } of animatedParts) {
-        const { voltage, current, secondaryCurrent } = componentSample(part, sampleIndex)
+      for (const { part, kind, powerGlow, inductorGlow, transformerPrimaryGlow, transformerSecondaryGlow, capacitorPlates, capacitance, seriesResistance, markers } of animatedParts) {
+        const { voltage, current, secondaryCurrent, capacitorCharge } = componentSample(part, sampleIndex)
         if (kind === 'resistor-result') {
           const power = Math.abs((voltage ?? 0) * (current ?? 0))
           const opacity = String(Math.min(1, Math.sqrt(power / (part.animationNominalPower ?? 0.25))) * 0.34)
@@ -512,6 +519,24 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         if (transformerPrimaryGlow && transformerPrimaryGlow.getAttribute('opacity') !== String(currentGlow)) transformerPrimaryGlow.setAttribute('opacity', String(currentGlow))
         const secondaryGlow = Math.min(1, Math.sqrt(Math.abs(secondaryCurrent ?? 0) / 0.005) * 0.8)
         if (transformerSecondaryGlow && transformerSecondaryGlow.getAttribute('opacity') !== String(secondaryGlow)) transformerSecondaryGlow.setAttribute('opacity', String(secondaryGlow))
+        if (kind === 'capacitor-result') {
+          const capacitorVoltage = voltage === undefined ? 0 : voltage - (current ?? 0) * seriesResistance
+          const charge = capacitorCharge ?? capacitance * capacitorVoltage
+          const chargeLevel = Number.isFinite(charge) ? Math.min(1, Math.sqrt(Math.abs(charge) / 1e-4)) : 0
+          const negativeVoltage = capacitorVoltage < 0
+          for (const plate of capacitorPlates) {
+            const positivePlate = plate.classList.contains('capacitor-charge-positive-plate')
+            const attributes: Array<[string, string]> = [
+              ['y1', String(-16 - 7 * chargeLevel)],
+              ['y2', String(16 + 7 * chargeLevel)],
+              ['data-charge-level', String(chargeLevel)],
+              ['stroke', (negativeVoltage === positivePlate) ? '#74bdf2' : '#f18484'],
+              ['stroke-width', String(2 + chargeLevel * 6)],
+              ['opacity', String(chargeLevel * .8)],
+            ]
+            for (const [name, value] of attributes) if (plate.getAttribute(name) !== value) plate.setAttribute(name, value)
+          }
+        }
         if (kind === 'transformer-result') continue
         const hasCurrent = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
         const pin1Polarity = current !== undefined && current < 0 ? '+' : '−'

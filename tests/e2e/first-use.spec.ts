@@ -8461,7 +8461,7 @@ test('capacitor plate animation expands with charge from the solved waveform', {
   expect(Number(await glow.getAttribute('data-charge-level'))).toBeGreaterThan(chargeLevelAt10Ms)
   expect(Math.abs(Number(await glow.getAttribute('y1')))).toBeGreaterThan(plateExtentAt10Ms)
   await capacitor.hover()
-  await expect(capacitor.locator(':scope > title')).toContainText('Q = C × V =')
+  await expect(capacitor.locator(':scope > title')).toContainText('plate charge animation follows solved charge; Q ≈')
 })
 
 test('capacitor discharge lesson compares solved RC decay before and after a resistor change', { tag: '@ngspice' }, async ({ page }) => {
