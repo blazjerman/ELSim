@@ -242,6 +242,27 @@ export function createEducationalOpampExampleProject(): Project {
   return project
 }
 
+/** A beginner voltage-follower lesson showing how negative feedback buffers a signal. */
+export function createOpampBufferExampleProject(): Project {
+  const project = createEducationalOpampExampleProject()
+  const amplifier = project.parts.find((part) => part.ref === 'U1')!
+  const outputPin = componentPins(amplifier)[4]
+  const invertingPin = componentPins(amplifier)[1]
+  project.name = 'Op-amp voltage follower buffer'
+  project.parts = project.parts.filter((part) => part.ref !== 'RG' && part.ref !== 'RF')
+  project.wires = [
+    { id: 'opamp-buffer-output-lead', points: [[outputPin.x, outputPin.y], [640, outputPin.y]] },
+    { id: 'opamp-buffer-feedback-drop', points: [[640, outputPin.y], [640, invertingPin.y]] },
+    { id: 'opamp-buffer-feedback-return', points: [[640, invertingPin.y], [invertingPin.x, invertingPin.y]] },
+  ]
+  project.netLabels = project.netLabels.filter((label) => !label.id.endsWith('-rg-top') && !label.id.endsWith('-rg-return') && !label.id.endsWith('-rf-output') && !label.id.endsWith('-rf-feedback'))
+    .map((label) => label.id === 'educational-opamp-input-negative' ? { ...label, name: 'VOUT' } : label)
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(RLOAD)'], ranges: {} }
+  return project
+}
+
 /** A beginner AC lesson that uses an NPN stage to demonstrate gain and phase inversion. */
 export function createCommonEmitterExampleProject(): Project {
   const project = createStarterProject()

@@ -3179,6 +3179,7 @@ export default function App() {
           'imported-opamp': examples.createImportedOpampExampleProject,
           'inverting-opamp': examples.createInvertingOpampExampleProject,
           'noninverting-opamp': examples.createNonInvertingOpampExampleProject,
+          'opamp-buffer': examples.createOpampBufferExampleProject,
           'common-emitter': examples.createCommonEmitterExampleProject,
           'common-source': examples.createCommonSourceExampleProject,
           'cmos-inverter': examples.createCmosInverterExampleProject,

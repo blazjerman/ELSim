@@ -10475,6 +10475,26 @@ test('non-inverting op-amp lesson predicts and verifies feedback gain changes', 
   await expect(lesson).toContainText('gain = 1 + RF/RG = 5')
 })
 
+test('op-amp voltage follower example opens and solves with direct negative feedback', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Advanced' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Op-amp voltage follower buffer' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Op-amp voltage follower buffer')
+  await expect(page.getByLabel('Guided example')).toContainText('Negative feedback makes the output follow the input')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(3)
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(VOUT)')
+  const outputRow = page.locator('.plot-window').last().locator('.op-table').getByRole('row', { name: /V\(vout\)/i })
+  await expect(outputRow).toContainText('0.999')
+})
+
 test('logic gate lesson simulates the four input truth-table states', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
