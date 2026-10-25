@@ -9191,6 +9191,7 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
   const maxSample = Number(await slider.getAttribute('max'))
   const currentAt = async (fraction: number) => {
     await slider.fill(String(Math.floor(maxSample * fraction)))
+    await inductor.hover()
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
     await expect.poll(async () => (await inductorTitle.textContent()) ?? '').toMatch(/[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)? A,/i)
     const title = (await inductorTitle.textContent()) ?? ''

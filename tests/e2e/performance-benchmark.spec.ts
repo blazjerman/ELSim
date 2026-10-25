@@ -5,18 +5,23 @@ import path from 'node:path'
 
 async function startDomMutationCapture(page: import('@playwright/test').Page) {
   await page.evaluate(() => {
-    type Capture = { records: number; componentIds: Set<string>; observer: MutationObserver }
+    type Capture = { records: number; componentIds: Set<string>; attributeCounts: Map<string, number>; nodeChangeCounts: Map<string, number>; observer: MutationObserver }
     const profileWindow = window as Window & { __elsimMutationCapture?: Capture }
     const componentIds = new Set<string>()
+    const attributeCounts = new Map<string, number>()
+    const nodeChangeCounts = new Map<string, number>()
     const observer = new MutationObserver((records) => {
       for (const record of records) {
         const target = record.target instanceof Element ? record.target : record.target.parentElement
         const part = target?.closest<SVGGElement>('.circuit-part')
         if (part?.dataset.partId) componentIds.add(part.dataset.partId)
+        const counts = record.type === 'attributes' ? attributeCounts : nodeChangeCounts
+        const name = record.type === 'attributes' ? record.attributeName ?? 'unknown' : record.type
+        counts.set(name, (counts.get(name) ?? 0) + 1)
       }
       capture.records += records.length
     })
-    const capture: Capture = { records: 0, componentIds, observer }
+    const capture: Capture = { records: 0, componentIds, attributeCounts, nodeChangeCounts, observer }
     profileWindow.__elsimMutationCapture = capture
     observer.observe(document.body, { attributes: true, childList: true, characterData: true, subtree: true })
   })
@@ -24,14 +29,20 @@ async function startDomMutationCapture(page: import('@playwright/test').Page) {
 
 async function stopDomMutationCapture(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
-    type Capture = { records: number; componentIds: Set<string>; observer: MutationObserver }
+    type Capture = { records: number; componentIds: Set<string>; attributeCounts: Map<string, number>; nodeChangeCounts: Map<string, number>; observer: MutationObserver }
     const profileWindow = window as Window & { __elsimMutationCapture?: Capture }
     const capture = profileWindow.__elsimMutationCapture
     if (!capture) return { mutationRecords: 0, changedComponentCount: 0 }
-    capture.records += capture.observer.takeRecords().length
+    const pending = capture.observer.takeRecords()
+    for (const record of pending) {
+      const counts = record.type === 'attributes' ? capture.attributeCounts : capture.nodeChangeCounts
+      const name = record.type === 'attributes' ? record.attributeName ?? 'unknown' : record.type
+      counts.set(name, (counts.get(name) ?? 0) + 1)
+    }
+    capture.records += pending.length
     capture.observer.disconnect()
     delete profileWindow.__elsimMutationCapture
-    return { mutationRecords: capture.records, changedComponentCount: capture.componentIds.size }
+    return { mutationRecords: capture.records, changedComponentCount: capture.componentIds.size, attributes: Object.fromEntries(capture.attributeCounts), nodeChanges: Object.fromEntries(capture.nodeChangeCounts) }
   })
 }
 
@@ -90,10 +101,10 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
     const source = {
       ...sourceTemplate,
       id: 'animation-bench-v1', ref: 'V1', value: '5 V', sourceMode: 'pulse',
-      // Put the edge inside the simulated time range so Home and End expose
-      // different component readings; a pulse that starts at t=0 is already
-      // settled for nearly every saved sample and makes this check flaky.
-      pulse: { initial: '0', delay: '0.5m', rise: '1u', fall: '1u', width: '2m', period: '5m' }, x: 120, y: 400,
+      // Keep current nonzero with the same direction at both ends while
+      // changing its magnitude; this isolates animation updates from the
+      // one-time insertion of current-polarity markers at zero current.
+      pulse: { initial: '1', delay: '0.5m', rise: '1u', fall: '1u', width: '2m', period: '5m' }, x: 120, y: 400,
     }
     const resistors = Array.from({ length: sections }, (_, index) => ({
       ...resistorTemplate,
