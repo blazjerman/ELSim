@@ -218,6 +218,12 @@
           "maxLength": 256,
           "description": "Optional native ngspice behavioral capacitor Q= expression defining charge in coulombs."
         },
+        "behavioralInductance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Optional native ngspice behavioral inductor L= expression; may depend on circuit voltages, voltage-source currents, parameters, time, temperature, or frequency."
+        },
         "tc1": {
           "type": "string",
           "maxLength": 64,

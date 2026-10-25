@@ -258,7 +258,8 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         const requiredModelParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
         const deviceModel = part.deviceModel ? importedDeviceModels.get(part.deviceModel.toLowerCase()) : undefined
         const modelSuppliesValue = Boolean(requiredModelParameter && deviceModel?.type === part.kind[0] && deviceModel.parameters.some((parameter) => parameter.name.toLowerCase() === requiredModelParameter))
-        if (part.kind !== 'resistor' || part.behavioralResistance === undefined) {
+        const behavioralInductor = part.kind === 'inductor' && part.behavioralInductance !== undefined
+        if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && !behavioralInductor) {
           if (magnitude === null && !isSheetParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) invalidValue(part.value.trim() === '' && part.deviceModel ? `Imported model ${part.deviceModel} must declare ${requiredModelParameter?.toUpperCase()} to supply this value.` : 'Enter a numeric value with an optional SI prefix, or use a parameter declared on this sheet.')
           else if (magnitude !== null && magnitude <= 0) issues.push({
           id: `nonpositive-value:${sheet.id}:${part.id}`,
@@ -303,6 +304,18 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral resistance expression.'
         issues.push({ id: `invalid-behavioral-resistance:${sheet.id}:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral resistance in ${sheet.name}`, detail, partId: topLevelInstanceId })
+      }
+    }
+    if (sheet.id !== project.activeSheetId) for (const part of sheet.parts) if (part.kind === 'inductor' && part.behavioralInductance !== undefined) {
+      try {
+        if (!part.behavioralInductance.trim() || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
+        const parsed = parseBehavioralExpression(part.behavioralInductance)
+        validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralInductance, ngspiceVoltageBranchReferences(sheet.parts))
+        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral inductance expression.'
+        issues.push({ id: `invalid-behavioral-inductor:${sheet.id}:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral inductor in ${sheet.name}`, detail, partId: topLevelInstanceId })
       }
     }
     const sheetLabelNames = new Set(sheet.netLabels.map((label) => label.name.trim()))
@@ -499,15 +512,28 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({ id: `invalid-behavioral-capacitor:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral capacitor`, detail, partId: part.id })
       }
     }
+    if (part.kind === 'inductor' && part.behavioralInductance !== undefined) {
+      try {
+        if (!part.behavioralInductance.trim() || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
+        const parsed = parseBehavioralExpression(part.behavioralInductance)
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralInductance, ngspiceVoltageBranchReferences(project.parts))
+        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral inductance expression.'
+        issues.push({ id: `invalid-behavioral-inductor:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral inductor`, detail, partId: part.id })
+      }
+    }
     if (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) {
       const magnitude = componentMagnitude(part.value, part.kind)
       const requiredModelParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
       const deviceModel = part.deviceModel ? importedDeviceModels.get(part.deviceModel.toLowerCase()) : undefined
       const modelSuppliesValue = Boolean(requiredModelParameter && deviceModel?.type === part.kind[0] && deviceModel.parameters.some((parameter) => parameter.name.toLowerCase() === requiredModelParameter))
       const behavioralCapacitor = part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined)
-      if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && !behavioralCapacitor && magnitude === null && !isDeclaredParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) {
+      const behavioralInductor = part.kind === 'inductor' && part.behavioralInductance !== undefined
+      if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && !behavioralCapacitor && !behavioralInductor && magnitude === null && !isDeclaredParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) {
         issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid value`, detail: part.value.trim() === '' && part.deviceModel ? `Imported model ${part.deviceModel} must declare ${requiredModelParameter?.toUpperCase()} to supply this value.` : 'Enter a numeric value with an optional SI prefix, such as 1 kΩ, 10 µF, or 2 mH.', partId: part.id })
-      } else if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && !behavioralCapacitor && magnitude !== null && magnitude <= 0) {
+      } else if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && !behavioralCapacitor && !behavioralInductor && magnitude !== null && magnitude <= 0) {
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }
     }

@@ -898,7 +898,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const negative = pinNet(connectivity, part, 1)
     const isBehavioralResistor = part.kind === 'resistor' && part.behavioralResistance !== undefined
     const isBehavioralCapacitor = part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined)
-    const value = isBehavioralResistor || isBehavioralCapacitor || part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' || part.kind === 'opamp' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
+    const isBehavioralInductor = part.kind === 'inductor' && part.behavioralInductance !== undefined
+    const value = isBehavioralResistor || isBehavioralCapacitor || isBehavioralInductor || part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' || part.kind === 'opamp' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
     const passiveModelType = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
     const passiveModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
     const temperatureModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
@@ -985,7 +986,24 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
     }
-    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && part.kind !== 'transmissionLine' && part.kind !== 'urcLine' && !isBehavioralResistor && !isBehavioralCapacitor && value === null && !valueCanBeModelDefault) {
+    let behavioralInductorValue: string | undefined
+    if (isBehavioralInductor) {
+      try {
+        const expression = part.behavioralInductance ?? ''
+        if (!expression.trim() || expression.length > 256 || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
+        const parsed = parseBehavioralExpression(expression)
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(project.parts))
+        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+        behavioralInductorValue = `L={${translateBehavioralExpression(expression)}}`
+      } catch (error) {
+        const message = error instanceof Error ? `${part.ref}: ${error.message}` : `${part.ref} has an invalid behavioral inductance expression.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+    }
+    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && part.kind !== 'transmissionLine' && part.kind !== 'urcLine' && !isBehavioralResistor && !isBehavioralCapacitor && !isBehavioralInductor && value === null && !valueCanBeModelDefault) {
       const message = `${part.ref} has an invalid numeric value${passiveDefaultParameter && part.value.trim() === '' ? ` (no compatible model with ${passiveDefaultParameter.toUpperCase()} default)` : ''}.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -1471,7 +1489,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         append(`${reference} ${elementPositive} ${node} 0`, part.id, 'component')
         elementPositive = node
       }
-      const instanceValue = behavioralResistanceValue ?? behavioralCapacitorValue ?? value ?? ''
+      const instanceValue = behavioralResistanceValue ?? behavioralCapacitorValue ?? behavioralInductorValue ?? value ?? ''
       const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
       const multiplierSuffix = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
       const acResistanceValue = part.kind === 'resistor' && part.acResistance !== undefined ? spiceScalar(part.acResistance, '') : null

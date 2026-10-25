@@ -34,6 +34,15 @@ test('behavioral capacitor expressions skip nominal-value checks and report bad 
   assert.match(checkCircuit(project).find((issue) => issue.id === `invalid-behavioral-capacitor:${capacitor.id}`).detail, /unknown node/i)
 })
 
+test('behavioral inductor expressions skip nominal-value checks and report bad references', () => {
+  const project = createStarterProject()
+  const inductor = { id: 'behavioral-l1', kind: 'inductor', ref: 'L2', value: 'illustrative value only', x: 900, y: 500, rotation: 0, behavioralInductance: 'V(vin) < 1 ? 1m : 2m' }
+  project.parts.push(inductor)
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `invalid-value:${inductor.id}` || issue.id === `nonpositive-value:${inductor.id}` || issue.id === `invalid-behavioral-inductor:${inductor.id}`), false)
+  inductor.behavioralInductance = 'V(unknown)'
+  assert.match(checkCircuit(project).find((issue) => issue.id === `invalid-behavioral-inductor:${inductor.id}`).detail, /unknown node/i)
+})
+
 test('voltage-controlled switch checks imported SW model presence and type', () => {
   const project = createVoltageSwitchExampleProject()
   const sw = project.parts.find((part) => part.kind === 'voltageSwitch')

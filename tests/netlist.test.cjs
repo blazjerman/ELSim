@@ -2723,6 +2723,20 @@ test('behavioral capacitors emit native C= and Q= expressions and validate refer
   assert.throws(() => validateProject(project), /unknown node/i)
 })
 
+test('behavioral inductors emit native L= expressions and validate references', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'behavioral-l1', kind: 'inductor', ref: 'L2', value: '1 mH', x: 900, y: 500, rotation: 0, behavioralInductance: 'V(vin) < 1 ? 1m : 2m' })
+  let artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^L2 n\d+ n\d+ L=\{V\(vin\) < 1 \? 1m : 2m\}$/m)
+  const inductor = project.parts.find((part) => part.ref === 'L2')
+  inductor.value = 'not a numeric inductance'
+  artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  inductor.behavioralInductance = 'V(unknown)'
+  assert.throws(() => validateProject(project), /unknown node/i)
+})
+
 test('native ngspice int() is emitted as truncation toward zero with supported runtime functions', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'native-bsource-int', kind: 'behavioral', ref: 'BINT', value: 'int(V(vin))', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })

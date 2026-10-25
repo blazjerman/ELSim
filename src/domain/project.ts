@@ -32,6 +32,8 @@ export type Part = {
   behavioralCapacitance?: string
   /** Optional ngspice charge-defined capacitor expression Q={...}. */
   behavioralCharge?: string
+  /** Optional ngspice expression-defined inductance L={...}. */
+  behavioralInductance?: string
   /** Optional native ngspice passive temperature coefficient (fraction per degree). */
   tc1?: string
   /** Optional native ngspice second-order passive temperature coefficient. */
@@ -472,6 +474,15 @@ export function validateProject(input: unknown): Project {
       const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
       validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
       const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(data.parts as Part[]))
+      if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+    }
+    if (candidate.behavioralInductance !== undefined) {
+      if (candidate.kind !== 'inductor' || typeof candidate.behavioralInductance !== 'string' || !candidate.behavioralInductance.trim() || candidate.behavioralInductance.length > 256 || candidate.deviceModel || candidate.instanceMultiplier !== undefined) throw new Error(`${candidate.ref} behavioral inductance requires an inductor without an imported model or parallel-device multiplier.`)
+      const parsed = parseBehavioralExpression(candidate.behavioralInductance)
+      const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
+      const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
+      validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
+      const unsupportedCurrent = unsupportedBehavioralCurrentReference(candidate.behavioralInductance, ngspiceVoltageBranchReferences(data.parts as Part[]))
       if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
     }
     for (const key of ['tc1', 'tc2', 'tce'] as const) {
