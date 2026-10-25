@@ -1,5 +1,9 @@
 # ELSim performance benchmarks
 
+## Firefox 5,000-part navigation recheck (2026-10-25)
+
+The focused large-schematic browser benchmark passed in Firefox on the documented i7-12700F host. The 5,000-part/4,900-wire project rendered in 842.15 ms with 64 parts and 551 wires mounted. Selection median/p95 was 6/17 ms, Ctrl+A reached the next frame in 75 ms, wheel zoom reached two animation frames in 38 ms median / 56 ms maximum, pan in 17/17 ms, and keyboard navigation in 22/29 ms. These are single-run local observations, not cross-machine budgets. They are consistent with prior same-host runs and do not identify a measured regression or justify a broad renderer rewrite. No solver or WASM run was part of this test.
+
 ## Reuse inspected imported-library sections (2026-10-25)
 
 `analyzeModelLibraries` now reuses the section names collected during its initial library inspection when resolving section-qualified `.LIB` dependencies. The previous dependency pass rescanned the target library source to list those sections. Parser and dependency output is unchanged; the focused `subcircuit-library` test passes, including the large multi-reference section fixture.
