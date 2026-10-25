@@ -207,7 +207,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const commands = ['.control', ...(stochasticSeed === undefined ? [] : [`setseed ${stochasticSeed}`, 'reset']), 'set filetype=binary']
   if (parameterSweep.length) {
     parameterSweep.forEach((run, index) => {
-      if (stochasticSeed !== undefined && index > 0) commands.push(`setseed ${Math.min(2_147_483_647, stochasticSeed + index)}`, 'reset')
+      if (stochasticSeed !== undefined && index > 0) commands.push(`setseed ${((stochasticSeed + index - 1) % 2_147_483_647) + 1}`, 'reset')
       run.values.forEach(({ component, value, parameter, model, modelTargets, instanceParameter, sourceParameter, globalParameter, pulseHigh, pwlScale, waveformAmplitude, altermodParameters }) => {
         if (altermodParameters) return
         if (parameter && modelTargets) commands.push(`alterparam ${binFamilyParameters.get(`${component.toLowerCase()}.${parameter.toLowerCase()}`)?.generated}=${value}`)

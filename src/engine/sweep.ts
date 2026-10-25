@@ -8,6 +8,22 @@ type VoltageSwitchSweepBase = { von: number; voff: number; ron: number; roff: nu
 type ParameterSweepValue = { component: string; value: string; parameter?: string; model?: string; modelTargets?: string[]; instanceParameter?: boolean; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean; voltageSwitch?: { base: VoltageSwitchSweepBase; parameter: keyof VoltageSwitchSweepBase }; altermodParameters?: { RON: string; ROFF: string; VT: string; VH: string } }
 export type ParameterSweepRun = { values: ParameterSweepValue[]; label: string }
 
+/** Expand parameter cases into separately seeded ngspice runs for statistical expressions. */
+export function prepareStochasticSamples(netlist: string, parameterRuns: ParameterSweepRun[], sampleCount: number): ParameterSweepRun[] {
+  if (!Number.isInteger(sampleCount) || sampleCount < 1 || sampleCount > 10) {
+    throw new Error('Independent random samples must be an integer from 1 to 10.')
+  }
+  if (sampleCount === 1 || !/\b(?:gauss|agauss|unif|aunif|limit)\s*\(/i.test(netlist)) return parameterRuns
+  const baseRuns = parameterRuns.length ? parameterRuns : [{ values: [], label: '' }]
+  if (baseRuns.length * sampleCount > 10) {
+    throw new Error('Parameter stepping and independent random sampling are limited to 10 total simulation runs.')
+  }
+  return baseRuns.flatMap((run) => Array.from({ length: sampleCount }, (_, index) => ({
+    values: run.values,
+    label: `${run.label ? `${run.label} · ` : ''}Sample ${index + 1}`,
+  })))
+}
+
 
 function voltageSwitchSweepBase(project: Project, part: Project['parts'][number]): { model: string; base: VoltageSwitchSweepBase } | undefined {
   if (part.kind !== 'voltageSwitch' || !part.deviceModel) return undefined

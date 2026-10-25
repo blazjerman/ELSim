@@ -175,7 +175,7 @@ export function sheetModelName(sheetId: string): string {
 
 export type Project = {
   format: 'elsim-project'
-  version: 8
+  version: 9
   name: string
   updatedAt: string
   parts: Part[]
@@ -188,7 +188,7 @@ export type Project = {
   symbolAssets?: SymbolAsset[]
   importedSchematicSource?: LtspiceSchematicSource
   importedChildSchematicSources?: LtspiceSchematicSource[]
-  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz' | 'disto'; stopTime: string; maxStep: string; startSavingTime?: string; temperature?: string; nominalTemperature?: string; relativeTolerance?: string; absoluteCurrentTolerance?: string; absoluteVoltageTolerance?: string; minimumConductance?: string; pivotRelativeTolerance?: string; pivotAbsoluteTolerance?: string; dcIterationLimit?: string; dcTransferIterationLimit?: string; dcSourceSteppingSteps?: string; dcGminStepping?: '0' | '1' | '2'; dcSkipInitialNewtonIteration?: boolean; transientLowerIterationLimit?: string; transientIterationLimit?: string; transientTotalIterationLimit?: string; transientErrorTolerance?: string; trapezoidalDampingFactor?: string; shuntResistance?: string; shuntCapacitance?: string; integrationMethod?: 'trap' | 'gear'; integrationMaxOrder?: number; skipAcOperatingPoint?: boolean; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; transferFunction?: { outputNode: string; inputSource: string }; sensitivity?: { outputNode: string; mode: 'dc' | 'ac' }; poleZero?: { outputNode: string; inputSource: string; roots: 'poles' | 'zeros' | 'both' }; distortion?: { outputNode: string; inputSource: string; harmonic: 2 | 3; mode?: 'harmonic' | 'intermodulation'; intermodProduct?: 'sum' | 'difference' | 'third-order'; secondToneRatio?: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise' | 'tf' | 'sens' | 'pz' | 'disto'; stopTime: string; maxStep: string; stochasticSampleCount?: number; startSavingTime?: string; temperature?: string; nominalTemperature?: string; relativeTolerance?: string; absoluteCurrentTolerance?: string; absoluteVoltageTolerance?: string; minimumConductance?: string; pivotRelativeTolerance?: string; pivotAbsoluteTolerance?: string; dcIterationLimit?: string; dcTransferIterationLimit?: string; dcSourceSteppingSteps?: string; dcGminStepping?: '0' | '1' | '2'; dcSkipInitialNewtonIteration?: boolean; transientLowerIterationLimit?: string; transientIterationLimit?: string; transientTotalIterationLimit?: string; transientErrorTolerance?: string; trapezoidalDampingFactor?: string; shuntResistance?: string; shuntCapacitance?: string; integrationMethod?: 'trap' | 'gear'; integrationMaxOrder?: number; skipAcOperatingPoint?: boolean; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; transferFunction?: { outputNode: string; inputSource: string }; sensitivity?: { outputNode: string; mode: 'dc' | 'ac' }; poleZero?: { outputNode: string; inputSource: string; roots: 'poles' | 'zeros' | 'both' }; distortion?: { outputNode: string; inputSource: string; harmonic: 2 | 3; mode?: 'harmonic' | 'intermodulation'; intermodProduct?: 'sum' | 'difference' | 'third-order'; secondToneRatio?: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
   rootSheetId: string
   activeSheetId: string
   sheets: ProjectSheet[]
@@ -230,7 +230,7 @@ function snapProjectGeometryToGrid(project: Record<string, unknown>): void {
 
 const starter: Project = {
   format: 'elsim-project',
-  version: 8,
+  version: 9,
   name: 'RC step response',
   updatedAt: new Date().toISOString(),
   parts: [
@@ -324,6 +324,10 @@ function migrateV7(input: Record<string, unknown>): Project {
   return project
 }
 
+function migrateV8(input: Record<string, unknown>): Project {
+  return { ...input, version: 9 } as unknown as Project
+}
+
 function migrateV2(input: Record<string, unknown>): Project {
   const project = { ...input, version: 7 } as unknown as Project
   project.rootSheetId = 'sheet-main'
@@ -354,7 +358,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     })
   }
   return {
-    format: 'elsim-project', version: 8,
+    format: 'elsim-project', version: 9,
     name: typeof input.name === 'string' ? input.name : 'Imported project',
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
     parts: oldParts.map(({ nodes: _nodes, ...part }) => part),
@@ -383,8 +387,9 @@ export function validateProject(input: unknown): Project {
   if (data.version === 5 && Array.isArray(data.sheets)) return validateProject(migrateV5(data))
   if (data.version === 6 && Array.isArray(data.sheets)) return validateProject(migrateV6(data))
   if (data.version === 7 && Array.isArray(data.sheets)) return validateProject(migrateV7(data))
-  if (data.version !== 8 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
-    throw new Error('This project format is not supported. Expected ELSim project version 8.')
+  if (data.version === 8 && Array.isArray(data.sheets)) return validateProject(migrateV8(data))
+  if (data.version !== 9 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
+    throw new Error('This project format is not supported. Expected ELSim project version 9.')
   }
   const parsedModelAssets = new Map<string, ReturnType<typeof parseSubcircuitLibrary>>()
   // Normalize hand-edited JSON before any connectivity checks. The app's
@@ -754,6 +759,7 @@ export function validateProject(input: unknown): Project {
   const view = data.view as Project['view'] | undefined
   if (typeof data.name !== 'string' || !data.name.trim() || typeof data.updatedAt !== 'string' || !Number.isFinite(Date.parse(data.updatedAt)) || !simulation || !['tran', 'op', 'ac', 'dc', 'noise', 'tf', 'sens', 'pz', 'disto'].includes(simulation.analysis) || typeof simulation.stopTime !== 'string' || !simulation.stopTime.trim() || typeof simulation.maxStep !== 'string' || !simulation.maxStep.trim() || !view || !Number.isFinite(view.zoom) || view.zoom <= 0 || !Number.isFinite(view.panX) || !Number.isFinite(view.panY)) throw new Error('Project settings are missing or malformed.')
   if (simulation.analysis === 'ac' && !simulation.acSweep) simulation.acSweep = { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
+  if (simulation.stochasticSampleCount !== undefined && (!Number.isInteger(simulation.stochasticSampleCount) || simulation.stochasticSampleCount < 1 || simulation.stochasticSampleCount > 10)) throw new Error('Independent random samples must be an integer from 1 to 10.')
   if (simulation.analysis === 'noise' && !simulation.noiseSweep) simulation.noiseSweep = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
   if (simulation.analysis === 'tf' && !simulation.transferFunction) simulation.transferFunction = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1' }
   if (simulation.analysis === 'disto' && !simulation.distortion) simulation.distortion = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout' && label.name !== '0')?.name ?? data.netLabels?.find((label) => label.name !== '0')?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', harmonic: 2 }

@@ -36,6 +36,8 @@ test('stochastic result decks seed and reload ngspice before drawing a random sa
   assert.throws(() => addResultControl(netlist, [], [], undefined, 1, 0), /seed must be an integer/)
   const samples = addResultControl(netlist, [{ values: [], label: 'Sample 1' }, { values: [], label: 'Sample 2' }], [], undefined, 1, 41)
   assert.match(samples, /setseed 41\nreset\nset filetype=binary\nrun\nwrite \/result-0\.raw all\nsetseed 42\nreset\nrun\nwrite \/result-1\.raw all/)
+  const wrappedSeeds = addResultControl(netlist, Array.from({ length: 3 }, (_, index) => ({ values: [], label: `Sample ${index + 1}` })), [], undefined, 1, 2_147_483_647)
+  assert.match(wrappedSeeds, /setseed 2147483647\nreset[\s\S]*setseed 1\nreset[\s\S]*setseed 2\nreset/)
 })
 
 test('result control selects the requested distortion harmonic before writing raw data', () => {

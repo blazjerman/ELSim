@@ -7,7 +7,7 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentMagnitude, createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
-const { prepareParameterSweep } = require(path.join(build, 'engine/sweep.js'))
+const { prepareParameterSweep, prepareStochasticSamples } = require(path.join(build, 'engine/sweep.js'))
 const { addResultControl } = require(path.join(build, 'engine/resultControl.js'))
 const { isEngineRequest } = require(path.join(build, 'engine/contract.js'))
 const { createUrcLineExampleProject, createHierarchicalExampleProject, createVoltageSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
@@ -20,6 +20,23 @@ test('engineering units parse to base magnitudes for resistor, capacitor, and in
   assert.equal(componentMagnitude('-5 V', 'source'), -5)
   assert.equal(componentMagnitude('2 mA', 'currentSource'), 0.002)
   assert.equal(componentMagnitude('not a value', 'resistor'), null)
+})
+
+test('independent stochastic samples retain parameter cases and stay within the ten-run engine limit', () => {
+  const randomNetlist = 'B1 out 0 V={aunif(5, 0.1)}'
+  assert.deepEqual(prepareStochasticSamples(randomNetlist, [], 3), [
+    { values: [], label: 'Sample 1' },
+    { values: [], label: 'Sample 2' },
+    { values: [], label: 'Sample 3' },
+  ])
+  const parameterRuns = [{ values: [{ component: 'R1', value: '1k' }], label: 'R1=1 kΩ' }]
+  assert.deepEqual(prepareStochasticSamples(randomNetlist, parameterRuns, 2), [
+    { values: parameterRuns[0].values, label: 'R1=1 kΩ · Sample 1' },
+    { values: parameterRuns[0].values, label: 'R1=1 kΩ · Sample 2' },
+  ])
+  assert.deepEqual(prepareStochasticSamples('V1 in 0 5', parameterRuns, 10), parameterRuns)
+  assert.throws(() => prepareStochasticSamples(randomNetlist, Array.from({ length: 6 }, (_, index) => ({ values: [{ component: `R${index + 1}`, value: '1k' }], label: `Case ${index + 1}` })), 2), /limited to 10/)
+  assert.throws(() => prepareStochasticSamples(randomNetlist, [], 11), /integer from 1 to 10/)
 })
 
 test('the sweep editor and Add action share eligible source, model, IC, and reusable-block targets', () => {

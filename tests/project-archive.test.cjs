@@ -42,9 +42,10 @@ globalThis.DecompressionStream = class TestDecompressionStream {
 const { verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
-test('project ZIP archive is deterministic and round-trips the complete v8 project', async () => {
+test('project ZIP archive is deterministic and round-trips the complete v9 project', async () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
+  project.simulation.stochasticSampleCount = 4
   project.parts[1].flipX = true
   project.parts[0].pulse = { initial: '0', delay: '2m', rise: '4u', fall: '5u', width: '10m', period: '20m' }
   project.parts[0].sourceMode = 'pwl'
@@ -155,7 +156,7 @@ test('v2 projects migrate to a root sheet and validate nested sheet ownership', 
   delete old.rootSheetId
   delete old.sheets
   const migrated = validateProject(old)
-  assert.equal(migrated.version, 8)
+  assert.equal(migrated.version, 9)
   assert.equal(migrated.rootSheetId, 'sheet-main')
   assert.equal(migrated.sheets.length, 1)
   assert.deepEqual(migrated.sheets[0].parts, migrated.parts)
@@ -180,26 +181,37 @@ test('v3 migration and active child-sheet scene round-trip', async () => {
   v3.version = 3
   delete v3.activeSheetId
   const migrated = validateProject(v3)
-  assert.equal(migrated.version, 8)
+  assert.equal(migrated.version, 9)
   assert.equal(migrated.activeSheetId, migrated.rootSheetId)
   const v4 = structuredClone(current)
   v4.version = 4
   delete v4.sheets[0].ports
   const migratedV4 = validateProject(v4)
-  assert.equal(migratedV4.version, 8)
+  assert.equal(migratedV4.version, 9)
   assert.deepEqual(migratedV4.sheets[0].ports, [])
   assert.deepEqual(migratedV4.sheets[0].parameters, [])
   const v5 = structuredClone(current)
   v5.version = 5
   delete v5.sheets[0].parameters
   const migratedV5 = validateProject(v5)
-  assert.equal(migratedV5.version, 8)
+  assert.equal(migratedV5.version, 9)
   assert.deepEqual(migratedV5.sheets[0].parameters, [])
   const v6 = structuredClone(current)
   v6.version = 6
   const migratedV6 = validateProject(v6)
-  assert.equal(migratedV6.version, 8)
+  assert.equal(migratedV6.version, 9)
   assert.deepEqual(migratedV6.sheets[0].ports, [])
+  const v8 = structuredClone(current)
+  v8.version = 8
+  const migratedV8 = validateProject(v8)
+  assert.equal(migratedV8.version, 9)
+  assert.equal(migratedV8.simulation.stochasticSampleCount, undefined)
+  assert.equal(validateProject({ ...structuredClone(current), simulation: { ...current.simulation, stochasticSampleCount: 10 } }).simulation.stochasticSampleCount, 10)
+  for (const invalidCount of [0, 11, 1.5, '3']) {
+    const invalid = structuredClone(current)
+    invalid.simulation.stochasticSampleCount = invalidCount
+    assert.throws(() => validateProject(invalid), /Independent random samples must be an integer from 1 to 10/)
+  }
 
   const child = { id: 'sheet-driver', name: 'Driver', parentSheetId: 'sheet-main', parts: [{ id: 'p-child-r', kind: 'resistor', ref: 'Rchild', value: '2k', x: 200, y: 200, rotation: 0 }], wires: [], junctions: [], netLabels: [], view: { zoom: 1.2, panX: 10, panY: 20 }, ports: [] }
   const activeChild = structuredClone(current)
@@ -326,7 +338,9 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const malformedNoiseRange = structuredClone(restored)
   malformedNoiseRange.plotSettings.panels = [{ id: 'plot-invalid-noise-range', bounds: { x: 0, y: 0, width: 640, height: 360 }, selectedTraceIds: [], ranges: { noise: { start: 0.8, end: 0.2 } } }]
   assert.throws(() => validateProject(malformedNoiseRange), /Plot panel view range is malformed/)
-  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v8.schema.json'), 'utf8'))
+  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v9.schema.json'), 'utf8'))
+  assert.equal(schema.properties.version.const, 9)
+  assert.deepEqual([schema.$defs.simulation.properties.stochasticSampleCount.minimum, schema.$defs.simulation.properties.stochasticSampleCount.maximum], [1, 10])
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('sens'))
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('pz'))
   assert.ok(schema.$defs.simulation.properties.analysis.enum.includes('disto'))
