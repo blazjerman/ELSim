@@ -79,7 +79,10 @@ test('parses native ngspice conditional expressions in subcircuit parameter defa
 test('translates documented ngspice word-form operators in imported expressions', () => {
   const source = [
     '.PARAM GLOBAL={1 and 1}',
-    '.FUNC LOGIC(x) {not x or 0}',
+    '.PARAM MULTILINE={1 and',
+    '+ 1}',
+    '.FUNC LOGIC(x) {not x or',
+    '+ 0}',
     '.MODEL DFAST D(IS={1 mod 2})',
     '.SUBCKT LOGIC_CELL IN OUT PARAMS: ENABLE={5 div 2}',
     'B1 OUT 0 V={ENABLE and LOGIC(0)}',
@@ -91,7 +94,8 @@ test('translates documented ngspice word-form operators in imported expressions'
   const parsed = parseSubcircuitLibrary(source)
   assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'ENABLE', defaultValue: '{5 div 2}' }])
   assert.match(parsed.modelText, /\.PARAM GLOBAL=\{1 && 1\}/)
-  assert.match(parsed.modelText, /\.FUNC LOGIC\(x\) \{! x \|\| 0\}/)
+  assert.match(parsed.modelText, /\.PARAM MULTILINE=\{1 &&\n\+ 1\}/)
+  assert.match(parsed.modelText, /\.FUNC LOGIC\(x\) \{! x \|\|\n\+ 0\}/)
   assert.match(parsed.modelText, /\.MODEL DFAST D\(IS=\{1 % 2\}\)/)
   assert.match(parsed.modelText, /PARAMS: ENABLE=\{5 \\ 2\}/)
   assert.match(parsed.modelText, /B1 OUT 0 V=\{ENABLE && LOGIC\(0\)\}/)
@@ -126,14 +130,15 @@ test('validates native ngspice Monte Carlo functions without evaluating them', (
 })
 
 test('specializes only the overridden stochastic subcircuit default and preserves source lines', () => {
-  const source = '* random model\n.SUBCKT MC IN OUT PARAMS: RVAL={gauss(1k, 0.1, 3)} DIVISOR={5 div 2}\n.FUNC LOGIC(x) {not x or 0}\nR1 IN OUT {RVAL * DIVISOR * LOGIC(0)}\n.ENDS MC\n'
+  const source = '* random model\n.SUBCKT MC IN OUT PARAMS: RVAL={gauss(1k, 0.1, 3)} DIVISOR={5 div 2}\n.FUNC LOGIC(x) {not x or\n+ 0}\nR1 IN OUT {RVAL * DIVISOR * LOGIC(0)}\n.ENDS MC\n'
   const definition = parseSubcircuitLibrary(source).subcircuits[0]
   const specialized = specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', { RVAL: '2k' })
   assert.deepEqual(specialized, [
     { text: '.SUBCKT ELSIM_OVERRIDE_X1 IN OUT PARAMS: RVAL=2k DIVISOR={5 \\ 2}', sourceLine: 2 },
-    { text: '.FUNC LOGIC(x) {! x || 0}', sourceLine: 3 },
-    { text: 'R1 IN OUT {RVAL * DIVISOR * LOGIC(0)}', sourceLine: 4 },
-    { text: '.ENDS ELSIM_OVERRIDE_X1', sourceLine: 5 },
+    { text: '.FUNC LOGIC(x) {! x ||', sourceLine: 3 },
+    { text: '+ 0}', sourceLine: 4 },
+    { text: 'R1 IN OUT {RVAL * DIVISOR * LOGIC(0)}', sourceLine: 5 },
+    { text: '.ENDS ELSIM_OVERRIDE_X1', sourceLine: 6 },
   ])
   assert.equal(specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', {}), null)
   assert.equal(specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', { OTHER: '2k' }), null)

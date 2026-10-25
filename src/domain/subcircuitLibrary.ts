@@ -79,7 +79,8 @@ export function specializeStochasticSubcircuit(
     text: `.SUBCKT ${name} ${definition.pins.join(' ')}${parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`,
     sourceLine: header.start,
   }]
-  for (let line = header.end + 1; line < closing.start; line += 1) records.push({ text: translateLibraryRecordOperators(physical[line - 1]), sourceLine: line })
+  const translationState = { braceDepth: 0 }
+  for (let line = header.end + 1; line < closing.start; line += 1) records.push({ text: translateLibraryRecordOperators(physical[line - 1], translationState), sourceLine: line })
   const endText = physical[closing.start - 1]
   const endMatch = endText.match(/^(\s*\.ends\s+)([^\s*;]+)(.*)$/i)
   records.push({
@@ -468,7 +469,7 @@ export function translateNgspiceExpressionOperators(value: string): string {
   return value
 }
 
-function translateLibraryRecordOperators(line: string): string {
+function translateLibraryRecordOperators(line: string, state: { braceDepth: number } = { braceDepth: 0 }): string {
   const code = withoutInlineComment(line)
   if (!code || /^\s*\.title\b/i.test(code)) return line
   const codeStart = line.indexOf(code)
@@ -485,20 +486,13 @@ function translateLibraryRecordOperators(line: string): string {
       continue
     }
     if (code[index] === '{') {
-      const start = index++
-      let depth = 1
-      let quote = ''
-      while (index < code.length && depth > 0) {
-        const character = code[index++]
-        if (quote) {
-          if (character === '\\' && index < code.length) index += 1
-          else if (character === quote) quote = ''
-        } else if (character === '"') quote = character
-        else if (character === '{') depth += 1
-        else if (character === '}') depth -= 1
-      }
-      const region = code.slice(start, index)
-      translated += depth === 0 ? translateNgspiceExpressionOperators(region) : region
+      state.braceDepth += 1
+      translated += code[index++]
+      continue
+    }
+    if (code[index] === '}') {
+      state.braceDepth = Math.max(0, state.braceDepth - 1)
+      translated += code[index++]
       continue
     }
     if (code[index] === "'") {
@@ -506,6 +500,13 @@ function translateLibraryRecordOperators(line: string): string {
       while (index < code.length && code[index] !== "'") index += 1
       if (index < code.length) index += 1
       translated += translateNgspiceExpressionOperators(code.slice(start, index))
+      continue
+    }
+    if (state.braceDepth > 0 && /[A-Za-z_]/.test(code[index])) {
+      const start = index++
+      while (index < code.length && /[A-Za-z0-9_!#$%\[\].]/.test(code[index])) index += 1
+      const token = code.slice(start, index)
+      translated += verboseNgspiceOperators[token.toLowerCase()] ?? token
       continue
     }
     translated += code[index++]
@@ -1458,7 +1459,8 @@ function parseSubcircuitLibraryFromInspection(
   const ranges = [...modelLines.map(({ start, end }) => [start, end] as const), ...subcircuits.map(({ startLine, endLine }) => [startLine, endLine] as const)]
   const retained = new Set<number>()
   for (const [start, end] of ranges) for (let line = start; line <= end; line += 1) retained.add(line)
-  const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: translateLibraryRecordOperators(physical[sourceLine - 1]) }))
+  const recordTranslationState = { braceDepth: 0 }
+  const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: translateLibraryRecordOperators(physical[sourceLine - 1], recordTranslationState) }))
   const modelText = modelRecords.map(({ text }) => text).join('\n')
   return { subcircuits, models, functions, dependencies, includes, modelText, modelRecords, topLevelParameterRecords }
 }
