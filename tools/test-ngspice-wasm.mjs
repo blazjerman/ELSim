@@ -24,7 +24,7 @@ fixtures.push('imported-library-global-node-op')
 fixtures.push('bracketed-subckt-parameter-op')
 fixtures.push('bsim3-bin-family-sweep')
 fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'disto-diode-harmonics', 'disto-diode-intermod', 'behavioral-resistor-op')
-fixtures.push('behavioral-component-current-op')
+fixtures.push('behavioral-component-current-op', 'behavioral-stochastic-functions-op')
 const fixturesWithRawResults = new Set(['pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac'])
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
@@ -127,6 +127,16 @@ for (const fixture of selectedFixtures) {
     const diodeCurrent = Number(wasmResult.stdout.match(/v\(out_d\) = ([\d.e+-]+)/i)?.[1])
     assert.ok(diodeCurrent > 0.1 && diodeCurrent < 1, `I(D1) should expose the conducting diode current, got ${diodeCurrent}`)
     process.stdout.write('PASS behavioral-component-current-op: ngspice evaluates resistor, capacitor, inductor, current-source, and diode currents in B-source expressions\n')
+    continue
+  }
+  if (fixture === 'behavioral-stochastic-functions-op') {
+    const sample = (name, node) => Number(wasmResult.stdout.match(new RegExp(`v\\(${node}\\) = ([+-]?[\\d.e+-]+)`, 'i'))?.[1])
+    const values = Object.fromEntries([['gauss', 'n1'], ['agauss', 'n2'], ['unif', 'n3'], ['aunif', 'n4'], ['limit', 'n5']].map(([name, node]) => [name, sample(name, node)]))
+    for (const [name, value] of Object.entries(values)) assert.ok(Number.isFinite(value), `${name} should produce a finite behavioral-source result, got ${value}`)
+    assert.ok(values.unif >= 0 && values.unif <= 10, `unif(5, 1) should apply a ±100% relative variation, got ${values.unif}`)
+    assert.ok(values.aunif >= 4 && values.aunif <= 6, `aunif(5, 1) should apply ±1 absolute variation, got ${values.aunif}`)
+    assert.ok(values.limit === 4 || values.limit === 6, `native limit(5, 1) should choose 5 ± 1, got ${values.limit}`)
+    process.stdout.write('PASS behavioral-stochastic-functions-op: gauss, agauss, unif, aunif, and native two-argument limit solve in B sources\n')
     continue
   }
   if (fixture === 'pole-zero-rc') {

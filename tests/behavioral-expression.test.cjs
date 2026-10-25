@@ -92,13 +92,21 @@ test('native ngspice &&, ||, and ! preserve zero/nonzero Boolean semantics', () 
   assert.throws(() => parseBehavioralExpression('~V(low)'), /supported only in the LTspice/)
 })
 
-test('native ngspice accepts only documented B-source functions and preserves native syntax', () => {
-  for (const expression of ['sin(V(in))', 'arctan(V(in))', 'tanh(V(in))', 'pwr(V(in), 2)', 'nint(V(in))', 'pwl(V(in), 0, 0, 1, 2)']) {
+test('native ngspice accepts documented math, piecewise, and stochastic B-source functions', () => {
+  for (const expression of [
+    'sin(V(in))', 'arctan(V(in))', 'tanh(V(in))', 'pwr(V(in), 2)', 'nint(V(in))', 'pwl(V(in), 0, 0, 1, 2)',
+    'gauss(5, 1, 3)', 'agauss(5, 1, 3)', 'unif(5, 1)', 'aunif(5, 1)', 'limit(5, 1)',
+  ]) {
     assert.doesNotThrow(() => parseBehavioralExpression(expression), expression)
     assert.equal(translateBehavioralExpression(expression), expression)
   }
+  assert.throws(() => parseBehavioralExpression('gauss(5, 1)'), /expects 3/)
+  assert.throws(() => parseBehavioralExpression('unif(5, 1, 0)'), /expects 2/)
+  assert.throws(() => parseBehavioralExpression('limit(5, 1, 0)'), /expects 2/)
+  assert.throws(() => parseBehavioralExpression('limit(V(in), 0, 3)', 'ngspice'), /expects 2/)
+  assert.equal(translateBehavioralExpression('limit(V(in), 0, 3)', 'ltspice'), 'min(max(V(in), 0), 3)')
   for (const expression of [
-    'if(V(in), 1, 0)', 'limit(V(in), 0, 3)', 'mod(V(in), 2)', 'pwrs(V(in), 0.5)',
+    'if(V(in), 1, 0)', 'mod(V(in), 2)', 'pwrs(V(in), 0.5)',
     'xor(V(in), V(in))', 'square(V(in))', 'buf(V(in))', 'inv(V(in))',
     'arcsin(V(in))', 'arccos(V(in))', 'atan2(V(in), 1)', 'cbrt(V(in))', 'hypot(V(in), 1)',
     'table(V(in), 0, 0, 1, 1)',

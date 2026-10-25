@@ -4,6 +4,34 @@ import { listModelLibrarySections, parseModelCard, withoutInlineComment, type Mo
 type LogicalSourceLine = { sourceLine: number; text: string; segments: { start: number; end: number; physicalLine: number }[] }
 export type ModelDialectLibrarySource = { assetId: string; content: string; selectedSections?: string[] }
 
+const nativeStatisticalFunctionArity = new Map([['gauss', 3], ['agauss', 3], ['unif', 2], ['aunif', 2], ['limit', 2]])
+
+/** Find a dialect-incompatible statistical helper while honoring native ngspice signatures. */
+function unsupportedDialectFunction(expression: string, onlyName?: string): { index: number; name: string } | undefined {
+  const calls = onlyName === 'limit'
+    ? /\blimit\s*\(/ig
+    : /\b(absdelay|agauss|arccos|arcsin|arctan|atan2|aunif|buf|cbrt|delay|flat|gauss|hypot|inv|mc|mod|noise|pwrs|random|rand|round|select|smallsig|square|unif|white|xor)\s*\(/ig
+  for (const match of expression.matchAll(calls)) {
+    const name = (onlyName ?? match[1]).toLowerCase()
+    const open = match.index! + match[0].lastIndexOf('(')
+    let depth = 1
+    let commas = 0
+    let hasArgument = false
+    let close = open + 1
+    for (; close < expression.length && depth > 0; close += 1) {
+      const character = expression[close]
+      if (character === '(') depth += 1
+      else if (character === ')') depth -= 1
+      else if (depth === 1 && character === ',') commas += 1
+      else if (depth === 1 && !/\s/.test(character)) hasArgument = true
+    }
+    const arity = hasArgument ? commas + 1 : 0
+    if (nativeStatisticalFunctionArity.get(name) === arity) continue
+    return { index: match.index!, name }
+  }
+  return undefined
+}
+
 function logicalSourceLines(source: string): LogicalSourceLine[] {
   const lines: LogicalSourceLine[] = []
   for (const [index, physicalLine] of source.replace(/^\uFEFF/, '').split(/\r?\n/).entries()) {
@@ -91,7 +119,7 @@ const helperCompatibilityRules = [
   { pattern: /\bif\s*\(/i, feature: 'Imported .FUNC uses LTspice if()', impact: 'The pinned browser ngspice engine reports “no such function” for LTspice if() in an imported behavioral expression.', suggestion: 'Rewrite if(condition, yes, no) as the ngspice ternary condition ? yes : no. ELSim preserves imported model source unchanged.' },
   { pattern: /\btable\s*\(/i, feature: 'Imported .FUNC uses LTspice table()', impact: 'The pinned browser ngspice engine reports “no such function” for LTspice table() in an imported behavioral expression.', suggestion: 'Rewrite the lookup as an ngspice-compatible PWL expression or equivalent subcircuit. ELSim preserves imported model source unchanged.' },
   { pattern: /\b(?:idt|idtmod|sdt)\s*\(/i, feature: 'Imported .FUNC uses LTspice behavioral integration', impact: 'The pinned browser ngspice engine does not implement LTspice idt()/idtmod()/sdt() as behavioral expression functions; idt() fails with “no such function”.', suggestion: 'Replace the behavioral integrator with an explicit capacitor-based circuit or a tested ngspice-compatible subcircuit.' },
-  { pattern: /\b(absdelay|arccos|arcsin|arctan|atan2|buf|cbrt|delay|flat|gauss|hypot|inv|mc|mod|noise|pwrs|random|rand|round|select|smallsig|square|white|xor)\s*\(/i, feature: 'Imported .FUNC uses an unavailable or incompatible B-source function', impact: 'The pinned browser ngspice engine rejects this imported behavioral function or uses an incompatible signature. Statistical functions in particular can differ in both argument order and distribution.', suggestion: 'Check the function’s intended behavior and replace it with a tested ngspice-compatible expression or equivalent subcircuit. ELSim preserves imported model source unchanged.' },
+  { pattern: /\b(absdelay|agauss|arccos|arcsin|arctan|atan2|aunif|buf|cbrt|delay|flat|gauss|hypot|inv|limit|mc|mod|noise|pwrs|random|rand|round|select|smallsig|square|unif|white|xor)\s*\(/i, feature: 'Imported .FUNC uses an unavailable or incompatible B-source function', impact: 'The pinned browser ngspice engine rejects this imported behavioral function or uses an incompatible signature. Statistical functions in particular can differ in both argument order and distribution.', suggestion: 'Check the function’s intended behavior and replace it with a tested ngspice-compatible expression or equivalent subcircuit. ELSim preserves imported model source unchanged.' },
   { pattern: /\bu\s*\(/i, feature: 'Imported .FUNC uses LTspice u() step function', impact: 'LTspice u(x) returns 0 when x is zero, while ngspice u(0) returns 0.5. The helper’s result can differ at the zero boundary.', suggestion: 'If the zero boundary matters, replace u(x) with (x > 0) ? 1 : 0 after checking the model author’s intent.' },
   { pattern: /\^/, feature: 'Imported .FUNC uses LTspice boolean ^', impact: 'LTspice uses ^ for Boolean XOR in B-source expressions, while ngspice interprets it as exponentiation.', suggestion: 'Use pow(a,b) for exponentiation or rewrite intended Boolean XOR explicitly for the target simulator.' },
   { pattern: /~/, feature: 'Imported .FUNC uses LTspice ~ inversion', impact: 'LTspice accepts ~ as Boolean inversion, but the pinned browser ngspice engine rejects this syntax in behavioral expressions.', suggestion: 'Rewrite using an explicit comparison that preserves LTspice Boolean threshold semantics; do not replace ~ with ngspice ! blindly.' },
@@ -153,8 +181,14 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
       // B source reaches that helper; broad syntax scans must not warn on dead
       // .FUNC declarations before the reachability pass below.
       if (helperDefinitionLines.has(sourceLine) && helperCompatibilityRules.some(({ pattern: helperPattern }) => helperPattern.test(line))) return []
-      const match = pattern.exec(line)
+      let match = pattern.exec(line)
       if (!match) return []
+      if (name === 'LTspice B-source function unavailable or incompatible in browser ngspice') {
+        const unsupported = unsupportedDialectFunction(line)
+        if (!unsupported) return []
+        match = Object.assign([line.slice(unsupported.index), unsupported.name], { index: unsupported.index }) as RegExpExecArray
+      }
+      if (name === 'LTspice limit() in imported model library' && !unsupportedDialectFunction(line, 'limit')) return []
       if (name === 'PSpice VSWITCH model outside supported numeric subset' && !conditionalModelLines.has(sourceLine)) {
         try {
           const parsedModel = parseModelCard(line, { text: line, start: sourceLine, end: sourceLine })
@@ -217,8 +251,14 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
         const calledFunctions = behavioralFunctionCalls(candidate.body)
         pending.push(...calledFunctions.map((called) => ({ name: called, scope: candidate.scope })))
         for (const rule of helperCompatibilityRules) {
-          const match = rule.pattern.exec(candidate.body)
+          let match = rule.pattern.exec(candidate.body)
           if (!match) continue
+          if (rule.feature === 'Imported .FUNC uses LTspice limit()' && !unsupportedDialectFunction(candidate.body, 'limit')) continue
+          if (rule.feature === 'Imported .FUNC uses an unavailable or incompatible B-source function') {
+            const unsupported = unsupportedDialectFunction(candidate.body)
+            if (!unsupported) continue
+            match = Object.assign([candidate.body.slice(unsupported.index), unsupported.name], { index: unsupported.index }) as RegExpExecArray
+          }
           const calledName = match[1]?.toLowerCase()
           if (rule.feature === 'Imported .FUNC uses an unavailable or incompatible B-source function' && calledName && (helpersByScope.get(candidate.scope)?.has(calledName) || globalHelpers.has(calledName))) continue
           const feature = rule.feature === 'Imported .FUNC uses an unavailable or incompatible B-source function' && match[1]

@@ -1838,6 +1838,23 @@ test('flags additional LTspice functions rejected by the pinned browser ngspice 
   assert.equal(source.includes('cbrt(V(IN))'), true)
 })
 
+test('accepts native ngspice stochastic signatures without compatibility warnings', () => {
+  const native = [
+    '.SUBCKT random_native IN OUT',
+    '.FUNC relative_gaussian(x) {gauss(x, 0.1, 3)}',
+    'B1 OUT 0 V=relative_gaussian(5) + agauss(5, 1, 3) + unif(5, 0.1) + aunif(5, 1) + limit(5, 1)',
+    '.ENDS random_native',
+  ].join('\n')
+  assert.deepEqual(analyzeLtspiceModelDialect(native), [])
+
+  const mismatched = '.SUBCKT random_ltspice IN OUT\nB1 OUT 0 V=gauss(V(IN)) + limit(V(IN), 0, 3)\n.ENDS random_ltspice'
+  const warnings = analyzeLtspiceModelDialect(mismatched)
+  assert.deepEqual(warnings.map(({ feature }) => feature), [
+    'LTspice limit() in imported model library',
+    'LTspice B-source function unavailable or incompatible in browser ngspice',
+  ])
+})
+
 test('flags LTspice unary ~ inversion syntax rejected by browser ngspice', () => {
   const source = '.SUBCKT inverter IN OUT\nB1 OUT 0 V=~(V(IN))\n.ENDS inverter'
   const [warning] = analyzeLtspiceModelDialect(source)

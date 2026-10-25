@@ -1,0 +1,18 @@
+Native ngspice stochastic functions in behavioral voltage sources
+B1 N1 0 V=gauss(5, 1, 3)
+R1 N1 0 1k
+B2 N2 0 V=agauss(5, 1, 3)
+R2 N2 0 1k
+B3 N3 0 V=unif(5, 1)
+R3 N3 0 1k
+B4 N4 0 V=aunif(5, 1)
+R4 N4 0 1k
+B5 N5 0 V=limit(5, 1)
+R5 N5 0 1k
+.op
+.control
+op
+print v(n1) v(n2) v(n3) v(n4) v(n5)
+quit
+.endc
+.end

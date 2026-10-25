@@ -46,6 +46,14 @@ const ngspiceOnlyFunctions = new Map<string, { min: number; max: number }>([
   ['nint', { min: 1, max: 1 }],
   ['sgn', { min: 1, max: 1 }],
   ['ternary_fcn', { min: 3, max: 3 }],
+  // Native statistical functions generate variation during a solve. In
+  // particular, ngspice limit(nom, avar) is stochastic and is distinct from
+  // LTspice's three-argument clamp helper with the same name.
+  ['gauss', { min: 3, max: 3 }],
+  ['agauss', { min: 3, max: 3 }],
+  ['unif', { min: 2, max: 2 }],
+  ['aunif', { min: 2, max: 2 }],
+  ['limit', { min: 2, max: 2 }],
 ])
 
 const engineeringScale: Record<string, number> = { meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 }
