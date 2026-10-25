@@ -38,6 +38,7 @@ function createTraceVariablePredicate(names: readonly string[]): (name: string) 
   }
   return (name) => {
     if (/^(?:inoise|onoise)_spectrum$/i.test(name)) return true
+    if (/^elsim_q_[A-Za-z0-9_]+$/i.test(name)) return true
     if (/^v\(/i.test(name) || /^i\(@/i.test(name)) return true
     const branch = name.match(/^i\((.*)\)$/i)?.[1].toLowerCase()
     return branch !== undefined && !internalCurrentBranches.has(branch)
@@ -46,6 +47,7 @@ function createTraceVariablePredicate(names: readonly string[]): (name: string) 
 
 export function isTraceVariable(name: string, names: string[]): boolean {
   if (/^(?:inoise|onoise)_spectrum$/i.test(name)) return true
+  if (/^elsim_q_[A-Za-z0-9_]+$/i.test(name)) return true
   if (/^v\(/i.test(name) || /^i\(@/i.test(name)) return true
   const branch = name.match(/^i\((.*)\)$/i)?.[1].toLowerCase()
   if (!branch) return false

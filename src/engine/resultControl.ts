@@ -10,6 +10,33 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+function behavioralChargeCommands(rows: readonly string[]): string[] {
+  const commands: string[] = []
+  let insideSubcircuit = false
+  for (const row of rows) {
+    if (/^\s*\.subckt\b/i.test(row)) { insideSubcircuit = true; continue }
+    if (/^\s*\.ends\b/i.test(row)) { insideSubcircuit = false; continue }
+    if (insideSubcircuit) continue
+    const device = row.match(/^\s*(C[A-Za-z0-9_]+)\s+\S+\s+\S+\s+/i)
+    if (!device) continue
+    const qOption = /\bQ\s*=\s*/i.exec(row.slice(device[0].length))
+    if (!qOption) continue
+    const valueStart = device[0].length + qOption.index + qOption[0].length
+    if (row[valueStart] !== '{') continue
+    let depth = 0
+    let valueEnd = valueStart
+    for (; valueEnd < row.length; valueEnd++) {
+      if (row[valueEnd] === '{') depth++
+      else if (row[valueEnd] === '}' && --depth === 0) break
+    }
+    if (depth !== 0 || valueEnd >= row.length) continue
+    const identifier = `ELSIM_Q_${device[1].replace(/[^A-Za-z0-9_]/g, '_')}`
+    const expression = row.slice(valueStart + 1, valueEnd)
+    commands.push(`let ${identifier} = ${expression}`)
+  }
+  return commands
+}
+
 export function addResultControl(netlist: string, parameterSweep: ParameterSweepRun[] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: { fundamentalFrequency: number; traceId: string; vector: string }, distortionPlot: 1 | 2 | 3 = 1): string {
   const rows = netlist.trimEnd().split(/\r?\n/)
   const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
@@ -17,6 +44,9 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const analysisCommand = rows.slice(0, endLine).find((line) => /^\s*\.(?:tran|op|ac|dc|noise|tf|sens|pz|disto)\b/i.test(line))?.trim().replace(/^\./, '')
   if (!analysisCommand) throw new Error('Generated netlist is missing its analysis directive.')
   const analysisType = analysisCommand.split(/\s+/, 1)[0].toLowerCase()
+  const chargeCommands = analysisType === 'tran' ? behavioralChargeCommands(rows.slice(0, endLine)) : []
+  const chargeVectorNames = chargeCommands.flatMap((command) => command.match(/^let\s+(\S+)/i)?.[1] ?? [])
+  const resultVectors = chargeVectorNames.length ? `all ${chargeVectorNames.join(' ')}` : 'all'
   if (ngspiceFourier && (analysisType !== 'tran' || !Number.isFinite(ngspiceFourier.fundamentalFrequency) || ngspiceFourier.fundamentalFrequency <= 0 || !/^[vi]\([@A-Za-z0-9_.$!#\[\]-]+\)$/i.test(ngspiceFourier.traceId) || !/^(?:[vi]\([A-Za-z0-9_.$!#-]+\)|@[A-Za-z0-9_.$!#-]+\[(?:i|id|ic|ib|ie|ig|is|current)\])$/i.test(ngspiceFourier.vector))) {
     throw new Error('Ngspice Fourier analysis requires a transient run, a positive frequency, and one simple voltage or current vector.')
   }
@@ -148,6 +178,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if (insideSubcircuit) return []
     const ref = line.match(/^\s*([RCLDSEGFHQBJIMZW][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
+    if (/^C/i.test(ref) && /\b(?:C|Q)\s*=\s*\{/i.test(line)) return []
     if ((analysisType === 'ac' || analysisType === 'noise') && /^[CL]/i.test(ref)) return []
     const kind = ref[0].toUpperCase()
     const current = kind === 'D' || kind === 'J' || kind === 'M' ? 'id' : kind === 'Q' ? 'ic' : kind === 'Z' ? 'is' : kind === 'I' ? 'current' : 'i'
@@ -181,9 +212,9 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
       })
       run.values.filter((value) => value.altermodParameters && value.model).forEach(({ model, altermodParameters }) => commands.push(`altermod ${model} RON=${altermodParameters!.RON} ROFF=${altermodParameters!.ROFF} VT=${altermodParameters!.VT} VH=${altermodParameters!.VH}`))
       if (run.values.some((value) => value.globalParameter || value.instanceParameter || value.modelTargets || value.sourceParameter || value.pulseHigh || value.pwlScale || value.waveformAmplitude)) commands.push('reset')
-      commands.push(analysisType === 'pz' || analysisType === 'disto' ? analysisCommand : 'run', ...(analysisType === 'disto' ? [`setplot disto${index * 3 + distortionPlot}`] : []), ...measurements.flatMap((measurement) => measurementCommand(measurement, `_${index}`)), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? [`setplot noise${index * 2 + 2}`, 'print onoise_total', 'print inoise_total', `setplot noise${index * 2 + 1}`] : []), `write /result-${index}.raw all`)
+      commands.push(analysisType === 'pz' || analysisType === 'disto' ? analysisCommand : 'run', ...chargeCommands, ...(analysisType === 'disto' ? [`setplot disto${index * 3 + distortionPlot}`] : []), ...measurements.flatMap((measurement) => measurementCommand(measurement, `_${index}`)), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? [`setplot noise${index * 2 + 2}`, 'print onoise_total', 'print inoise_total', `setplot noise${index * 2 + 1}`] : []), `write /result-${index}.raw ${resultVectors}`)
     })
-  } else commands.push(analysisCommand, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.flatMap((measurement) => measurementCommand(measurement)) : []), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? ['setplot noise2', 'print onoise_total', 'print inoise_total', 'setplot noise1'] : []), ...(analysisType === 'disto' ? [`setplot disto${distortionPlot}`] : []), 'write /result.raw all')
+  } else commands.push(analysisCommand, ...chargeCommands, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.flatMap((measurement) => measurementCommand(measurement)) : []), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? ['setplot noise2', 'print onoise_total', 'print inoise_total', 'setplot noise1'] : []), ...(analysisType === 'disto' ? [`setplot disto${distortionPlot}`] : []), `write /result.raw ${resultVectors}`)
   commands.push('quit', '.endc', '.end')
   rows.splice(endLine, 1, ...binFamilyParameterRows, ...waveformParameterRows, ...measurementRows, ...save, ...commands)
   if (analysisType === 'ac' || analysisType === 'noise') {

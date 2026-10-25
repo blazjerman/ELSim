@@ -174,6 +174,14 @@ test('trace-only ASCII parsing preserves analysis metadata while skipping intern
   assert.equal(full.variables.length, 4, 'the general parser continues to expose every saved variable')
 })
 
+test('trace-only parsing retains ELSim behavioral-capacitor charge vectors', () => {
+  const raw = validRaw.replace('i(v1) current', 'elsim_q_c1 notype').replaceAll('-1.000000e-03', '1.000000e-06').replaceAll('-2.000000e-03', '2.000000e-06')
+  const parsed = parseRawTraces(raw)
+  assert.deepEqual(parsed.variables.map(({ name }) => name), ['v(in)', 'elsim_q_c1'])
+  assert.deepEqual([...parsed.variables[1].values], [1e-6, 2e-6])
+  assert.equal(isTraceVariable('elsim_q_c1', parsed.variables.map((variable) => variable.name)), true)
+})
+
 test('ASCII raw parser reads one-point operating-point values without inventing a time vector', () => {
   const parsed = parseAsciiRawFile(validOperatingPointRaw)
   assert.equal(parsed.plotName, 'Operating Point')

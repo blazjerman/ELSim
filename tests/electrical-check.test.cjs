@@ -24,6 +24,16 @@ test('behavioral resistor expressions replace the fixed resistance value during 
   assert.match(checkCircuit(project).find((issue) => issue.id === `invalid-behavioral-resistance:${resistor.id}`).detail, /unknown node/i)
 })
 
+test('behavioral capacitor expressions skip nominal-value checks and report bad references', () => {
+  const project = createStarterProject()
+  const capacitor = project.parts.find((part) => part.kind === 'capacitor')
+  capacitor.value = 'illustrative value only'
+  capacitor.behavioralCharge = '1u*V(vout)'
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `invalid-value:${capacitor.id}` || issue.id === `invalid-behavioral-capacitor:${capacitor.id}`), false)
+  capacitor.behavioralCharge = '1u*V(unknown)'
+  assert.match(checkCircuit(project).find((issue) => issue.id === `invalid-behavioral-capacitor:${capacitor.id}`).detail, /unknown node/i)
+})
+
 test('voltage-controlled switch checks imported SW model presence and type', () => {
   const project = createVoltageSwitchExampleProject()
   const sw = project.parts.find((part) => part.kind === 'voltageSwitch')

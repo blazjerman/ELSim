@@ -28,6 +28,10 @@ export type Part = {
   acResistance?: string
   /** Optional ngspice behavioral resistance expression for a nonlinear resistor. */
   behavioralResistance?: string
+  /** Optional ngspice behavioral capacitance expression C={...}. */
+  behavioralCapacitance?: string
+  /** Optional ngspice charge-defined capacitor expression Q={...}. */
+  behavioralCharge?: string
   /** Optional native ngspice passive temperature coefficient (fraction per degree). */
   tc1?: string
   /** Optional native ngspice second-order passive temperature coefficient. */
@@ -456,6 +460,18 @@ export function validateProject(input: unknown): Project {
       const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
       validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
       const unsupportedCurrent = unsupportedBehavioralCurrentReference(candidate.behavioralResistance, ngspiceVoltageBranchReferences(data.parts as Part[]))
+      if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+    }
+    if (candidate.behavioralCapacitance !== undefined || candidate.behavioralCharge !== undefined) {
+      const isCapacitorExpression = (typeof candidate.behavioralCapacitance === 'string' && Boolean(candidate.behavioralCapacitance.trim()) && candidate.behavioralCapacitance.length <= 256)
+        || (typeof candidate.behavioralCharge === 'string' && Boolean(candidate.behavioralCharge.trim()) && candidate.behavioralCharge.length <= 256)
+      if (candidate.kind !== 'capacitor' || !isCapacitorExpression || candidate.behavioralCapacitance !== undefined && candidate.behavioralCharge !== undefined || candidate.deviceModel || candidate.seriesResistance !== undefined || candidate.instanceMultiplier !== undefined) throw new Error(`${candidate.ref} behavioral capacitance requires one C= or Q= expression and cannot be combined with a device model, series resistance, or multiplier.`)
+      const expression = candidate.behavioralCapacitance ?? candidate.behavioralCharge!
+      const parsed = parseBehavioralExpression(expression)
+      const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
+      const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
+      validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
+      const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(data.parts as Part[]))
       if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
     }
     for (const key of ['tc1', 'tc2', 'tce'] as const) {

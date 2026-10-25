@@ -45,11 +45,12 @@ function makeTraces(rawData: string | Uint8Array): Trace[] {
     const current = lowercaseName.startsWith('i(')
     const inner = variable.name.match(/^[vi]\((.*)\)$/i)?.[1] ?? variable.name
     const component = inner.match(/^@(.*)\[(?:i|id|ic)\]$/i)?.[1]
+    const chargeComponent = lowercaseName.match(/^elsim_q_(.+)$/i)?.[1]
     const noise = /^(?:inoise|onoise)_spectrum$/i.test(variable.name)
     return {
       id: lowercaseName,
-      label: noise ? (lowercaseName.startsWith('onoise') ? 'Output noise' : 'Input-referred noise') : `${current ? 'I' : 'V'}(${component ?? inner})`,
-      unit: noise ? rawTraceUnit(variable.name, variable.type) : current ? 'A' : 'V',
+      label: chargeComponent ? `Q(${chargeComponent})` : noise ? (lowercaseName.startsWith('onoise') ? 'Output noise' : 'Input-referred noise') : `${current ? 'I' : 'V'}(${component ?? inner})`,
+      unit: chargeComponent ? 'C' : noise ? rawTraceUnit(variable.name, variable.type) : current ? 'A' : 'V',
       axisLabel: parsed.axisLabel,
       axisUnit: parsed.axisUnit,
       axis,

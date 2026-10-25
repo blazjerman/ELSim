@@ -45,6 +45,14 @@ test('result control selects the requested distortion harmonic before writing ra
   assert.match(stepped, /alter R1 2k\ndisto dec 10 100 100k\nsetplot disto5\nwrite \/result-1\.raw all/i)
 })
 
+test('result control saves native behavioral capacitor charge samples for schematic animation', () => {
+  const netlist = 'Behavioral capacitor\nV1 in 0 PULSE(0 5 0 1u 1u 1m 2m)\nR1 in out 1k\nC1 out 0 Q={1u*V(out)}\n.tran 10u 1m\n.end'
+  const control = addResultControl(netlist)
+  assert.match(control, /tran 10u 1m\nlet ELSIM_Q_C1 = 1u\*V\(out\)\nwrite \/result\.raw all ELSIM_Q_C1/)
+  const nested = addResultControl('Subcircuit charge\n.subckt CELL in out\nC1 out 0 Q={1u*V(out)}\n.ends CELL\nV1 in 0 PULSE(0 5 0 1u 1u 1m 2m)\nX1 in out CELL\n.tran 10u 1m\n.end')
+  assert.doesNotMatch(nested, /let ELSIM_Q_C1/)
+})
+
 test('result control executes the selected AC and DC analyses instead of the default transient run', () => {
   const ac = addResultControl('V1 in 0 AC 1\nR1 in 0 1k\n.ac dec 20 10 1meg\n.end')
   assert.match(ac, /\.control\nset filetype=binary\nac dec 20 10 1meg\nwrite \/result\.raw all/)

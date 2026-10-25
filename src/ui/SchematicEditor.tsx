@@ -113,9 +113,13 @@ function nearestAxisIndex(axis: Float64Array, value: number, start: number, end:
   return Math.abs(axis[low] - value) < Math.abs(axis[low - 1] - value) ? low : low - 1
 }
 
-type ComponentSampleValues = { voltage?: number; current?: number; secondaryCurrent?: number; switchClosed?: boolean; logicOutput?: number }
+type ComponentSampleValues = { voltage?: number; current?: number; secondaryCurrent?: number; capacitorCharge?: number; switchClosed?: boolean; logicOutput?: number }
 type ComponentTraceReading = Trace | 0 | undefined
-type ComponentAnimationPlan = { positive: ComponentTraceReading; negative: ComponentTraceReading; current?: Trace; secondaryCurrent?: Trace; logicOutput: ComponentTraceReading }
+type ComponentAnimationPlan = { positive: ComponentTraceReading; negative: ComponentTraceReading; current?: Trace; secondaryCurrent?: Trace; capacitorCharge?: Trace; logicOutput: ComponentTraceReading }
+
+function behavioralChargeVector(ref: string): string {
+  return `elsim_q_${ref.replace(/[^A-Za-z0-9_]/g, '_')}`
+}
 
 function readComponentTrace(reading: ComponentTraceReading, primaryAxis: Float64Array | undefined, sampleIndex: number | null): number | undefined {
   if (reading === 0) return 0
@@ -283,7 +287,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const sharedFrameAnimation = part.kind === 'resistor' || part.kind === 'inductor' || part.kind === 'transformer'
   const sampleRequested = animate && (sharedFrameAnimation ? selected || hovered : RESULT_ANIMATED_PART_KINDS.has(part.kind) || selected || hovered)
   const animationSample = useSimulationCursorWhen(sampleRequested)
-  const { voltage, current, secondaryCurrent, switchClosed, logicOutput } = useMemo(() => sampleRequested ? componentSample(part, animationSample) : {}, [sampleRequested, animationSample, componentSample, part])
+  const { voltage, current, secondaryCurrent, capacitorCharge: sampledCapacitorCharge, switchClosed, logicOutput } = useMemo(() => sampleRequested ? componentSample(part, animationSample) : {}, [sampleRequested, animationSample, componentSample, part])
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
   const currentGlow = Math.min(1, Math.sqrt(Math.abs(current ?? 0) / 0.005) * 0.8)
   const secondaryCurrentGlow = Math.min(1, Math.sqrt(Math.abs(secondaryCurrent ?? 0) / 0.005) * 0.8)
@@ -302,7 +306,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const resistorPowerGlow = part.kind === 'resistor' ? Math.min(1, Math.sqrt(dissipatedPower / (part.animationNominalPower ?? 0.25))) : 0
   const capacitorVoltage = part.kind === 'capacitor' && voltage !== undefined ? voltage - (current ?? 0) * seriesResistance : undefined
   const capacitorCharge = part.kind === 'capacitor' && voltage !== undefined
-    ? componentValueMagnitude * capacitorVoltage!
+    ? sampledCapacitorCharge ?? componentValueMagnitude * capacitorVoltage!
     : undefined
   const capacitorChargeLevel = Number.isFinite(capacitorCharge) ? Math.min(1, Math.sqrt(Math.abs(capacitorCharge!) / 1e-4)) : 0
   const inductorEnergy = part.kind === 'inductor' && current !== undefined
@@ -439,7 +443,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     if (tool === 'probe') { if (part.kind !== 'ground') onProbe(part.id); return }
     if (tool === 'select') { onSelect(part.id); if (isInteractiveSwitch) onSwitchToggle(part.id) }
   }} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); const additive = event.shiftKey || event.ctrlKey || event.metaKey; onSelect(part.id, additive); if (isInteractiveSwitch && !additive) onSwitchToggle(part.id) } }}>
-    {showSampleTitle && (voltage !== undefined || current !== undefined || logicOutput !== undefined) && <title>{`${part.ref}: ${logicOutput === undefined ? '' : `output ${logicState} (${logicOutput.toPrecision(4)} V); `}${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; no thermal behavior is simulated; ` : part.kind === 'resistor' ? `illustrative glow follows solved electrical power (${dissipatedPower.toPrecision(4)} W); reference ${part.animationNominalPower ?? 0.25} W; no thermal behavior is simulated; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'zener' ? 'reverse breakdown follows the selected Zener model; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `plate charge animation follows solved charge; ${Number.isFinite(capacitorCharge) ? `Q = C × V = ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined || logicOutput !== undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${currentDescription}`}`}</title>}
+    {showSampleTitle && (voltage !== undefined || current !== undefined || logicOutput !== undefined) && <title>{`${part.ref}: ${logicOutput === undefined ? '' : `output ${logicState} (${logicOutput.toPrecision(4)} V); `}${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; no thermal behavior is simulated; ` : part.kind === 'resistor' ? `illustrative glow follows solved electrical power (${dissipatedPower.toPrecision(4)} W); reference ${part.animationNominalPower ?? 0.25} W; no thermal behavior is simulated; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'zener' ? 'reverse breakdown follows the selected Zener model; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `${part.behavioralCharge !== undefined ? 'charge follows the native Q= expression; ' : part.behavioralCapacitance !== undefined ? 'charge animation uses nominal C × V as an illustration; ngspice solves the C= expression; ' : 'plate charge animation follows solved charge; '}${Number.isFinite(capacitorCharge) ? `Q ${part.behavioralCharge !== undefined ? '=' : '≈'} ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined || logicOutput !== undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${currentDescription}`}`}</title>}
     <rect x={hitBounds.x} y={hitBounds.y} width={hitBounds.width} height={hitBounds.height} rx="9" className="part-hit" />
     {detailed || symbol ? <><g transform={part.flipX ? 'scale(-1 1)' : undefined}>
     <ComponentSymbolGeometry geometry={symbolGeometry} stroke={common.stroke} animation={symbolAnimation} rotation={part.rotation}/>
@@ -868,6 +872,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
       negative: traceForNode(pinNet(resultConnectivity, part, 1)),
       current: traceForVector(currentVector) ?? traceForVector(`i(${part.ref})`),
       secondaryCurrent: part.kind === 'transformer' ? traceForVector(transformerWindingCurrentVector(part.ref, 'S')) : undefined,
+      capacitorCharge: part.kind === 'capacitor' && part.behavioralCharge !== undefined ? traceForVector(behavioralChargeVector(part.ref)) : undefined,
       logicOutput: outputIndex === undefined ? undefined : traceForNode(pinNet(resultConnectivity, part, outputIndex)),
     }
     componentAnimationPlans.set(part, plan)
@@ -989,9 +994,10 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
     const negative = readComponentTrace(plan.negative, axis, sampleIndex)
     const current = readComponentTrace(plan.current, axis, sampleIndex)
     const secondaryCurrent = readComponentTrace(plan.secondaryCurrent, axis, sampleIndex)
+    const capacitorCharge = readComponentTrace(plan.capacitorCharge, axis, sampleIndex)
     const switchClosed = voltageSwitchStateAt(part, sampleIndex) ?? currentSwitchStateAt(part, sampleIndex)
     const logicOutput = readComponentTrace(plan.logicOutput, axis, sampleIndex)
-    return { voltage: positive !== undefined && negative !== undefined ? positive - negative : undefined, current, secondaryCurrent, switchClosed, logicOutput }
+    return { voltage: positive !== undefined && negative !== undefined ? positive - negative : undefined, current, secondaryCurrent, capacitorCharge, switchClosed, logicOutput }
   }
   const componentSampleRef = useRef(componentSample)
   componentSampleRef.current = componentSample

@@ -280,6 +280,19 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       netLabels: sheet.netLabels,
     }
     const sheetConnectivity = analyzeConnectivity(sheetProject)
+    if (sheet.id !== project.activeSheetId) for (const part of sheet.parts) if (part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined)) {
+      try {
+        const expression = part.behavioralCapacitance ?? part.behavioralCharge ?? ''
+        if (!expression.trim() || part.behavioralCapacitance !== undefined && part.behavioralCharge !== undefined || part.deviceModel || part.seriesResistance !== undefined || part.instanceMultiplier !== undefined) throw new Error('Behavioral capacitance requires one C= or Q= expression and cannot be combined with an imported model, series resistance, or multiplier.')
+        const parsed = parseBehavioralExpression(expression)
+        validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(sheet.parts))
+        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral capacitance or charge expression.'
+        issues.push({ id: `invalid-behavioral-capacitor:${sheet.id}:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral capacitor in ${sheet.name}`, detail, partId: topLevelInstanceId })
+      }
+    }
     if (sheet.id !== project.activeSheetId) for (const part of sheet.parts) if (part.kind === 'resistor' && part.behavioralResistance !== undefined) {
       try {
         if (!part.behavioralResistance.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
@@ -473,14 +486,28 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({ id: `invalid-behavioral-resistance:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral resistance`, detail, partId: part.id })
       }
     }
+    if (part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined)) {
+      try {
+        const expression = part.behavioralCapacitance ?? part.behavioralCharge ?? ''
+        if (!expression.trim() || part.behavioralCapacitance !== undefined && part.behavioralCharge !== undefined || part.deviceModel || part.seriesResistance !== undefined || part.instanceMultiplier !== undefined) throw new Error('Behavioral capacitance requires one C= or Q= expression and cannot be combined with an imported model, series resistance, or multiplier.')
+        const parsed = parseBehavioralExpression(expression)
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(project.parts))
+        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral capacitance or charge expression.'
+        issues.push({ id: `invalid-behavioral-capacitor:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral capacitor`, detail, partId: part.id })
+      }
+    }
     if (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) {
       const magnitude = componentMagnitude(part.value, part.kind)
       const requiredModelParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
       const deviceModel = part.deviceModel ? importedDeviceModels.get(part.deviceModel.toLowerCase()) : undefined
       const modelSuppliesValue = Boolean(requiredModelParameter && deviceModel?.type === part.kind[0] && deviceModel.parameters.some((parameter) => parameter.name.toLowerCase() === requiredModelParameter))
-      if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && magnitude === null && !isDeclaredParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) {
+      const behavioralCapacitor = part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined)
+      if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && !behavioralCapacitor && magnitude === null && !isDeclaredParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) {
         issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid value`, detail: part.value.trim() === '' && part.deviceModel ? `Imported model ${part.deviceModel} must declare ${requiredModelParameter?.toUpperCase()} to supply this value.` : 'Enter a numeric value with an optional SI prefix, such as 1 kΩ, 10 µF, or 2 mH.', partId: part.id })
-      } else if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && magnitude !== null && magnitude <= 0) {
+      } else if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && !behavioralCapacitor && magnitude !== null && magnitude <= 0) {
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }
     }

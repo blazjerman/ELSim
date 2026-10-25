@@ -2706,6 +2706,23 @@ test('behavioral resistors emit native ngspice resistance expressions and valida
   assert.throws(() => validateProject(project), /unknown node/i)
 })
 
+test('behavioral capacitors emit native C= and Q= expressions and validate references', () => {
+  const project = createStarterProject()
+  const capacitor = project.parts.find((part) => part.kind === 'capacitor')
+  capacitor.behavioralCapacitance = 'V(vin) < 1 ? 1u : 2u'
+  let artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^V__ELSIM_C1_CURRENT vout __ELSIM_p_c1_CURRENT 0$/m)
+  assert.match(artifact.text, /^C1 __ELSIM_p_c1_CURRENT 0 C=\{V\(vin\) < 1 \? 1u : 2u\}$/m)
+  capacitor.behavioralCapacitance = undefined
+  capacitor.behavioralCharge = '1u*V(vout)'
+  artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^C1 __ELSIM_p_c1_CURRENT 0 Q=\{1u\*V\(vout\)\}$/m)
+  capacitor.behavioralCharge = '1u*V(unknown)'
+  assert.throws(() => validateProject(project), /unknown node/i)
+})
+
 test('native ngspice int() is emitted as truncation toward zero with supported runtime functions', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'native-bsource-int', kind: 'behavioral', ref: 'BINT', value: 'int(V(vin))', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
