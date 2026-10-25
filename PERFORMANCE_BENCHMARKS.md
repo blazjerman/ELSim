@@ -1115,3 +1115,7 @@ The 501-part Firefox stress fixture passed after skipping SVG opacity writes who
 ### Stable current-source direction during playback (2026-10-25)
 
 A focused Firefox/ngspice regression observes a constant DC current source during 350 ms of result playback. Before the guard, the shared cursor listener rewrote its unchanged `data-current-direction` attribute on every sample; after the guard, the observer records zero such mutations. The same workflow changes current sign and verifies the source arrow reverses, preserving visible electrical direction. This is a direct mutation regression, not a frame-time benchmark. No WASM rebuild or Pages workflow ran.
+
+### Zero-current wire-flow visibility (2026-10-25)
+
+Wire-flow samples with zero magnitude remain present for diagnostics, but their SVG flow stroke is now transparent. The focused current-source/load workflow solved forward, reverse, then zero-current transients in both Firefox and Chromium; both browsers retained a numeric zero magnitude on the checked wire and rendered it at opacity zero. This prevents stationary current dots from implying current where none flows. No WASM rebuild or Pages workflow ran.
