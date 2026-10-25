@@ -153,8 +153,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants.closed.find((primitive) => primitive.kind === 'path')?.d, 'M-12 -2L12 0')
   assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants.open.find((primitive) => primitive.kind === 'path')?.d, 'M-12 -2L9 -12')
   for (const state of ['open', 'closed']) assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants[state].filter((primitive) => primitive.className === 'control-pin-label').map(({ text }) => text), ['+', '−'])
-  assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.forwardCurrent.filter((primitive) => primitive.className === 'inductor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '−'], [2, '+']])
-  assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.reverseCurrent.filter((primitive) => primitive.className === 'inductor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '+'], [2, '−']])
+  assert.equal(componentDefinitionFor('inductor').symbolVariants, undefined)
   assert.deepEqual(componentDefinitionFor('capacitor').symbolVariants.forwardCurrent.filter((primitive) => primitive.className === 'capacitor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '−'], [2, '+']])
   assert.deepEqual(componentDefinitionFor('capacitor').symbolVariants.reverseCurrent.filter((primitive) => primitive.className === 'capacitor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '+'], [2, '−']])
   for (const kind of ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet']) {
