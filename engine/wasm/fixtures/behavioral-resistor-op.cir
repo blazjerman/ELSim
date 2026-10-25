@@ -1,0 +1,8 @@
+ELSim behavioral resistor uses the control voltage to select 1 kΩ or 2 kΩ
+VCTRL ctrl 0 DC 2
+VIN in 0 DC 5
+R1 in out R={V(ctrl) < 1 ? 1k : 2k}
+R2 out 0 1k
+.op
+.print op v(ctrl) v(out) i(VIN)
+.end

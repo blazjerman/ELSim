@@ -23,7 +23,7 @@ fixtures.push('imported-subckt-sqr-parameter-op')
 fixtures.push('imported-library-global-node-op')
 fixtures.push('bracketed-subckt-parameter-op')
 fixtures.push('bsim3-bin-family-sweep')
-fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'disto-diode-harmonics', 'disto-diode-intermod')
+fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'disto-diode-harmonics', 'disto-diode-intermod', 'behavioral-resistor-op')
 const fixturesWithRawResults = new Set(['pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac'])
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
@@ -110,6 +110,11 @@ for (const fixture of selectedFixtures) {
     const thirdOrder = Number(wasmResult.stdout.match(/DISTORTION - IM: 2f1-f2[\s\S]*?\n0\s+1\.000000e\+02\s+([\d.e+-]+)/i)?.[1])
     assert.ok(Math.abs(thirdOrder - 6.625511e-12) < 1e-16, `third-order 2f1-f2 intermodulation at 100 Hz should be about 6.625511 pV, got ${thirdOrder}`)
     process.stdout.write('PASS disto-diode-intermod: 2f1-f2 = 6.625511 pV at 100 Hz (F2/F1 = 0.49)\n')
+    continue
+  }
+  if (fixture === 'behavioral-resistor-op') {
+    assert.match(wasmResult.stdout, /0\s+2\.000000e\+00\s+1\.666667e\+00\s+-1\.66667e-03/i, '2 kΩ behavioral R1 and 1 kΩ R2 should produce about 1.667 V at out and 1.667 mA from VIN')
+    process.stdout.write('PASS behavioral-resistor-op: R(V(ctrl)) selects 2 kΩ and solves the expected divider voltage/current\n')
     continue
   }
   if (fixture === 'pole-zero-rc') {

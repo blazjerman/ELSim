@@ -6927,6 +6927,21 @@ test('imported device model inspector shows and searches unparsed source assignm
   await expect(page.getByLabel('Unparsed model assignments')).toContainText('N = {vendor_shape(5)}')
 })
 
+test('behavioral resistor mode saves its expression and generates a native ngspice resistor @ui-smoke', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Select and move' }).click()
+  await page.locator('.circuit-part[aria-label^="R1,"]').click()
+  const mode = page.getByLabel('Use behavioral resistance for R1')
+  await expect(mode).toBeVisible()
+  await mode.check()
+  const expression = page.getByRole('textbox', { name: 'Behavioral resistance for R1' })
+  await expression.fill('V(vin) < 1 ? 1k : 2k')
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1')?.behavioralResistance)).toBe('V(vin) < 1 ? 1k : 2k')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^R1 vin vout R=\{V\(vin\) < 1 \? 1k : 2k\}$/m)
+})
+
 test('resistor AC value is editable, saved, and generated as an AC-only override @ui-smoke', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Select and move' }).click()

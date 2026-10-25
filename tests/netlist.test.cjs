@@ -2695,6 +2695,17 @@ test('behavioral voltage and current sources emit validated B-source expressions
   assert.throws(() => validateProject(project), /unknown node/)
 })
 
+test('behavioral resistors emit native ngspice resistance expressions and validate references', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  resistor.behavioralResistance = 'V(vin) < 1 ? 1k : 2k'
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^R1 vin vout R=\{V\(vin\) < 1 \? 1k : 2k\}$/m)
+  resistor.behavioralResistance = 'V(unknown)'
+  assert.throws(() => validateProject(project), /unknown node/i)
+})
+
 test('native ngspice int() is emitted as truncation toward zero with supported runtime functions', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'native-bsource-int', kind: 'behavioral', ref: 'BINT', value: 'int(V(vin))', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })

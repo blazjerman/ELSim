@@ -258,14 +258,16 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         const requiredModelParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
         const deviceModel = part.deviceModel ? importedDeviceModels.get(part.deviceModel.toLowerCase()) : undefined
         const modelSuppliesValue = Boolean(requiredModelParameter && deviceModel?.type === part.kind[0] && deviceModel.parameters.some((parameter) => parameter.name.toLowerCase() === requiredModelParameter))
-        if (magnitude === null && !isSheetParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) invalidValue(part.value.trim() === '' && part.deviceModel ? `Imported model ${part.deviceModel} must declare ${requiredModelParameter?.toUpperCase()} to supply this value.` : 'Enter a numeric value with an optional SI prefix, or use a parameter declared on this sheet.')
-        else if (magnitude !== null && magnitude <= 0) issues.push({
+        if (part.kind !== 'resistor' || part.behavioralResistance === undefined) {
+          if (magnitude === null && !isSheetParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) invalidValue(part.value.trim() === '' && part.deviceModel ? `Imported model ${part.deviceModel} must declare ${requiredModelParameter?.toUpperCase()} to supply this value.` : 'Enter a numeric value with an optional SI prefix, or use a parameter declared on this sheet.')
+          else if (magnitude !== null && magnitude <= 0) issues.push({
           id: `nonpositive-value:${sheet.id}:${part.id}`,
           severity: 'warning',
           title: `${part.ref} must have a positive value in ${sheet.name}`,
           detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.',
           partId: topLevelInstanceId,
-        })
+          })
+        }
       }
     }
 
@@ -278,6 +280,18 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       netLabels: sheet.netLabels,
     }
     const sheetConnectivity = analyzeConnectivity(sheetProject)
+    if (sheet.id !== project.activeSheetId) for (const part of sheet.parts) if (part.kind === 'resistor' && part.behavioralResistance !== undefined) {
+      try {
+        if (!part.behavioralResistance.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
+        const parsed = parseBehavioralExpression(part.behavioralResistance)
+        validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceVoltageBranchReferences(sheet.parts))
+        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral resistance expression.'
+        issues.push({ id: `invalid-behavioral-resistance:${sheet.id}:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral resistance in ${sheet.name}`, detail, partId: topLevelInstanceId })
+      }
+    }
     const sheetLabelNames = new Set(sheet.netLabels.map((label) => label.name.trim()))
     appendMultipleBlockOutputIssues(sheet, sheetConnectivity, topLevelInstanceId)
     for (const [index, diagnostic] of sheetConnectivity.diagnostics.entries()) issues.push({
@@ -447,14 +461,26 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     if (part.kind === 'currentSource' && componentMagnitude(part.value, part.kind) === null && !isDeclaredParameter(part.value)) {
       issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid current`, detail: 'Enter a numeric current with an optional SI prefix, such as 1 mA or -250 µA.', partId: part.id })
     }
+    if (part.kind === 'resistor' && part.behavioralResistance !== undefined) {
+      try {
+        if (!part.behavioralResistance.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
+        const parsed = parseBehavioralExpression(part.behavioralResistance)
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceVoltageBranchReferences(project.parts))
+        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral resistance expression.'
+        issues.push({ id: `invalid-behavioral-resistance:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid behavioral resistance`, detail, partId: part.id })
+      }
+    }
     if (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) {
       const magnitude = componentMagnitude(part.value, part.kind)
       const requiredModelParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
       const deviceModel = part.deviceModel ? importedDeviceModels.get(part.deviceModel.toLowerCase()) : undefined
       const modelSuppliesValue = Boolean(requiredModelParameter && deviceModel?.type === part.kind[0] && deviceModel.parameters.some((parameter) => parameter.name.toLowerCase() === requiredModelParameter))
-      if (magnitude === null && !isDeclaredParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) {
+      if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && magnitude === null && !isDeclaredParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) {
         issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid value`, detail: part.value.trim() === '' && part.deviceModel ? `Imported model ${part.deviceModel} must declare ${requiredModelParameter?.toUpperCase()} to supply this value.` : 'Enter a numeric value with an optional SI prefix, such as 1 kΩ, 10 µF, or 2 mH.', partId: part.id })
-      } else if (magnitude !== null && magnitude <= 0) {
+      } else if ((part.kind !== 'resistor' || part.behavioralResistance === undefined) && magnitude !== null && magnitude <= 0) {
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }
     }

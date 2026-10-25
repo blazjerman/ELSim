@@ -14,6 +14,16 @@ test('starter project passes the common wiring checks', () => {
   assert.deepEqual(checkCircuit(createStarterProject()), [])
 })
 
+test('behavioral resistor expressions replace the fixed resistance value during circuit checks', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  resistor.value = 'not a numeric resistance'
+  resistor.behavioralResistance = 'V(vin) < 1 ? 1k : 2k'
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `invalid-value:${resistor.id}` || issue.id === `nonpositive-value:${resistor.id}` || issue.id === `invalid-behavioral-resistance:${resistor.id}`), false)
+  resistor.behavioralResistance = 'V(unknown)'
+  assert.match(checkCircuit(project).find((issue) => issue.id === `invalid-behavioral-resistance:${resistor.id}`).detail, /unknown node/i)
+})
+
 test('voltage-controlled switch checks imported SW model presence and type', () => {
   const project = createVoltageSwitchExampleProject()
   const sw = project.parts.find((part) => part.kind === 'voltageSwitch')

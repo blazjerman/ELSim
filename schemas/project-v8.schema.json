@@ -200,6 +200,12 @@
           "maxLength": 64,
           "description": "Optional positive resistor value used only in AC analysis; when omitted, the ordinary resistance applies."
         },
+        "behavioralResistance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Optional native ngspice behavioral resistor expression; may depend on circuit voltages, voltage-source currents, parameters, time, temperature, or frequency."
+        },
         "tc1": {
           "type": "string",
           "maxLength": 64,
