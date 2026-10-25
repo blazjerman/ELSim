@@ -137,24 +137,30 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
       // one-time insertion of current-polarity markers at zero current.
       pulse: { initial: '1', delay: '0.5m', rise: '1u', fall: '1u', width: '2m', period: '5m' }, x: 120, y: 400,
     }
-    const resistors = Array.from({ length: sections }, (_, index) => ({
-      ...resistorTemplate,
-      id: `animation-bench-r-${index + 1}`,
-      ref: `R${index + 1}`,
-      value: '1k',
-      x: 240 + (index % 50) * 110,
-      y: 400 + Math.floor(index / 50) * 100,
-    }))
+    const animatedParts = Array.from({ length: sections }, (_, index) => {
+      const isResistor = index % 2 === 0
+      const instanceIndex = Math.floor(index / 2) + 1
+      return {
+        ...resistorTemplate,
+        id: `animation-bench-${isResistor ? 'r' : 'l'}-${instanceIndex}`,
+        ref: `${isResistor ? 'R' : 'L'}${instanceIndex}`,
+        kind: isResistor ? 'resistor' : 'inductor',
+        componentDefinitionId: isResistor ? resistorTemplate.componentDefinitionId : 'elsim.inductor',
+        value: isResistor ? '10 Ω' : '1 mH',
+        x: 240 + (index % 50) * 110,
+        y: 400 + Math.floor(index / 50) * 100,
+      }
+    })
     const netLabels: { id: string; name: string; x: number; y: number; visible: boolean }[] = [
       { id: 'animation-bench-source-positive', name: 'N0', x: source.x, y: source.y - 52, visible: true },
       { id: 'animation-bench-source-ground', name: '0', x: source.x, y: source.y + 52, visible: true },
     ]
-    resistors.forEach((part, index) => {
+    animatedParts.forEach((part, index) => {
       netLabels.push({ id: `animation-bench-label-${index}-left`, name: `N${index}`, x: part.x - 52, y: part.y, visible: true })
       netLabels.push({ id: `animation-bench-label-${index}-right`, name: index === sections - 1 ? '0' : `N${index + 1}`, x: part.x + 52, y: part.y, visible: true })
     })
-    const parts = [source, ...resistors]
-    project.name = 'Browser benchmark · 500 component animated transient'
+    const parts = [source, ...animatedParts]
+    project.name = 'Browser benchmark · 250 resistor and 250 inductor transient'
     project.parts = parts
     project.wires = []
     project.junctions = []
@@ -169,7 +175,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
-  await expect(page.locator('.project-title')).toHaveText('Browser benchmark · 500 component animated transient')
+  await expect(page.locator('.project-title')).toHaveText('Browser benchmark · 250 resistor and 250 inductor transient')
   const initiallyMountedParts = page.locator('svg.schematic .circuit-part')
   await expect.poll(() => initiallyMountedParts.count()).toBeGreaterThan(0)
   await expect.poll(() => initiallyMountedParts.count()).toBeLessThan(501)
@@ -181,10 +187,10 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   const slider = page.getByRole('slider', { name: 'Simulation time' })
   await expect(slider).toBeVisible()
   expect(Number(await slider.getAttribute('max'))).toBeGreaterThan(1)
-  await page.locator('g.circuit-part[data-part-id="animation-bench-r-5"]').hover()
-  const visibleResistorTitle = page.locator('g.circuit-part[data-part-id="animation-bench-r-5"] > title')
-  await expect(visibleResistorTitle).toContainText('R5')
-  const offscreenResistorTitle = page.locator('g.circuit-part[data-part-id="animation-bench-r-500"] > title')
+  await page.locator('g.circuit-part[data-part-id="animation-bench-r-2"]').hover()
+  const visibleResistorTitle = page.locator('g.circuit-part[data-part-id="animation-bench-r-2"] > title')
+  await expect(visibleResistorTitle).toContainText('R2')
+  const offscreenResistorTitle = page.locator('g.circuit-part[data-part-id="animation-bench-r-250"] > title')
   await expect(offscreenResistorTitle).toHaveCount(0)
   const inspectedReadoutCount = await page.locator('svg.schematic g.circuit-part > title').count()
   expect(inspectedReadoutCount).toBeLessThan(10)
@@ -202,49 +208,61 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   const viewportMutations = await stopDomMutationCapture(page)
   const viewportFrames = await stopScrubFrameCapture(page)
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
-  await page.locator('g.circuit-part[data-part-id="animation-bench-r-500"]').hover()
-  await expect(offscreenResistorTitle).toContainText('R500')
+  await page.locator('g.circuit-part[data-part-id="animation-bench-l-250"]').hover()
+  await expect(page.locator('g.circuit-part[data-part-id="animation-bench-l-250"] > title')).toContainText('L250')
   const fittedComponentCount = await page.locator('svg.schematic g.circuit-part').count()
   expect(fittedComponentCount).toBe(501)
-  const animatedResistors = page.locator('svg.schematic .circuit-part[data-animation-kind="resistor-power"]')
-  await expect(animatedResistors).toHaveCount(500)
-  await expect(page.locator('svg.schematic [data-resistor-power-glow]')).toHaveCount(500)
-  const lastResistor = page.locator('svg.schematic .circuit-part[data-part-id="animation-bench-r-500"]')
+  const animatedResistors = page.locator('svg.schematic .circuit-part[data-animation-kind="resistor-result"]')
+  const animatedInductors = page.locator('svg.schematic .circuit-part[data-animation-kind="inductor-result"]')
+  await expect(animatedResistors).toHaveCount(250)
+  await expect(animatedInductors).toHaveCount(250)
+  await expect(page.locator('svg.schematic [data-resistor-power-glow]')).toHaveCount(250)
+  await expect(page.locator('svg.schematic [data-inductor-current-glow]')).toHaveCount(250)
+  const lastResistor = page.locator('svg.schematic .circuit-part[data-part-id="animation-bench-r-250"]')
+  const lastInductor = page.locator('svg.schematic .circuit-part[data-part-id="animation-bench-l-250"]')
   await expect.poll(async () => Number(await lastResistor.locator('[data-resistor-power-glow]').getAttribute('opacity'))).toBeGreaterThan(0)
-  expect(await lastResistor.locator('[data-live-current-polarity]').evaluateAll((nodes) => nodes.map((node) => [node.getAttribute('data-pin'), node.getAttribute('data-polarity'), node.getAttribute('opacity')]))).toEqual([['1', '−', '1'], ['2', '+', '1']])
+  await expect.poll(async () => Number(await lastInductor.locator('[data-inductor-current-glow]').getAttribute('opacity'))).toBeGreaterThan(0)
+  expect(await lastInductor.locator('[data-live-current-polarity]').evaluateAll((nodes) => nodes.map((node) => [node.getAttribute('data-pin'), node.getAttribute('data-polarity'), node.getAttribute('opacity')]))).toEqual([['1', '−', '1'], ['2', '+', '1']])
   await slider.press('Home')
-  const fittedInitialReading = await lastResistor.locator(':scope > title').textContent()
+  const fittedInitialReading = await lastInductor.locator(':scope > title').textContent()
   const lastResistorGlowAtHome = await lastResistor.locator('[data-resistor-power-glow]').getAttribute('opacity')
+  const lastInductorGlowAtHome = await lastInductor.locator('[data-inductor-current-glow]').getAttribute('opacity')
   const fittedGlowBefore = await page.locator('[data-resistor-power-glow]').first().getAttribute('opacity')
+  const inductorGlowValuesBefore = await page.locator('[data-inductor-current-glow]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('opacity')))
   await page.evaluate(() => { (window as Window & { __elsimAnimationProfile?: { calls: number; totalMs: number; maxMs: number } }).__elsimAnimationProfile = { calls: 0, totalMs: 0, maxMs: 0 } })
   await startDomMutationCapture(page)
   await startScrubFrameCapture(page, slider)
   const fullCanvasStarted = performance.now()
   const fullCanvasGlowValuesBefore = await page.locator('[data-resistor-power-glow]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('opacity')))
   await slider.press('End')
-  await expect(lastResistor.locator(':scope > title')).not.toHaveText(fittedInitialReading ?? '')
+  await expect(lastInductor.locator(':scope > title')).not.toHaveText(fittedInitialReading ?? '')
   const fittedGlowAfter = await page.locator('[data-resistor-power-glow]').first().getAttribute('opacity')
   const lastResistorGlowAtEnd = await lastResistor.locator('[data-resistor-power-glow]').getAttribute('opacity')
+  const lastInductorGlowAtEnd = await lastInductor.locator('[data-inductor-current-glow]').getAttribute('opacity')
   expect(lastResistorGlowAtEnd).not.toBe(lastResistorGlowAtHome)
+  expect(lastInductorGlowAtEnd).not.toBe(lastInductorGlowAtHome)
   const fullCanvasGlowValuesAfter = await page.locator('[data-resistor-power-glow]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('opacity')))
   const changedGlowCount = fullCanvasGlowValuesAfter.filter((value, index) => value !== fullCanvasGlowValuesBefore[index]).length
-  expect(changedGlowCount).toBe(500)
+  expect(changedGlowCount).toBe(250)
+  const inductorGlowValuesAfter = await page.locator('[data-inductor-current-glow]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('opacity')))
+  const changedInductorGlowCount = inductorGlowValuesAfter.filter((value, index) => value !== inductorGlowValuesBefore[index]).length
+  expect(changedInductorGlowCount).toBe(250)
   const glowValueCountAfterScrub = await page.locator('[data-resistor-power-glow]').evaluateAll((nodes) => new Set(nodes.map((node) => node.getAttribute('opacity'))).size)
   const fullCanvasScrubMs = performance.now() - fullCanvasStarted
   const fullCanvasMutations = await stopDomMutationCapture(page)
   const fullCanvasFrames = await stopScrubFrameCapture(page)
   const animationCallbackProfile = await page.evaluate(() => (window as Window & { __elsimAnimationProfile?: { calls: number; totalMs: number; maxMs: number } }).__elsimAnimationProfile)
-  const resistorReadoutsAtEnd = new Map<string, string>()
-  for (const id of ['animation-bench-r-1', 'animation-bench-r-250', 'animation-bench-r-500']) {
+  const componentReadoutsAtEnd = new Map<string, string>()
+  for (const id of ['animation-bench-r-1', 'animation-bench-l-125', 'animation-bench-r-250', 'animation-bench-l-250']) {
     const part = page.locator(`svg.schematic .circuit-part[data-part-id="${id}"]`)
     await part.hover()
-    resistorReadoutsAtEnd.set(id, await part.locator(':scope > title').textContent() ?? '')
+    componentReadoutsAtEnd.set(id, await part.locator(':scope > title').textContent() ?? '')
   }
   await slider.press('Home')
-  for (const id of ['animation-bench-r-1', 'animation-bench-r-250', 'animation-bench-r-500']) {
+  for (const id of ['animation-bench-r-1', 'animation-bench-l-125', 'animation-bench-r-250', 'animation-bench-l-250']) {
     const part = page.locator(`svg.schematic .circuit-part[data-part-id="${id}"]`)
     await part.hover()
-    await expect(part.locator(':scope > title')).not.toHaveText(resistorReadoutsAtEnd.get(id) ?? '')
+    await expect(part.locator(':scope > title')).not.toHaveText(componentReadoutsAtEnd.get(id) ?? '')
   }
   await page.getByLabel('Simulation playback speed').selectOption('1')
   const playButton = page.locator('button[title^="Play result animation"]')
@@ -260,7 +278,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   const playbackRafIntervals = await stopRafIntervalCapture(page)
   await pauseButton.click()
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v9', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), changedGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportRafIntervals: viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasRafIntervals: fullCanvasFrames, animationCallbackProfile, idleRafIntervals, playbackRafIntervals }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-250-resistor-250-inductor-animation-scrub-v10', browser: browserName, componentCount: 501, resistorCount: 250, inductorCount: 250, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), animatedInductorCount: await animatedInductors.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), inductorGlowCount: await page.locator('svg.schematic [data-inductor-current-glow]').count(), changedGlowCount, changedInductorGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportRafIntervals: viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasRafIntervals: fullCanvasFrames, animationCallbackProfile, idleRafIntervals, playbackRafIntervals }, null, 2))
 })
 
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
