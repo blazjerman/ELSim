@@ -3166,7 +3166,7 @@ export default function App() {
           led: examples.createLedExampleProject, 'led-current-limiter': examples.createLedCurrentLimiterExampleProject,
           'led-parallel': examples.createParallelLedExampleProject,
           'capacitor-discharge': examples.createCapacitorDischargeExampleProject,
-          rlc: examples.createRlcExampleProject, 'lc-energy': examples.createLcEnergyExampleProject, 'rl-step': examples.createRlStepExampleProject, flyback: examples.createFlybackDiodeExampleProject, controlled: examples.createControlledSourceExampleProject,
+          rlc: examples.createRlcExampleProject, 'lc-energy': examples.createLcEnergyExampleProject, 'behavioral-inductor': examples.createBehavioralInductorExampleProject, 'rl-step': examples.createRlStepExampleProject, flyback: examples.createFlybackDiodeExampleProject, controlled: examples.createControlledSourceExampleProject,
           'current-controlled': examples.createCurrentControlledSourcesExampleProject, transistor: examples.createTransistorSwitchExampleProject,
           'voltage-switch': examples.createVoltageSwitchExampleProject,
           'current-switch': examples.createCurrentSwitchExampleProject,

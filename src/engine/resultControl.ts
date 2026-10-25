@@ -179,6 +179,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     const ref = line.match(/^\s*([RCLDSEGFHQBJIMZW][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
     if (/^C/i.test(ref) && /\b(?:C|Q)\s*=\s*\{/i.test(line)) return []
+    if (/^L/i.test(ref) && /\bL\s*=\s*\{/i.test(line)) return [`i(${ref})`]
     if ((analysisType === 'ac' || analysisType === 'noise') && /^[CL]/i.test(ref)) return []
     const kind = ref[0].toUpperCase()
     const current = kind === 'D' || kind === 'J' || kind === 'M' ? 'id' : kind === 'Q' ? 'ic' : kind === 'Z' ? 'is' : kind === 'I' ? 'current' : 'i'

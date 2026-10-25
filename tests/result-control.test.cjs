@@ -170,6 +170,12 @@ test('controlled sources have their branch currents saved for probing', () => {
   assert.match(control, /^\.save all @E1\[i\] @G1\[i\]$/m)
 })
 
+test('behavioral inductor current uses the native branch vector instead of @L[i]', () => {
+  const control = addResultControl('V1 in 0 1\nL1 in out L={5m+5m*exp(-abs(I(V1))/50m)}\n.tran 1u 1m\n.end')
+  assert.match(control, /^\.save all i\(L1\)$/m)
+  assert.doesNotMatch(control, /@L1\[i\]/i)
+})
+
 test('BJT and MOSFET models save device current using ngspice-specific vectors', () => {
   const control = addResultControl('Q1 c b e ELSIM_MODEL_Q1\n.model ELSIM_MODEL_Q1 NPN(BF=100)\n.tran 1u 1m\n.end')
   assert.match(control, /^\.save all @Q1\[ic\] @Q1\[ib\] @Q1\[ie\]$/m)

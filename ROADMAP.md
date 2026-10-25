@@ -1,4 +1,6 @@
 # ELSim: agent-ready product and engineering roadmap
+M2.2 behavioral-inductor current results and lesson (2026-10-25): Behavioral inductors now request their solved branch current (`i(L1)`) in root sheets and reusable hierarchy instead of the unavailable ordinary `@L[i]` device parameter. The Advanced Examples catalog adds a smooth, explicitly illustrative current-dependent inductance lesson; it teaches how a falling L expression steepens the current ramp and is not presented as a magnetic-core model. Domain tests cover the example and nested current saves; focused Firefox verifies the lesson, generated native ngspice expression, and successful transient run with the existing local runtime. TypeScript and focused unit groups pass. No WASM rebuild or Pages workflow ran.
+
 
 Status: active implementation roadmap, 2026-10-10. The application foundation is being built in this repository.
 

@@ -243,6 +243,8 @@ function hierarchicalSaveVectors(project: Project): string[] {
       if (part.kind === 'transmissionLine') {
         saves.add(`.save ${transmissionLinePortCurrentVector(device, 1, Boolean(part.deviceModel))}`)
         saves.add(`.save ${transmissionLinePortCurrentVector(device, 2, Boolean(part.deviceModel))}`)
+      } else if (part.kind === 'inductor' && part.behavioralInductance !== undefined) {
+        saves.add(`.save i(${device})`)
       } else if (part.kind === 'urcLine') {
         saves.add(`.save i(v.${[...path, urcLineCurrentSenseReference(part.ref, 'IN').toLowerCase()].join('.')})`)
         saves.add(`.save i(v.${[...path, urcLineCurrentSenseReference(part.ref, 'OUT').toLowerCase()].join('.')})`)

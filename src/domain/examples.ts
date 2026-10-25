@@ -1723,6 +1723,49 @@ export function createRlStepExampleProject(): Project {
   return project
 }
 
+/** A smooth, teaching-only model shows how falling inductance steepens a current ramp. */
+export function createBehavioralInductorExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = {
+    id: 'behavioral-inductor-v1', kind: 'source', ref: 'V1', value: '2 V', sourceMode: 'pulse',
+    pulse: { initial: '0 V', delay: '0', rise: '1 µs', fall: '1 µs', width: '5 ms', period: '10 ms' },
+    x: 220, y: 360, rotation: 0,
+  }
+  const resistor: Part = { id: 'behavioral-inductor-r1', kind: 'resistor', ref: 'R1', value: '20 Ω', x: 460, y: 300, rotation: 0 }
+  const inductor: Part = {
+    id: 'behavioral-inductor-l1', kind: 'inductor', ref: 'L1', value: '10 mH',
+    behavioralInductance: '5m + 5m*exp(-abs(I(V1))/50m)', x: 700, y: 300, rotation: 0,
+  }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Current-dependent inductor'
+  project.parts = [source, resistor, inductor]
+  project.wires = [
+    { id: 'behavioral-inductor-feed-rise', points: [[220, 310], [220, 260]] },
+    { id: 'behavioral-inductor-feed-top', points: [[220, 260], [410, 260]] },
+    { id: 'behavioral-inductor-feed-drop', points: [[410, 260], [410, 300]] },
+    { id: 'behavioral-inductor-resistor-coil', points: [[510, 300], [650, 300]] },
+    { id: 'behavioral-inductor-return-right', points: [[750, 300], [800, 300]] },
+    { id: 'behavioral-inductor-return-drop', points: [[800, 300], [800, 460]] },
+    { id: 'behavioral-inductor-return-bottom', points: [[800, 460], [220, 460]] },
+    { id: 'behavioral-inductor-return-source', points: [[220, 460], [220, 410]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    labelAt('behavioral-inductor-vin', 'VIN', source, 0),
+    labelAt('behavioral-inductor-coil-node', 'V_L', resistor, 1),
+    labelAt('behavioral-inductor-ground', '0', source, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '10 ms', maxStep: '10 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(L1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -15, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A capacitor-only transient lesson showing exponential discharge from an initial voltage. */
 export function createCapacitorDischargeExampleProject(): Project {
   const project = createStarterProject()

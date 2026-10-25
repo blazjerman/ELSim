@@ -30,7 +30,7 @@ export function urcLinePortCurrentVector(ref: string, port: 1 | 2 = 1): string {
   return `i(${urcLineCurrentSenseReference(ref, port === 1 ? 'IN' : 'OUT')})`
 }
 
-export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref' | 'deviceModel' | 'behavioralCapacitance' | 'behavioralCharge'>): string {
+export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref' | 'deviceModel' | 'behavioralCapacitance' | 'behavioralCharge' | 'behavioralInductance'>): string {
   if (part.kind === 'source') return `i(${part.ref})`
   if (part.kind === 'opamp') return `i(@r.x${part.ref}.rout[i])`
   if (part.kind === 'currentSource') return `i(@${part.ref}[current])`
@@ -42,6 +42,7 @@ export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref' | 'device
   if (part.kind === 'voltageSwitch') return `i(@${part.ref}[i])`
   if (part.kind === 'currentSwitch') return `i(@${part.ref}[i])`
   if (part.kind === 'capacitor' && (part.behavioralCapacitance !== undefined || part.behavioralCharge !== undefined)) return `i(V__ELSIM_${part.ref.replace(/[^A-Za-z0-9_]/g, '_')}_CURRENT)`
+  if (part.kind === 'inductor' && part.behavioralInductance !== undefined) return `i(${part.ref})`
   const currentName = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'id' : 'i'
   return `i(@${part.ref}[${currentName}])`
 }
