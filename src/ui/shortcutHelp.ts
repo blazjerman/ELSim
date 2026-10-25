@@ -1,4 +1,5 @@
-import { COMPONENT_SHORTCUTS, componentPaletteItems } from './componentPaletteData'
+import { componentPaletteItems } from './componentPaletteData'
+import { COMPONENT_SHORTCUTS } from './componentShortcuts'
 import { componentDefinitionFor } from '../domain/componentDefinitions'
 
 export const EDITOR_SHORTCUTS = [

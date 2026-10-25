@@ -29,7 +29,7 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { formatTime } from './formatTime'
 import { getSimulationCursor, setSimulationCursor, setSimulationCursorForPlayback, useSimulationCursorAnimation } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
-import { COMPONENT_SHORTCUTS, componentCategoryKinds, componentPaletteItems } from './componentPaletteData'
+import { COMPONENT_SHORTCUTS } from './componentShortcuts'
 import type { ComponentPaletteCategory } from './componentPaletteData'
 import { compatibleDeviceModelType, componentDefaultValue, componentDefinitionFor, componentPropertyDefault, deviceModelTypeMatches, importedSubcircuitComponentDefinition, supportsDeviceTemperatureDelta, supportsInitialOff } from '../domain/componentDefinitions'
 import { componentMagnitude, formatEngineeringValue } from '../domain/componentValue'
@@ -89,7 +89,7 @@ function clearDeletedInductorCouplings(parts: Part[], deletedIds: ReadonlySet<st
 }
 
 const ParameterSweepEditor = lazy(() => import('./ParameterSweepEditor'))
-const ComponentPalette = lazy(() => import('./ComponentPalette').then((module) => ({ default: module.ComponentPalette })))
+const ComponentLibraryContents = lazy(() => import('./ComponentPalette').then((module) => ({ default: module.ComponentLibraryContents })))
 const RandomSamplingEditor = lazy(() => import('./RandomSamplingEditor'))
 const ModelSourceViewer = lazy(() => import('./ModelSourceViewer').then((module) => ({ default: module.ModelSourceViewer })))
 const ImportedDeviceModelParameters = lazy(() => import('./ImportedDeviceModelParameters'))
@@ -1549,21 +1549,8 @@ export default function App() {
     const selectedIds = activeSelected && !selectedPartIdSet.has(activeSelected.id) ? [activeSelected.id] : selectedPartIds
     updatePartUiState(selectedIds, activeSelected?.id ?? project.parts[0]?.id)
   }, [selectedPartIds, selectedWireIds, activeSelected, project.parts])
-  const filteredPalette = useMemo(() => {
-    const query = componentQuery.trim().toLowerCase()
-    const shortcutQuery = componentQuery.trim().match(/^key:(.+)$/i)?.[1].trim()
-    const categoryKinds = componentCategoryKinds[componentCategory]
-    return componentPaletteItems.filter(({ kind }) => {
-      if (!query && !categoryKinds.includes(kind)) return false
-      if (!query) return true
-      if (shortcutQuery !== undefined) return COMPONENT_SHORTCUTS[kind] === shortcutQuery
-      const definition = componentDefinitionFor(kind)
-      return `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind]} ${definition.paletteSubtitle ?? ''}`.toLowerCase().includes(query)
-    })
-  }, [componentCategory, componentQuery])
   const selectComponentForPlacement = useCallback((kind: PartKind, polarized = false, logicOperation?: Part['logicOperation']) => {
-    const component = componentPaletteItems.find((item) => item.kind === kind)
-    if (!component) return
+    if (kind === 'subcircuit') return
     setPendingComponentKind(kind)
     setPendingComponentRotation(defaultPlacementRotation(kind))
     setPendingPolarizedCapacitor(kind === 'capacitor' && polarized)
@@ -2338,8 +2325,8 @@ export default function App() {
       if (event.key === 'C') { selectComponentForPlacement('capacitor', true); return }
       const logicOperation = LOGIC_GATE_SHORTCUTS[event.key]
       if (logicOperation) { selectComponentForPlacement('logicGate', false, logicOperation); return }
-      const matchingPart = componentPaletteItems.find(({ kind }) => COMPONENT_SHORTCUTS[kind] === event.key)
-      if (matchingPart) { selectComponentForPlacement(matchingPart.kind); return }
+      const matchingPart = Object.entries(COMPONENT_SHORTCUTS).find(([, shortcut]) => shortcut === event.key)
+      if (matchingPart) { selectComponentForPlacement(matchingPart[0] as PartKind); return }
       const futurePart = FUTURE_COMPONENT_SHORTCUTS[event.key]
       if (futurePart) { setNotice(`${futurePart} is reserved for a future component.`); return }
       if (event.key === 'm') { setPendingComponentKind(null); setTool('select') }
@@ -3387,15 +3374,7 @@ export default function App() {
         <button className={mobilePane === 'properties' ? 'active' : ''} aria-pressed={mobilePane === 'properties'} onClick={() => setMobilePane('properties')}>Properties</button>
       </nav>
       <aside aria-label="Component library" className={`library-panel${mobilePane === 'components' ? ' mobile-active' : ''}`}>
-        <div className="panel-heading"><div><span className="eyebrow">DESIGN</span><h2>Components</h2></div><span className="library-count" aria-label={`${filteredPalette.length} components shown`}>{filteredPalette.length}</span></div>
-        <label className="search-box"><Search size={15}/><input ref={componentSearchRef} aria-label="Find a component" placeholder="Find a component or key:r" value={componentQuery} onChange={(event) => setComponentQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && filteredPalette[0]) { event.preventDefault(); selectComponentForPlacement(filteredPalette[0].kind); componentSearchRef.current?.blur() } }}/>{componentQuery ? <button type="button" aria-label="Clear component search" onClick={() => { setComponentQuery(''); componentSearchRef.current?.focus() }}><X size={13}/></button> : <kbd>/</kbd>}</label>
-        <div className="library-categories" role="group" aria-label="Component category">
-          <button className={`category${componentCategory === 'basics' ? ' active' : ''}`} aria-pressed={componentCategory === 'basics'} onClick={() => setComponentCategory('basics')}><Zap size={14}/> Basics</button>
-          <button className={`category${componentCategory === 'semiconductors' ? ' active' : ''}`} aria-pressed={componentCategory === 'semiconductors'} onClick={() => setComponentCategory('semiconductors')}><Waypoints size={14}/> Semiconductors</button>
-          <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
-        </div>
-        <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
-        {filteredPalette.length ? <Suspense fallback={<div className="component-grid" role="status" aria-label="Loading components"/>}><ComponentPalette items={filteredPalette} pendingKind={pendingComponentKind} onSelect={selectComponentForPlacement}/></Suspense> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
+        <Suspense fallback={<div className="component-grid" role="status" aria-label="Loading components"/>}><ComponentLibraryContents query={componentQuery} onQueryChange={setComponentQuery} category={componentCategory} onCategoryChange={setComponentCategory} inputRef={componentSearchRef} kindNames={kindNames} pendingKind={pendingComponentKind} onSelect={selectComponentForPlacement}/></Suspense>
         {availableSheetBlocks.length > 0 && <div className="imported-models">
           <div className="component-list-label">PROJECT BLOCKS</div>
           {availableSheetBlocks.map((sheet) => <div className="imported-model" key={sheet.id}>

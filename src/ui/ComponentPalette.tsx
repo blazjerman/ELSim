@@ -1,8 +1,10 @@
-import { memo } from 'react'
-import { CircleHelp } from 'lucide-react'
+import { memo, useMemo } from 'react'
+import { Activity, CircleHelp, Search, Waypoints, X, Zap } from 'lucide-react'
 import { componentDefinitionFor } from '../domain/componentDefinitions'
 import type { PartKind } from '../domain/project'
-import { COMPONENT_SHORTCUTS } from './componentPaletteData'
+import { COMPONENT_SHORTCUTS } from './componentShortcuts'
+import { componentCategoryKinds, componentPaletteItems } from './componentPaletteData'
+import type { ComponentPaletteCategory } from './componentPaletteData'
 
 type PaletteKind = Exclude<PartKind, 'subcircuit'>
 
@@ -29,8 +31,13 @@ const PaletteSymbol = memo(function PaletteSymbol({ kind }: { kind: PaletteKind 
   </svg>
 })
 
-type ComponentPaletteProps = {
-  items: readonly { kind: PaletteKind }[]
+type ComponentLibraryContentsProps = {
+  query: string
+  onQueryChange: (value: string) => void
+  category: ComponentPaletteCategory
+  onCategoryChange: (category: ComponentPaletteCategory) => void
+  inputRef: { current: HTMLInputElement | null }
+  kindNames: Partial<Record<PartKind, string>>
   pendingKind: PartKind | null
   onSelect: (kind: PartKind) => void
 }
@@ -48,6 +55,33 @@ const ComponentCard = memo(function ComponentCard({ kind, active, onSelect }: { 
   </button>
 })
 
-export const ComponentPalette = memo(function ComponentPalette({ items, pendingKind, onSelect }: ComponentPaletteProps) {
+const ComponentPalette = memo(function ComponentPalette({ items, pendingKind, onSelect }: { items: readonly { kind: PaletteKind }[]; pendingKind: PartKind | null; onSelect: (kind: PartKind) => void }) {
   return <div className="component-grid">{items.map(({ kind }) => <ComponentCard key={kind} kind={kind} active={pendingKind === kind} onSelect={onSelect}/>)}</div>
+})
+
+export const ComponentLibraryContents = memo(function ComponentLibraryContents({ query, onQueryChange, category, onCategoryChange, inputRef, kindNames, pendingKind, onSelect }: ComponentLibraryContentsProps) {
+  const filteredPalette = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    const shortcutQuery = query.trim().match(/^key:(.+)$/i)?.[1].trim()
+    const categoryKinds = componentCategoryKinds[category]
+    return componentPaletteItems.filter(({ kind }) => {
+      if (!normalizedQuery && !categoryKinds.includes(kind)) return false
+      if (!normalizedQuery) return true
+      if (shortcutQuery !== undefined) return COMPONENT_SHORTCUTS[kind] === shortcutQuery
+      const definition = componentDefinitionFor(kind)
+      return `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind] ?? kind} ${definition.paletteSubtitle ?? ''}`.toLowerCase().includes(normalizedQuery)
+    })
+  }, [category, kindNames, query])
+
+  return <>
+    <div className="panel-heading"><div><span className="eyebrow">DESIGN</span><h2>Components</h2></div><span className="library-count" aria-label={`${filteredPalette.length} components shown`}>{filteredPalette.length}</span></div>
+    <label className="search-box"><Search size={15}/><input ref={inputRef} aria-label="Find a component" placeholder="Find a component or key:r" value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && filteredPalette[0]) { event.preventDefault(); onSelect(filteredPalette[0].kind); inputRef.current?.blur() } }}/>{query ? <button type="button" aria-label="Clear component search" onClick={() => { onQueryChange(''); inputRef.current?.focus() }}><X size={13}/></button> : <kbd>/</kbd>}</label>
+    <div className="library-categories" role="group" aria-label="Component category">
+      <button className={`category${category === 'basics' ? ' active' : ''}`} aria-pressed={category === 'basics'} onClick={() => onCategoryChange('basics')}><Zap size={14}/> Basics</button>
+      <button className={`category${category === 'semiconductors' ? ' active' : ''}`} aria-pressed={category === 'semiconductors'} onClick={() => onCategoryChange('semiconductors')}><Waypoints size={14}/> Semiconductors</button>
+      <button className={`category${category === 'controlled' ? ' active' : ''}`} aria-pressed={category === 'controlled'} onClick={() => onCategoryChange('controlled')}><Activity size={14}/> Controlled sources</button>
+    </div>
+    <div className="component-list-label">{query ? `${filteredPalette.length} SEARCH RESULTS` : category === 'basics' ? 'BASIC COMPONENTS' : category === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
+    {filteredPalette.length ? <ComponentPalette items={filteredPalette} pendingKind={pendingKind} onSelect={onSelect}/> : <div className="component-empty" role="status">No components found for “{query}”.</div>}
+  </>
 })
