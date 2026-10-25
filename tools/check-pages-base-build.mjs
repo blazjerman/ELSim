@@ -24,6 +24,12 @@ assert.match(html, /src="\/ELSim\/assets\/index-[^"]+\.js"/)
 assert.match(html, /href="\/ELSim\/manifest\.webmanifest"/)
 assert.match(html, /href="\/ELSim\/icon\.svg"/)
 
+const manifest = JSON.parse(await readFile(path.join(output, 'manifest.webmanifest'), 'utf8'))
+const manifestUrl = new URL(`${base}manifest.webmanifest`, 'https://pages.example.test')
+assert.equal(new URL(manifest.start_url, manifestUrl).pathname, base, 'PWA start URL must open at the project base path')
+assert.equal(new URL(manifest.scope, manifestUrl).pathname, base, 'PWA scope must remain inside the project base path')
+assert.equal(new URL(manifest.icons[0].src, manifestUrl).pathname, `${base}icon.svg`, 'PWA icon must resolve under the project base path')
+
 const assetFiles = await readdir(path.join(output, 'assets'))
 const mainEntry = html.match(/src="[^\"]*\/assets\/(index-[^\"]+\.js)"/)?.[1]
 const mainBundle = mainEntry && assetFiles.includes(mainEntry) ? mainEntry : undefined
@@ -38,4 +44,4 @@ assert.ok(worker.includes(JSON.stringify(base)) && worker.includes('engine/ngspi
 const serviceWorker = await readFile(path.join(output, 'sw.js'), 'utf8')
 assert.ok(serviceWorker.includes('./index.html') && serviceWorker.includes('./manifest.webmanifest'), 'offline shell paths must be relative to the service worker scope')
 
-console.log('✔ GitHub Pages /ELSim/ build uses base-aware app, worker, WASM, and service-worker URLs')
+console.log('✔ Local /ELSim/ build uses base-aware app, worker, WASM, service worker, and PWA manifest URLs')
