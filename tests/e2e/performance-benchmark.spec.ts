@@ -48,17 +48,17 @@ async function stopDomMutationCapture(page: import('@playwright/test').Page) {
 
 async function startScrubFrameCapture(page: import('@playwright/test').Page, slider: import('@playwright/test').Locator) {
   await slider.evaluate((element) => {
-    type Capture = { inputAt: number | null; mutationAt: number | null; frame1At: number | null; frame2At: number | null; observer: MutationObserver }
+    type Capture = { inputAt: number | null; mutationAt: number | null; raf1At: number | null; raf2At: number | null; observer: MutationObserver }
     const captureWindow = window as Window & { __elsimScrubCapture?: Capture }
-    const capture: Capture = { inputAt: null, mutationAt: null, frame1At: null, frame2At: null, observer: new MutationObserver(() => {
+    const capture: Capture = { inputAt: null, mutationAt: null, raf1At: null, raf2At: null, observer: new MutationObserver(() => {
       if (capture.inputAt !== null && capture.mutationAt === null) capture.mutationAt = performance.now()
     }) }
     capture.observer.observe(document.body, { attributes: true, childList: true, characterData: true, subtree: true })
     element.addEventListener('input', () => {
       capture.inputAt = performance.now()
       requestAnimationFrame(() => {
-        capture.frame1At = performance.now()
-        requestAnimationFrame(() => { capture.frame2At = performance.now() })
+      capture.raf1At = performance.now()
+      requestAnimationFrame(() => { capture.raf2At = performance.now() })
       })
     }, { once: true })
     captureWindow.__elsimScrubCapture = capture
@@ -68,7 +68,7 @@ async function startScrubFrameCapture(page: import('@playwright/test').Page, sli
 async function stopScrubFrameCapture(page: import('@playwright/test').Page) {
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   return page.evaluate(() => {
-    type Capture = { inputAt: number | null; mutationAt: number | null; frame1At: number | null; frame2At: number | null; observer: MutationObserver }
+    type Capture = { inputAt: number | null; mutationAt: number | null; raf1At: number | null; raf2At: number | null; observer: MutationObserver }
     const captureWindow = window as Window & { __elsimScrubCapture?: Capture }
     const capture = captureWindow.__elsimScrubCapture
     if (!capture) return null
@@ -76,8 +76,8 @@ async function stopScrubFrameCapture(page: import('@playwright/test').Page) {
     delete captureWindow.__elsimScrubCapture
     return {
       inputToMutationMs: capture.inputAt === null || capture.mutationAt === null ? null : Number((capture.mutationAt - capture.inputAt).toFixed(2)),
-      inputToNextFrameMs: capture.inputAt === null || capture.frame1At === null ? null : Number((capture.frame1At - capture.inputAt).toFixed(2)),
-      inputToSecondFrameMs: capture.inputAt === null || capture.frame2At === null ? null : Number((capture.frame2At - capture.inputAt).toFixed(2)),
+      inputToFirstRafMs: capture.inputAt === null || capture.raf1At === null ? null : Number((capture.raf1At - capture.inputAt).toFixed(2)),
+      inputToSecondRafMs: capture.inputAt === null || capture.raf2At === null ? null : Number((capture.raf2At - capture.inputAt).toFixed(2)),
     }
   })
 }
@@ -88,7 +88,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the animation benchmark').toEqual([])
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
-  await page.goto('/')
+  await page.goto('/?profile-animation')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await expect(page.locator('.project-title')).toHaveText('RC step response')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
@@ -185,6 +185,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   const fittedInitialReading = await lastResistor.locator(':scope > title').textContent()
   const lastResistorGlowAtHome = await lastResistor.locator('[data-resistor-power-glow]').getAttribute('opacity')
   const fittedGlowBefore = await page.locator('[data-resistor-power-glow]').first().getAttribute('opacity')
+  await page.evaluate(() => { (window as Window & { __elsimAnimationProfile?: { calls: number; totalMs: number; maxMs: number } }).__elsimAnimationProfile = { calls: 0, totalMs: 0, maxMs: 0 } })
   await startDomMutationCapture(page)
   await startScrubFrameCapture(page, slider)
   const fullCanvasStarted = performance.now()
@@ -201,6 +202,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   const fullCanvasScrubMs = performance.now() - fullCanvasStarted
   const fullCanvasMutations = await stopDomMutationCapture(page)
   const fullCanvasFrames = await stopScrubFrameCapture(page)
+  const animationCallbackProfile = await page.evaluate(() => (window as Window & { __elsimAnimationProfile?: { calls: number; totalMs: number; maxMs: number } }).__elsimAnimationProfile)
   const resistorReadoutsAtEnd = new Map<string, string>()
   for (const id of ['animation-bench-r-1', 'animation-bench-r-250', 'animation-bench-r-500']) {
     const part = page.locator(`svg.schematic .circuit-part[data-part-id="${id}"]`)
@@ -214,7 +216,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
     await expect(part.locator(':scope > title')).not.toHaveText(resistorReadoutsAtEnd.get(id) ?? '')
   }
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v7', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), changedGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasFrames }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v8', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, uninspectedReadoutCount, inspectedReadoutCount, componentsAfterFit: fittedComponentCount, animatedResistorCount: await animatedResistors.count(), resistorGlowCount: await page.locator('svg.schematic [data-resistor-power-glow]').count(), changedGlowCount, glowValueCountAfterScrub, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, fittedGlowBefore, fittedGlowAfter, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasFrames, animationCallbackProfile }, null, 2))
 })
 
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {

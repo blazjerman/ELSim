@@ -475,6 +475,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
   const partsById = useMemo(() => new Map(parts.map((part) => [part.id, part])), [parts])
   useEffect(() => {
     if (!animationEnabled) return
+    const profileAnimation = import.meta.env.DEV && new URLSearchParams(window.location.search).has('profile-animation')
     // Hundreds of non-inspected resistors otherwise each subscribe and
     // reconcile their full SVG subtree on every cursor frame. Keep their
     // nodes in React, but apply only the changing power/polarity attributes
@@ -490,6 +491,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
       markers: Array.from(group.querySelectorAll<SVGTextElement>('[data-live-current-polarity]')),
     })).filter((entry): entry is typeof entry & { part: Part } => entry.part !== undefined)
     const updateResistorAnimation = () => {
+      const profileStartedAt = profileAnimation ? performance.now() : 0
       const sampleIndex = getSimulationCursor()
       for (const { part, glow, markers } of animatedResistors) {
         const { voltage, current } = componentSample(part, sampleIndex)
@@ -512,6 +514,14 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
             else marker.setAttribute('aria-hidden', ariaHidden)
           }
         }
+      }
+      if (profileAnimation) {
+        const elapsed = performance.now() - profileStartedAt
+        const profileWindow = window as Window & { __elsimAnimationProfile?: { calls: number; totalMs: number; maxMs: number } }
+        const profile = profileWindow.__elsimAnimationProfile ??= { calls: 0, totalMs: 0, maxMs: 0 }
+        profile.calls += 1
+        profile.totalMs += elapsed
+        profile.maxMs = Math.max(profile.maxMs, elapsed)
       }
     }
     updateResistorAnimation()
