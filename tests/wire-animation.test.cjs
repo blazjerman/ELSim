@@ -73,6 +73,24 @@ test('wire playback keeps dash phase while simulation samples update', () => {
   }
 })
 
+test('wire direction reversal changes motion without resetting its phase', () => {
+  const config = { key: 'reversing-wire', magnitude: 0.001, forward: true, dotSize: 2, dotSpacing: 12 }
+  const start = 4
+  const afterForward = advanceWireAnimationPhase(start, config, 1000 / 60)
+  const afterReverse = advanceWireAnimationPhase(afterForward, { ...config, forward: false }, 1000 / 60)
+  assert.ok(Math.abs(afterReverse - start) < 1e-9,
+    `reversing equal current should retrace the same dot phase (got ${start} → ${afterForward} → ${afterReverse})`)
+})
+
+test('wire animation caps a long frame stall instead of teleporting dots', () => {
+  const config = { key: 'stalled-wire', magnitude: 0.001, forward: true, dotSize: 2, dotSpacing: 12 }
+  assert.equal(
+    advanceWireAnimationPhase(0, config, 500),
+    advanceWireAnimationPhase(0, config, 50),
+    'a long blocked frame must advance by at most the 50 ms animation delta cap',
+  )
+})
+
 test('wire animation speed is directly proportional to solved current', () => {
   const previousWindow = global.window
   const previousRequest = global.requestAnimationFrame
