@@ -19,7 +19,7 @@ const testFiles = [
   'hierarchy.test.cjs', 'example-path.test.cjs', 'ngspice-wasm-parity.test.mjs', 'plot.test.cjs',
   'fourier.test.cjs', 'simulation-presets.test.cjs', 'ngspice-release-check.test.mjs',
   'ngspice-link-inventory.test.mjs', 'ngspice-xspice-config.test.mjs', 'desktop-preflight.test.mjs',
-  'test-runner-selection.test.cjs',
+  'desktop-project-file-flow.test.cjs', 'test-runner-selection.test.cjs',
 ]
 const args = process.argv.slice(2)
 const listOnly = args.includes('--list')
