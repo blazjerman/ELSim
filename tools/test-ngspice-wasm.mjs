@@ -100,7 +100,7 @@ for (const fixture of selectedFixtures) {
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
   if (fixture === 'punctuated-subckt-name-op') {
-    for (const output of ['out1', 'out2', 'out3', 'out4', 'out5']) {
+    for (const output of ['out1', 'out2', 'out3', 'out4', 'out5', 'out6']) {
       assert.match(wasmResult.stdout, new RegExp(`v\\(${output}\\)\\s*=\\s*5\\.000000e\\+00`, 'i'), `${output}: the punctuation-bearing subcircuit should resolve and produce 5 V`)
     }
     assert.doesNotMatch(wasmResult.stderr, /can't find model|unknown model|model type mismatch/i)
@@ -108,7 +108,7 @@ for (const fixture of selectedFixtures) {
     continue
   }
   if (fixture === 'model-name-punctuation-op') {
-    assert.match(wasmResult.stdout, /v\(out\)\s*=\s*5\.904033e-01/i, 'all punctuation-bearing model names should resolve to diode models in native ngspice')
+    assert.match(wasmResult.stdout, /v\(out\)\s*=\s*5\.859663e-01/i, 'all punctuation-bearing model names should resolve to diode models in native ngspice')
     assert.doesNotMatch(wasmResult.stderr, /can't find model|unknown model|model type mismatch/i)
     process.stdout.write('PASS model-name-punctuation-op: ngspice resolved model names containing !, #, $, %, and brackets\n')
     continue

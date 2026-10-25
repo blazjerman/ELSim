@@ -109,7 +109,7 @@ export function isValidSpiceSubcircuitPinName(value: string): boolean {
   return isValidSpiceNodeName(value) && value !== '0' && !/^gnd$/i.test(value)
 }
 /** Native ngspice model identifiers may contain punctuation and slash (for example LF356/NS). */
-const spiceModelNameCharacter = String.raw`(?:[A-Za-z0-9_!#$%.-]|\[[A-Za-z0-9_]+\])`
+const spiceModelNameCharacter = String.raw`(?:[A-Za-z0-9_!#$%.-]|\[[A-Za-z0-9_!#$%.-]+\])`
 const spiceModelNameSegment = String.raw`[A-Za-z0-9_]${spiceModelNameCharacter}*`
 const spiceModelNamePattern = `${spiceModelNameSegment}(?:/${spiceModelNameSegment})*`
 export function isValidSpiceModelName(value: string, allowLeadingDigit = false): boolean {

@@ -1059,7 +1059,7 @@ test('accepts hyphens inside ngspice model and subcircuit identifiers', () => {
 })
 
 test('accepts native ngspice punctuation in model identifiers', () => {
-  const names = ['D!TEST', 'D#TEST', 'D$TEST', 'D%TEST', 'D[1]']
+  const names = ['D!TEST', 'D#TEST', 'D$TEST', 'D%TEST', 'D[1]', 'D[!#$%]']
   for (const name of names) {
     assert.equal(isValidSpiceModelName(name), true, `${name} should be a valid native model identifier`)
     assert.equal(isValidSpiceModelName(name, true), true, `${name} should be a valid device-model reference`)
@@ -1077,7 +1077,7 @@ test('accepts native ngspice punctuation in model identifiers', () => {
   assert.deepEqual(report.missing, [])
   assert.deepEqual(report.resolved.map(({ modelName }) => modelName), names)
 
-  const subcircuitNames = ['AMP!CORE', 'AMP#CORE', 'AMP$CORE', 'AMP%CORE', 'AMP[1]']
+  const subcircuitNames = ['AMP!CORE', 'AMP#CORE', 'AMP$CORE', 'AMP%CORE', 'AMP[1]', 'AMP[!#$%]']
   const implementations = subcircuitNames.map((name) => `.SUBCKT ${name} IN OUT\nE1 OUT 0 IN 0 1\n.ENDS ${name}`).join('\n')
   const wrapper = `.SUBCKT WRAPPER IN OUT\n${subcircuitNames.map((name, index) => `X${index + 1} IN OUT ${name}`).join('\n')}\n.ENDS WRAPPER`
   const parsedSubcircuits = parseSubcircuitLibrary(`${implementations}\n${wrapper}`)

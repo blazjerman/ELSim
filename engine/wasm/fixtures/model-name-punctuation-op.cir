@@ -6,11 +6,13 @@ D2 out 0 D#TEST
 D3 out 0 D$TEST
 D4 out 0 D%TEST
 D5 out 0 D[1]
+D6 out 0 D[!#$%]
 .model D!TEST D (IS=1e-14 N=1)
 .model D#TEST D (IS=1e-14 N=1)
 .model D$TEST D (IS=1e-14 N=1)
 .model D%TEST D (IS=1e-14 N=1)
 .model D[1] D (IS=1e-14 N=1)
+.model D[!#$%] D (IS=1e-14 N=1)
 .control
 op
 print v(out)
