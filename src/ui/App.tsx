@@ -3459,6 +3459,7 @@ export default function App() {
                 {exampleLesson.id === 'common-emitter' && <BeginnerPrediction kind="common-emitter-phase"/>}
                 {exampleLesson.id === 'common-source' && <BeginnerPrediction kind="common-source-phase"/>}
                 {exampleLesson.id === 'cmos-inverter' && <BeginnerPrediction kind="cmos-inverter"/>}
+                {exampleLesson.id === 'opamp-buffer' && <BeginnerPrediction kind="opamp-buffer" key={`${partsById.get('educational-opamp-vin')?.value ?? ''}:${partsById.get('educational-opamp-rload')?.value ?? ''}`} inputValue={partsById.get('educational-opamp-vin')?.value ?? ''} loadResistanceValue={partsById.get('educational-opamp-rload')?.value ?? ''}/>}
                 {exampleLesson.id === 'ohms-law' && <BeginnerPrediction kind="ohms-law" key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`} supplyValue={partsById.get('ohms-law-v1')?.value ?? ''} resistanceValue={partsById.get('ohms-law-r1')?.value ?? ''}/>}
                 {exampleLesson.id === 'current-source' && <BeginnerPrediction kind="current-source" key={`${partsById.get('isource-i1')?.value ?? ''}:${partsById.get('isource-r1')?.value ?? ''}`} currentValue={partsById.get('isource-i1')?.value ?? ''} resistanceValue={partsById.get('isource-r1')?.value ?? ''}/>}
                 {exampleLesson.id === 'diode-polarity' && <BeginnerPrediction kind="diode-polarity" key={partsById.get('diode-polarity-v1')?.value ?? ''} supplyValue={partsById.get('diode-polarity-v1')?.value ?? ''}/>}

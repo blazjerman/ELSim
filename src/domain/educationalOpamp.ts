@@ -1,11 +1,14 @@
 /** Original ELSim teaching model shared by the import example and its source fixture. */
+export const educationalOpampOpenLoopGain = 100_000
+export const educationalOpampOutputResistanceOhms = 50
+
 export const educationalOpampLibrary = `* ELSim-authored educational macromodel; not a physical op-amp model.
 * Five SPICE pins are ordered INP INM VPOS VNEG OUT.
 * Models finite open-loop gain and output resistance with ideal rail clamps.
 * It omits bandwidth, slew rate, bias/offset currents, and device protection.
 .SUBCKT ELSIM_EDU_OPAMP INP INM VPOS VNEG OUT
-EGAIN NDRIVE 0 INP INM 100000
-ROUT NDRIVE OUT 50
+EGAIN NDRIVE 0 INP INM ${educationalOpampOpenLoopGain}
+ROUT NDRIVE OUT ${educationalOpampOutputResistanceOhms}
 DHI OUT VPOS DCLAMP
 DLO VNEG OUT DCLAMP
 .MODEL DCLAMP D(Is=1e-14 N=1)

@@ -1,6 +1,7 @@
 import type { ExampleId } from './ExamplesDialog'
 import { componentCurrentVector } from '../domain/probe'
 import { componentMagnitude } from '../domain/componentValue'
+import { educationalOpampOpenLoopGain, educationalOpampOutputResistanceOhms } from '../domain/educationalOpamp'
 import type { Project } from '../domain/project'
 import type { SimulationResult, Trace } from '../engine/contract'
 
@@ -19,6 +20,10 @@ function formatLessonCapacitance(capacitanceF: number): string {
 
 function formatLessonVoltage(voltage: number): string {
   return `${Number(voltage.toPrecision(4))} V`
+}
+
+function formatLessonMicrovolts(microvolts: number): string {
+  return `${Number(microvolts.toPrecision(3))} µV`
 }
 
 function formatLessonCurrent(milliamps: number): string {
@@ -114,7 +119,7 @@ transformer: { title: 'A transformer changes AC voltage', guidance: 'Before runn
 'imported-opamp': { title: 'Inspect and simulate a user IC', guidance: 'This five-pin op-amp is an imported subcircuit model. Inspect XU1 to see the declared pin order, then run the operating point: the 0.5 V input and 2:1 feedback network produce about 1.5 V at VOUT. This original teaching model omits bandwidth, slew rate, and input bias; it is not a physical device model.' },
 'inverting-opamp': { title: 'Negative feedback reverses and scales the input', guidance: 'Run the operating point and compare V(VIN) with V(VOUT). With the non-inverting input grounded, 10 kΩ at the input, and 20 kΩ in feedback, the gain is −RF/RIN = −2, so 0.5 V becomes about −1 V. Inspect V(FB) to see feedback hold the inverting input near 0 V. After the solve, try increasing RF to 40 kΩ and compare the predicted −2 V with ngspice. U1 uses ELSim’s built-in idealized teaching model; it is not a specific IC and omits bandwidth, slew rate, offset, and noise.' },
 'noninverting-opamp': { title: 'Positive gain without reversing the input', guidance: 'Run the operating point and compare V(VIN) with V(VOUT). The non-inverting input follows VIN; the 20 kΩ feedback resistor and 10 kΩ resistor to ground set gain = 1 + RF/RG = 3, so 0.5 V becomes about 1.5 V. Change RF to 40 kΩ and rerun: the output should rise to about 2.5 V. U1 uses ELSim’s built-in idealized teaching model; it is not a specific IC and omits bandwidth, slew rate, offset, and noise.' },
- 'opamp-buffer': { title: 'Use feedback to make a voltage follower', guidance: 'U1’s output is connected directly to its inverting input, while VIN drives the non-inverting input. Negative feedback makes the output follow the input; compare V(VIN) and V(VOUT) in the operating-point results. RLOAD is a 10 kΩ load. This built-in model has finite gain and output resistance but omits bandwidth, slew rate, offset, and noise; it is an educational model, not a specific IC.' },
+ 'opamp-buffer': { title: 'Use feedback to make a voltage follower', guidance: 'U1’s output is connected directly to its inverting input, while VIN drives the non-inverting input. Before running, estimate VOUT below. Then compare V(VIN) and V(VOUT) in the operating-point results. Change RLOAD from 10 kΩ to 10 Ω and run again to make the small load-dependent output shortfall easier to see. This built-in teaching model has finite gain and output resistance but omits bandwidth, slew rate, offset, and noise; it also has no output-current limit and is not a specific IC.' },
 'common-emitter': { title: 'A transistor amplifier inverts its input', guidance: 'Run the AC sweep and compare V(VIN) with V(VOUT). RBIAS1 and RBIAS2 set Q1’s DC base voltage, while RE stabilizes its operating point. RC converts changing collector current into an output voltage; the output is amplified and about 180° out of phase in the midband. The built-in NPN model is an approximate teaching model.' },
 'common-source': { title: 'An NMOS amplifier inverts its input', guidance: 'Run the AC sweep and compare V(VIN) with V(VOUT). RBIAS1 and RBIAS2 set the gate’s DC bias; the gate draws almost no steady current. RD converts drain-current changes into a voltage at DRAIN, and COUT couples that signal to the load. The common-source output is amplified and about 180° out of phase in the midband. The built-in Level 1 MOSFET model is an approximate teaching model.' },
 'cmos-inverter': { title: 'Two MOSFETs make a CMOS inverter', guidance: 'The PMOS connects VOUT toward VDD when VIN is low; the NMOS connects VOUT toward ground when VIN is high. Their gates share VIN and their drains share VOUT, so the pair reverses the input logic level. Run the transient and compare VIN with VOUT. These built-in Level 1 devices are simplified teaching models; the circuit does not model switching delay, power-on behavior, or a foundry CMOS process.' },
@@ -151,6 +156,16 @@ function transientVoltageAt(trace: Trace | undefined, timeSeconds: number): numb
 
 export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, partsById: ReadonlyMap<string, Project['parts'][number]>, initialConditions: Project['simulation']['initialConditions'], simulationResult: SimulationResult | null, simulationResultStale: boolean, rlcResonancePeak: ResonancePeak): string | null {
   const lessonId = exampleLesson.id
+  const opampBufferInput = lessonId === 'opamp-buffer' ? componentMagnitude(partsById.get('educational-opamp-vin')?.value ?? '1 V', 'source') : null
+  const opampBufferLoad = lessonId === 'opamp-buffer' ? componentMagnitude(partsById.get('educational-opamp-rload')?.value ?? '10 kΩ', 'resistor') : null
+  const opampBufferPrediction = opampBufferInput !== null && opampBufferLoad !== null && opampBufferLoad > 0
+    ? opampBufferInput * educationalOpampOpenLoopGain * opampBufferLoad / (educationalOpampOutputResistanceOhms + opampBufferLoad + educationalOpampOpenLoopGain * opampBufferLoad)
+    : null
+  const opampBufferComparisonLoad = opampBufferLoad !== null && opampBufferLoad <= 10 ? 10_000 : 10
+  const opampBufferComparisonPrediction = opampBufferInput !== null
+    ? opampBufferInput * educationalOpampOpenLoopGain * opampBufferComparisonLoad / (educationalOpampOutputResistanceOhms + opampBufferComparisonLoad + educationalOpampOpenLoopGain * opampBufferComparisonLoad)
+    : null
+  const opampBufferSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const ohmsLawSupply = lessonId === 'ohms-law' ? componentMagnitude(partsById.get('ohms-law-v1')?.value ?? '5 V', 'source') : null
   const ohmsLawResistance = lessonId === 'ohms-law' ? componentMagnitude(partsById.get('ohms-law-r1')?.value ?? '1 kΩ', 'resistor') : null
   const ohmsLawPredictedCurrent = ohmsLawSupply !== null && ohmsLawResistance !== null && ohmsLawResistance > 0 ? ohmsLawSupply / ohmsLawResistance : null
@@ -707,7 +722,13 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const voltageSwitchPredictedClosed = voltageSwitchThreshold !== null && voltageSwitchHysteresis !== null && voltageSwitchControlAt25Ms !== undefined
     ? voltageSwitchControlAt25Ms >= voltageSwitchThreshold + voltageSwitchHysteresis / 2
     : undefined
-  const lessonNextStep = lessonId === 'lc-energy' && simulationResult?.analysis === 'tran'
+  const lessonNextStep = lessonId === 'opamp-buffer' && simulationResult?.analysis === 'op'
+    ? opampBufferPrediction !== null
+      ? simulationResultStale
+        ? `The previous operating point solved VOUT = ${opampBufferSolvedOutput !== undefined ? formatLessonVoltage(opampBufferSolvedOutput) : 'not available'}. With VIN = ${formatLessonVoltage(opampBufferInput!)} and RLOAD = ${formatLessonResistance(opampBufferLoad!)}, the teaching model predicts ${formatLessonVoltage(opampBufferPrediction)}; rerun to check the edited circuit.`
+        : `With VIN = ${formatLessonVoltage(opampBufferInput!)} and RLOAD = ${formatLessonResistance(opampBufferLoad!)}, the model predicts VOUT = ${formatLessonVoltage(opampBufferPrediction)}${opampBufferSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(opampBufferSolvedOutput)}` : ''}. The predicted output is ${formatLessonMicrovolts(Math.abs(opampBufferInput! - opampBufferPrediction) * 1e6)} below VIN. Change RLOAD to ${formatLessonResistance(opampBufferComparisonLoad)} and rerun; the model predicts a ${Math.abs(opampBufferInput! - opampBufferComparisonPrediction!) > Math.abs(opampBufferInput! - opampBufferPrediction) ? 'larger' : 'smaller'} shortfall of ${formatLessonMicrovolts(Math.abs(opampBufferInput! - opampBufferComparisonPrediction!) * 1e6)}. This effect comes from its ${educationalOpampOutputResistanceOhms} Ω output resistance together with finite open-loop gain ${educationalOpampOpenLoopGain.toLocaleString()}; this simplified model does not include output-current limiting.`
+      : 'Enter a numeric VIN and a positive RLOAD, then rerun the operating point to compare VOUT.'
+    : lessonId === 'lc-energy' && simulationResult?.analysis === 'tran'
     ? lcEnergyIdealPeakCurrentMa !== null && lcEnergySolvedPeakCurrentMa !== undefined
       ? simulationResultStale
         ? `The previous transient reached |I(L1)| = ${formatLessonCurrent(lcEnergySolvedPeakCurrentMa)}. The edited values predict an ideal peak of ${formatLessonCurrent(lcEnergyIdealPeakCurrentMa)} before resistor losses; rerun to compare the new result.`

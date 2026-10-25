@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { componentMagnitude, parsePredictionValue, type PredictionUnit } from '../domain/componentValue'
+import { educationalOpampOpenLoopGain, educationalOpampOutputResistanceOhms } from '../domain/educationalOpamp'
 
 type NumericPredictionProps = {
   id: string
@@ -143,6 +144,25 @@ export function RectifierPeakPrediction({ offsetValue, amplitudeValue }: { offse
     unit="V"
     predictedValue={outputPeak}
     absoluteTolerance={0.15}
+    explanation={explanation}
+  />
+}
+
+export function OpampBufferPrediction({ inputValue, loadResistanceValue }: { inputValue: string; loadResistanceValue: string }) {
+  const input = componentMagnitude(inputValue, 'source')
+  const load = componentMagnitude(loadResistanceValue, 'resistor')
+  const predictedOutput = input !== null && load !== null && load > 0
+    ? input * educationalOpampOpenLoopGain * load / (educationalOpampOutputResistanceOhms + load + educationalOpampOpenLoopGain * load)
+    : null
+  const explanation = predictedOutput === null
+    ? 'Use a numeric input voltage and a positive load resistance to check this estimate.'
+    : `The model has open-loop gain ${educationalOpampOpenLoopGain.toLocaleString()} and 50 Ω output resistance. Feedback makes VOUT nearly equal VIN, but its finite gain and load cause a small shortfall: the model predicts ${formatValue(predictedOutput)} V. Real op-amps also have bandwidth, slew rate, offset, and other effects that this teaching model omits.`
+  return <NumericPrediction
+    id="opamp-buffer-output-prediction"
+    prompt={`Before running, estimate VOUT for VIN = ${input === null ? 'invalid' : `${formatValue(input)} V`} and RLOAD = ${load === null ? 'invalid' : formatResistance(load)}`}
+    unit="V"
+    predictedValue={predictedOutput}
+    absoluteTolerance={0.01}
     explanation={explanation}
   />
 }
@@ -758,7 +778,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'transformer-voltage' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors' | 'common-source-phase' | 'common-emitter-phase' | 'cmos-inverter'
+  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'transformer-voltage' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors' | 'common-source-phase' | 'common-emitter-phase' | 'cmos-inverter' | 'opamp-buffer'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -787,6 +807,7 @@ type BeginnerPredictionProps = {
   frequencyValue?: string
   referenceResistanceValue?: string
   turnsRatioValue?: string
+  inputValue?: string
 }
 
 /** Keep lesson-only prediction logic out of the editor's initial download. */
@@ -800,6 +821,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'common-source-phase': return <CommonSourcePhasePrediction/>
     case 'common-emitter-phase': return <CommonEmitterPhasePrediction/>
     case 'cmos-inverter': return <CmosInverterPrediction/>
+    case 'opamp-buffer': return <OpampBufferPrediction inputValue={props.inputValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'diode-polarity': return <DiodePolarityPrediction supplyValue={props.supplyValue ?? ''}/>
