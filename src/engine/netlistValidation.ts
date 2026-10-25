@@ -243,19 +243,21 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     if (stop === null || stop <= 0 || (start !== null && stop <= start)) add('acStopFrequency', 'Stop frequency must be greater than the start frequency.')
   } else if (project.simulation.analysis === 'dc') {
     const sweep = project.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
-    const source = independentSources.find((part) => part.ref.toLowerCase() === sweep.source.toLowerCase())
-    if (!source) add('dcSource', 'Choose an existing independent voltage or current source.')
-    const quantity = source?.kind === 'currentSource' ? 'current' : 'voltage'
-    const quantityName = quantity === 'current' ? 'current' : 'voltage'
-    const unit = quantity === 'current' ? 'A' : 'V'
+    const temperatureSweep = sweep.source.toLowerCase() === 'temp'
+    const source = temperatureSweep ? undefined : independentSources.find((part) => part.ref.toLowerCase() === sweep.source.toLowerCase())
+    if (!source && !temperatureSweep) add('dcSource', 'Choose an existing independent voltage or current source, or sweep circuit temperature.')
+    const quantity = temperatureSweep ? 'temperature' : source?.kind === 'currentSource' ? 'current' : 'voltage'
+    const quantityName = temperatureSweep ? 'temperature' : quantity === 'current' ? 'current' : 'voltage'
+    const unit = temperatureSweep ? '°C' : quantity === 'current' ? 'A' : 'V'
     const start = spiceMagnitude(sweep.start, quantity)
     const stop = spiceMagnitude(sweep.stop, quantity)
     const step = spiceMagnitude(sweep.step, quantity)
-    if (start === null) add('dcStart', `Enter a valid start ${quantityName}, such as 0 ${unit}.`)
-    if (stop === null) add('dcStop', `Enter a valid stop ${quantityName}, such as ${quantity === 'current' ? '10 mA' : '5 V'}.`)
-    if (step === null || step === 0) add('dcStep', `Enter a nonzero ${quantityName} step, such as ${quantity === 'current' ? '1 mA' : '0.1 V'}.`)
+    if (start === null || temperatureSweep && start < -273.15) add('dcStart', `Enter a valid start ${quantityName}${temperatureSweep ? ' at or above −273.15 °C' : ''}, such as ${temperatureSweep ? '27 °C' : `0 ${unit}`}.`)
+    if (stop === null || temperatureSweep && stop < -273.15) add('dcStop', `Enter a valid stop ${quantityName}${temperatureSweep ? ' at or above −273.15 °C' : ''}, such as ${temperatureSweep ? '127 °C' : quantity === 'current' ? '10 mA' : '5 V'}.`)
+    if (temperatureSweep && (start !== null && start > 10000 || stop !== null && stop > 10000)) add('dcStop', 'Circuit temperature must not exceed 10000 °C.')
+    if (step === null || step === 0) add('dcStep', `Enter a nonzero ${quantityName} step, such as ${temperatureSweep ? '10 °C' : quantity === 'current' ? '1 mA' : '0.1 V'}.`)
     else if (start !== null && stop !== null && (stop - start) * step < 0) add('dcStep', `Step direction must lead from the start ${quantityName} to the stop ${quantityName}.`)
-    const pointCount = source ? dcSweepPointCount(sweep.start, sweep.stop, sweep.step, source.kind === 'currentSource' ? 'currentSource' : 'source') : null
+    const pointCount = temperatureSweep ? dcSweepPointCount(sweep.start, sweep.stop, sweep.step, 'temperature') : source ? dcSweepPointCount(sweep.start, sweep.stop, sweep.step, source.kind === 'currentSource' ? 'currentSource' : 'source') : null
     if (pointCount !== null && pointCount > MAX_DC_SWEEP_POINTS) add('dcStep', `DC sweep is limited to ${MAX_DC_SWEEP_POINTS.toLocaleString()} points. Increase the step size or narrow the range.`)
   }
   return errors

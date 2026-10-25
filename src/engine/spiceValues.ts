@@ -91,9 +91,15 @@ export function spiceSweepValue(value: string): string | null {
   return spiceScalar(result, '')
 }
 
-export function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage' | 'current'): number | null {
+export function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage' | 'current' | 'temperature'): number | null {
   const explicitElectricalUnit = value.trim().match(/([vVaA])$/)?.[1]?.toLowerCase()
   if (quantity === 'voltage' && explicitElectricalUnit === 'a' || quantity === 'current' && explicitElectricalUnit === 'v') return null
+  if (quantity === 'temperature') {
+    const normalized = value.trim().replace(/\s+/g, '').replace(/°?c$/i, '')
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(normalized)) return null
+    const temperature = Number(normalized)
+    return Number.isFinite(temperature) ? temperature : null
+  }
   const normalized = quantity === 'time' ? spiceTime(value) : quantity === 'frequency' ? spiceFrequency(value) : spiceSweepValue(value)
   const match = normalized?.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
   if (!match) return null

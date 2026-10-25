@@ -25,6 +25,7 @@ fixtures.push('bracketed-subckt-parameter-op')
 fixtures.push('bsim3-bin-family-sweep')
 fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'disto-diode-harmonics', 'disto-diode-intermod', 'behavioral-resistor-op')
 fixtures.push('behavioral-component-current-op', 'behavioral-stochastic-functions-op')
+fixtures.push('temperature-dc-sweep')
 const fixturesWithRawResults = new Set(['pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'current-source-transient-noise-tran'])
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
@@ -118,6 +119,16 @@ for (const fixture of selectedFixtures) {
     const output = realRawVector(wasmResult.raw, 'v(out)')
     assert.ok(output.length > 10, `current-source TRNOISE should produce a transient waveform, got ${output.length} samples`)
     assert.ok(output.some((value) => Math.abs(value - output[0]) > 1e-6), 'current-source TRNOISE should vary the resistor output voltage over time')
+  }
+  if (fixture === 'temperature-dc-sweep') {
+    const points = wasmResult.stdout.match(/\n\s*\d+\s+[-+\d.eE]+\s+[-+\d.eE]+/g) ?? []
+    assert.equal(points.length, 3, `temperature sweep should produce 27 °C, 77 °C, and 127 °C points; output was:\n${wasmResult.stdout}`)
+    const rows = points.map((line) => line.trim().split(/\s+/).map(Number))
+    assert.deepEqual(rows.map((row) => row[1]), [27, 77, 127], `the native sweep should visit the requested temperature coordinates; output was:\n${wasmResult.stdout}`)
+    const outputs = rows.map((row) => row[2])
+    assert.ok(outputs[0] > outputs[1] && outputs[1] > outputs[2], `diode forward voltage should fall as circuit temperature rises, got ${outputs.join(', ')}`)
+    process.stdout.write(`PASS temperature-dc-sweep: diode forward voltage falls from ${outputs[0]} V to ${outputs[2]} V across 27–127 °C\n`)
+    continue
   }
   if (fixture === 'disto-diode-harmonics') {
     const secondHarmonic = Number(wasmResult.stdout.match(/DISTORTION - 2nd harmonic[\s\S]*?\n0\s+1\.000000e\+02\s+([\d.e+-]+)/i)?.[1])

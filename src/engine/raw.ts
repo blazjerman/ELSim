@@ -194,9 +194,10 @@ export function parseAsciiRawFile(text: string, tracesOnly = false): ParsedRawFi
     }
   }
   const axisVector = isDcSweep ? variableRecords[0].name : ''
-  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise || isDisto ? 'Frequency' : isDcSweep ? axisVector : isTransferFunction ? 'Transfer function' : 'Operating point'
+  const temperatureSweep = isDcSweep && /^temp(?:-sweep)?$/i.test(axisVector)
+  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise || isDisto ? 'Frequency' : temperatureSweep ? 'Temperature' : isDcSweep ? axisVector : isTransferFunction ? 'Transfer function' : 'Operating point'
   const sweepType = variableRecords[0].type.toLowerCase()
-  const axisUnit = hasTimeAxis ? 's' : isFrequency || isNoise || isDisto ? 'Hz' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
+  const axisUnit = hasTimeAxis ? 's' : isFrequency || isNoise || isDisto ? 'Hz' : temperatureSweep ? '°C' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
   if (isDcSweep && variables[0]) variables[0].values.set(axis)
   const retainedVariables = variables.filter((variable): variable is RawVariable => variable !== undefined)
   return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isPoleZero ? 'pz' : isSensitivity ? 'sens' : isDisto ? 'disto' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : isTransferFunction ? 'tf' : 'op', axis, variables: tracesOnly ? retainedVariables : retainedVariables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
@@ -294,9 +295,10 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
     }
   }
   const axisVector = isDcSweep ? variableRecords[0].name : ''
-  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise || isDisto ? 'Frequency' : isDcSweep ? axisVector : isTransferFunction ? 'Transfer function' : 'Operating point'
+  const temperatureSweep = isDcSweep && /^temp(?:-sweep)?$/i.test(axisVector)
+  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise || isDisto ? 'Frequency' : temperatureSweep ? 'Temperature' : isDcSweep ? axisVector : isTransferFunction ? 'Transfer function' : 'Operating point'
   const sweepType = variableRecords[0].type.toLowerCase()
-  const axisUnit = hasTimeAxis ? 's' : isFrequency || isNoise || isDisto ? 'Hz' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
+  const axisUnit = hasTimeAxis ? 's' : isFrequency || isNoise || isDisto ? 'Hz' : temperatureSweep ? '°C' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
   if (isDcSweep && variables[0]) variables[0].values.set(axis)
   const parsedVariables = variables.filter((variable): variable is RawVariable => variable !== undefined)
   return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isPoleZero ? 'pz' : isSensitivity ? 'sens' : isDisto ? 'disto' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : isTransferFunction ? 'tf' : 'op', axis, variables: tracesOnly ? parsedVariables : parsedVariables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }

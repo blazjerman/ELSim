@@ -2932,10 +2932,29 @@ test('DC sweep emits a steady source and a validated voltage-source sweep', () =
   assert.match(createNetlistArtifact(project).diagnostics[0].message, /same direction/)
 })
 
+test('DC sweep can use ngspice circuit temperature as its primary variable', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'dc'
+  project.simulation.dcSweep = { source: 'temp', start: '27 °C', stop: '127 °C', step: '10 °C' }
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.dc temp 27 127 10$/m)
+  assert.equal(validateAnalysisSettings(project).some((error) => error.field.startsWith('dc')), false)
+  project.simulation.dcSweep.start = '-274 °C'
+  assert.match(validateAnalysisSettings(project).find((error) => error.field === 'dcStart').message, /−273\.15/)
+  assert.match(createNetlistArtifact(project).diagnostics[0].message, /−273\.15/)
+  project.simulation.dcSweep = { source: 'temp', start: '0', stop: '10000', step: '2' }
+  assert.equal(validateAnalysisSettings(project).some((error) => error.field === 'dcStep'), false)
+  project.simulation.dcSweep.stop = '10001'
+  assert.match(validateAnalysisSettings(project).find((error) => error.field === 'dcStop').message, /10000 °C/)
+})
+
 test('DC sweep point count is bounded consistently in preflight and netlist generation', () => {
   assert.equal(MAX_DC_SWEEP_POINTS, 10_000)
   assert.equal(dcSweepPointCount('0 V', '9999 V', '1 V', 'source'), 10_000)
   assert.equal(dcSweepPointCount('10 mA', '0 A', '-1 µA', 'currentSource'), 10_001)
+  assert.equal(dcSweepPointCount('27 °C', '127 °C', '10 °C', 'temperature'), 11)
+  assert.equal(dcSweepPointCount('-273.15 °C', '10000 °C', '2 °C', 'temperature'), 5_137)
   const project = createStarterProject()
   project.simulation.analysis = 'dc'
   project.simulation.dcSweep = { source: 'V1', start: '0 V', stop: '9999 V', step: '1 V' }

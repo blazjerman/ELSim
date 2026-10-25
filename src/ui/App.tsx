@@ -1447,18 +1447,25 @@ export default function App() {
     return { voltageSources, dcSweepSources, capacitorParts, inductorParts, diodeParts, bjtParts, fetParts }
   }, [project.parts])
   const { voltageSources, dcSweepSources, capacitorParts, inductorParts, diodeParts, bjtParts, fetParts } = partCollections
+  const dcSweepTemperature = (project.simulation.dcSweep?.source ?? 'V1').toLowerCase() === 'temp'
   const activeDcSweepSource = dcSweepSources.find((part) => part.ref.toLowerCase() === (project.simulation.dcSweep?.source ?? 'V1').toLowerCase())
   const dcSweepIsCurrent = activeDcSweepSource?.kind === 'currentSource'
-  const dcSweepUnit = dcSweepIsCurrent ? 'A' : 'V'
-  const dcSweepQuantity = dcSweepIsCurrent ? 'current' : 'voltage'
-  const dcSweepDefaults = dcSweepIsCurrent
+  const dcSweepUnit = dcSweepTemperature ? '°C' : dcSweepIsCurrent ? 'A' : 'V'
+  const dcSweepQuantity = dcSweepTemperature ? 'temperature' : dcSweepIsCurrent ? 'current' : 'voltage'
+  const dcSweepDefaults = dcSweepTemperature
+    ? { source: 'temp', start: '27 °C', stop: '127 °C', step: '10 °C' }
+    : dcSweepIsCurrent
     ? { source: activeDcSweepSource?.ref ?? 'I1', start: '0 A', stop: '10 mA', step: '1 mA' }
     : { source: activeDcSweepSource?.ref ?? 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
   const changeDcSweepSource = (sourceRef: string) => setProject((current) => {
     const previous = dcSweepSources.find((part) => part.ref.toLowerCase() === (current.simulation.dcSweep?.source ?? 'V1').toLowerCase())
     const next = dcSweepSources.find((part) => part.ref.toLowerCase() === sourceRef.toLowerCase())
-    const changedQuantity = Boolean(next && (!previous || (previous.kind === 'currentSource') !== (next.kind === 'currentSource')))
-    const defaults = next?.kind === 'currentSource'
+    const previousQuantity = (current.simulation.dcSweep?.source ?? 'V1').toLowerCase() === 'temp' ? 'temperature' : previous?.kind === 'currentSource' ? 'current' : 'voltage'
+    const nextQuantity = sourceRef.toLowerCase() === 'temp' ? 'temperature' : next?.kind === 'currentSource' ? 'current' : 'voltage'
+    const changedQuantity = previousQuantity !== nextQuantity
+    const defaults = nextQuantity === 'temperature'
+      ? { source: 'temp', start: '27 °C', stop: '127 °C', step: '10 °C' }
+      : next?.kind === 'currentSource'
       ? { source: sourceRef, start: '0 A', stop: '10 mA', step: '1 mA' }
       : { source: sourceRef, start: '0 V', stop: '5 V', step: '0.1 V' }
     const existing = current.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
@@ -3600,10 +3607,10 @@ export default function App() {
               </>
             })()}
             {project.simulation.analysis === 'dc' && <>
-              <label className="field-label">Independent source<select data-analysis-setting="dcSource" aria-invalid={Boolean(analysisSettingError('dcSource'))} value={project.simulation.dcSweep?.source ?? 'V1'} onChange={(event) => changeDcSweepSource(event.target.value)}>{dcSweepSources.map((part) => <option key={part.id} value={part.ref}>{part.ref} ({part.kind === 'source' ? 'voltage' : 'current'})</option>)}</select>{analysisSettingError('dcSource') && <small className="field-error" role="alert">{analysisSettingError('dcSource')}</small>}</label>
+              <label className="field-label">Sweep target<select data-analysis-setting="dcSource" aria-invalid={Boolean(analysisSettingError('dcSource'))} value={project.simulation.dcSweep?.source ?? 'V1'} onChange={(event) => changeDcSweepSource(event.target.value)}><option value="temp">Circuit temperature (°C)</option>{dcSweepSources.map((part) => <option key={part.id} value={part.ref}>{part.ref} ({part.kind === 'source' ? 'voltage' : 'current'})</option>)}</select>{analysisSettingError('dcSource') && <small className="field-error" role="alert">{analysisSettingError('dcSource')}</small>}</label>
               <label className="field-label">{`Start ${dcSweepQuantity} (${dcSweepUnit})`}<input data-analysis-setting="dcStart" aria-invalid={Boolean(analysisSettingError('dcStart'))} aria-describedby={analysisSettingError('dcStart') ? 'analysis-error-dcStart' : undefined} value={project.simulation.dcSweep?.start ?? dcSweepDefaults.start} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, dcSweep: { ...(current.simulation.dcSweep ?? dcSweepDefaults), start: event.target.value } } }))}/>{analysisSettingError('dcStart') && <small id="analysis-error-dcStart" className="field-error" role="alert">{analysisSettingError('dcStart')}</small>}</label>
               <label className="field-label">{`Stop ${dcSweepQuantity} (${dcSweepUnit})`}<input data-analysis-setting="dcStop" aria-invalid={Boolean(analysisSettingError('dcStop'))} aria-describedby={analysisSettingError('dcStop') ? 'analysis-error-dcStop' : undefined} value={project.simulation.dcSweep?.stop ?? dcSweepDefaults.stop} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, dcSweep: { ...(current.simulation.dcSweep ?? dcSweepDefaults), stop: event.target.value } } }))}/>{analysisSettingError('dcStop') && <small id="analysis-error-dcStop" className="field-error" role="alert">{analysisSettingError('dcStop')}</small>}</label>
-              <label className="field-label">{`Step (${dcSweepUnit})`}<input data-analysis-setting="dcStep" aria-invalid={Boolean(analysisSettingError('dcStep'))} aria-describedby={analysisSettingError('dcStep') ? 'analysis-error-dcStep' : undefined} value={project.simulation.dcSweep?.step ?? dcSweepDefaults.step} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, dcSweep: { ...(current.simulation.dcSweep ?? dcSweepDefaults), step: event.target.value } } }))}/>{analysisSettingError('dcStep') && <small id="analysis-error-dcStep" className="field-error" role="alert">{analysisSettingError('dcStep')}</small>}</label><div className="field-hint">Changing between voltage and current sources resets the range to matching units; switching between sources of the same type keeps the range.</div>
+              <label className="field-label">{`Step (${dcSweepUnit})`}<input data-analysis-setting="dcStep" aria-invalid={Boolean(analysisSettingError('dcStep'))} aria-describedby={analysisSettingError('dcStep') ? 'analysis-error-dcStep' : undefined} value={project.simulation.dcSweep?.step ?? dcSweepDefaults.step} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, dcSweep: { ...(current.simulation.dcSweep ?? dcSweepDefaults), step: event.target.value } } }))}/>{analysisSettingError('dcStep') && <small id="analysis-error-dcStep" className="field-error" role="alert">{analysisSettingError('dcStep')}</small>}</label><div className="field-hint">{dcSweepTemperature ? 'Each point solves the circuit at a different global temperature. Per-device TEMP settings override this; DTEMP remains relative to it.' : 'Changing between voltage and current sources resets the range to matching units; switching between sources of the same type keeps the range.'}</div>
             </>}
           </div>
     {(project.simulation.parameterSweeps?.length ?? 0) > 0

@@ -14666,6 +14666,27 @@ test('DC sweep waveform supports source cursor and horizontal wheel zoom without
   expect(draggedRange).toEqual(wheelRange)
 })
 
+test('DC analysis can sweep circuit temperature and label the Celsius coordinate', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.getByLabel('Analysis type').first().selectOption('dc')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByLabel('Sweep target').selectOption('temp')
+  await expect(page.getByLabel('Start temperature (°C)')).toHaveValue('27 °C')
+  await page.getByLabel('Stop temperature (°C)').fill('127 °C')
+  await page.getByLabel('Step (°C)').fill('50 °C')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('.dc temp 27 127 50')
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await openComponentVoltagePlot(page)
+  const plot = page.locator('.plot-window').last()
+  await expect(plot.getByRole('img', { name: /swept response in V/ })).toBeVisible()
+  await expect(plot).toContainText('°C')
+})
+
 test('three-parameter sweep runs all eight bounded cases in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()

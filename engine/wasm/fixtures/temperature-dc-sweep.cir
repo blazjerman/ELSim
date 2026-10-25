@@ -1,0 +1,9 @@
+ELSim native ngspice circuit-temperature sweep
+V1 in 0 5
+R1 in out 1k
+D1 out 0 DTEST
+.model DTEST D(Is=1e-14 N=1)
+.temp 40
+.dc temp 27 127 50
+.print dc v(out)
+.end

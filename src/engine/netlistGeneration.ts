@@ -2183,17 +2183,19 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   } else if (project.simulation.analysis === 'dc') {
     const sweep = project.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
-    const start = spiceSweepValue(sweep.start), stop = spiceSweepValue(sweep.stop), step = spiceSweepValue(sweep.step)
-    const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.source.toLowerCase())
-    const quantity = source?.kind === 'currentSource' ? 'current' : 'voltage'
-    const unit = quantity === 'current' ? 'A' : 'V'
+    const temperatureSweep = sweep.source.toLowerCase() === 'temp'
+    const parseValue = (value: string) => spiceSweepValue(temperatureSweep ? value.trim().replace(/°?c$/i, '') : value)
+    const start = parseValue(sweep.start), stop = parseValue(sweep.stop), step = parseValue(sweep.step)
+    const source = temperatureSweep ? undefined : project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.source.toLowerCase())
+    const quantity = temperatureSweep ? 'temperature' : source?.kind === 'currentSource' ? 'current' : 'voltage'
+    const unit = temperatureSweep ? '°C' : quantity === 'current' ? 'A' : 'V'
     const startMagnitude = spiceMagnitude(sweep.start, quantity), stopMagnitude = spiceMagnitude(sweep.stop, quantity), stepMagnitude = spiceMagnitude(sweep.step, quantity)
-    const pointCount = source ? dcSweepPointCount(sweep.start, sweep.stop, sweep.step, source.kind === 'currentSource' ? 'currentSource' : 'source') : null
-    if (!source || !start || !stop || !step || startMagnitude === null || stopMagnitude === null || stepMagnitude === null || Number(step) === 0 || (Number(stop) - Number(start)) * Number(step) < 0 || pointCount === null || pointCount > MAX_DC_SWEEP_POINTS) {
-      const message = pointCount !== null && pointCount > MAX_DC_SWEEP_POINTS ? `DC sweep is limited to ${MAX_DC_SWEEP_POINTS.toLocaleString()} points; increase the step size or narrow the range.` : `DC sweep needs an existing independent voltage or current source and valid start, stop, and nonzero ${unit} step values in the same direction.`
+    const pointCount = temperatureSweep ? dcSweepPointCount(sweep.start, sweep.stop, sweep.step, 'temperature') : source ? dcSweepPointCount(sweep.start, sweep.stop, sweep.step, source.kind === 'currentSource' ? 'currentSource' : 'source') : null
+    if ((!source && !temperatureSweep) || !start || !stop || !step || startMagnitude === null || stopMagnitude === null || stepMagnitude === null || temperatureSweep && (startMagnitude < -273.15 || stopMagnitude < -273.15 || startMagnitude > 10000 || stopMagnitude > 10000) || Number(step) === 0 || (Number(stop) - Number(start)) * Number(step) < 0 || pointCount === null || pointCount > MAX_DC_SWEEP_POINTS) {
+      const message = pointCount !== null && pointCount > MAX_DC_SWEEP_POINTS ? `DC sweep is limited to ${MAX_DC_SWEEP_POINTS.toLocaleString()} points; increase the step size or narrow the range.` : temperatureSweep ? 'Temperature sweep needs valid Celsius values from −273.15 °C to 10000 °C and a nonzero step in the same direction.' : `DC sweep needs an existing independent voltage or current source and valid start, stop, and nonzero ${unit} step values in the same direction.`
       rows.push(`* ERROR: ${message}`)
       diagnostics.push({ severity: 'error', message, sourceId: source?.id ?? 'analysis:dc', line: rows.length })
-    } else append(`.dc ${source.ref} ${start} ${stop} ${step}`, 'analysis:dc', 'analysis')
+    } else append(`.dc ${temperatureSweep ? 'temp' : source!.ref} ${start} ${stop} ${step}`, 'analysis:dc', 'analysis')
   } else {
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)

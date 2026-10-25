@@ -257,6 +257,19 @@ Values:
   assert.deepEqual([...parsed.axis], [0, 0.01])
 })
 
+test('DC temperature sweep axes are displayed as Celsius in both raw formats', () => {
+  for (const vector of ['temp', 'temp-sweep']) {
+    const header = `Title: Temperature sweep\nPlotname: DC transfer characteristic\nFlags: real\nNo. Variables: 2\nNo. Points: 3\nVariables:\n  0 ${vector} temperature\n  1 v(out) voltage\nValues:`
+    const ascii = `${header}\n 0 27\n 0.69\n 1 77\n 0.60\n 2 127\n 0.52\n`
+    for (const parsed of [parseAsciiRawFile(ascii), parseBinaryRawFile(binaryRaw(header, [27, 0.69, 77, 0.60, 127, 0.52]))]) {
+      assert.equal(parsed.axisLabel, 'Temperature')
+      assert.equal(parsed.axisVector, vector)
+      assert.equal(parsed.axisUnit, '°C')
+      assert.deepEqual([...parsed.axis], [27, 77, 127])
+    }
+  }
+})
+
 test('ASCII raw parser reads ngspice output and input-referred noise density vectors', () => {
   const parsed = parseAsciiRawFile(validNoiseRaw)
   assert.equal(parsed.analysis, 'noise')
