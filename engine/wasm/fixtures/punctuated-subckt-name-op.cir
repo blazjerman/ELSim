@@ -1,0 +1,28 @@
+ngspice subcircuit model name punctuation probe
+V1 in 0 5
+X1 in out1 AMP!CORE
+X2 in out2 AMP#CORE
+X3 in out3 AMP$CORE
+X4 in out4 AMP%CORE
+X5 in out5 AMP[1]
+.subckt AMP!CORE IN OUT
+E1 OUT 0 IN 0 1
+.ends
+.subckt AMP#CORE IN OUT
+E1 OUT 0 IN 0 1
+.ends
+.subckt AMP$CORE IN OUT
+E1 OUT 0 IN 0 1
+.ends
+.subckt AMP%CORE IN OUT
+E1 OUT 0 IN 0 1
+.ends
+.subckt AMP[1] IN OUT
+E1 OUT 0 IN 0 1
+.ends
+.control
+op
+print v(out1) v(out2) v(out3) v(out4) v(out5)
+quit
+.endc
+.end

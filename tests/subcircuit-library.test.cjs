@@ -1076,6 +1076,19 @@ test('accepts native ngspice punctuation in model identifiers', () => {
   ])
   assert.deepEqual(report.missing, [])
   assert.deepEqual(report.resolved.map(({ modelName }) => modelName), names)
+
+  const subcircuitNames = ['AMP!CORE', 'AMP#CORE', 'AMP$CORE', 'AMP%CORE', 'AMP[1]']
+  const implementations = subcircuitNames.map((name) => `.SUBCKT ${name} IN OUT\nE1 OUT 0 IN 0 1\n.ENDS ${name}`).join('\n')
+  const wrapper = `.SUBCKT WRAPPER IN OUT\n${subcircuitNames.map((name, index) => `X${index + 1} IN OUT ${name}`).join('\n')}\n.ENDS WRAPPER`
+  const parsedSubcircuits = parseSubcircuitLibrary(`${implementations}\n${wrapper}`)
+  assert.deepEqual(parsedSubcircuits.subcircuits.map(({ name }) => name), [...subcircuitNames, 'WRAPPER'])
+  assert.deepEqual(parsedSubcircuits.dependencies.map(({ modelName, kind }) => [modelName, kind]), subcircuitNames.map((name) => [name, 'subcircuit']))
+  const subcircuitReport = analyzeModelDependencies([
+    { id: 'wrapper', filename: 'wrapper.lib', content: wrapper },
+    { id: 'amplifiers', filename: 'amplifiers.lib', content: implementations },
+  ])
+  assert.deepEqual(subcircuitReport.missing, [])
+  assert.deepEqual(subcircuitReport.resolved.map(({ modelName }) => modelName), subcircuitNames)
 })
 
 test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {
