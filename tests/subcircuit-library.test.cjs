@@ -1807,6 +1807,24 @@ test('follows global imported .FUNC helpers across library files and attributes 
   ])
 })
 
+test('model dependency analysis accepts continued .FUNC records in the selected library section', () => {
+  const content = String.raw`.LIB active
+.FUNC continued_helper(x) {x + \\
++ sqr(x)}
+.ENDL active
+.LIB inactive
+.FUNC inactive_helper(x) {sqr(x)}
+.ENDL inactive`
+  const analyzed = analyzeModelLibraries([{
+    id: 'continued-section',
+    filename: 'continued-section.lib',
+    content,
+    selectedSections: ['active'],
+  }])
+  assert.deepEqual(analyzed.assets[0].parsed.functions.map(({ name, sourceLine }) => [name, sourceLine]), [['continued_helper', 2]])
+  assert.deepEqual(analyzed.dependencies.conflicts, [])
+})
+
 test('follows ngspice punctuation-bearing .FUNC names when reporting reachable incompatibilities', () => {
   const source = '.SUBCKT helpers IN OUT\nB1 OUT 0 V=helper#name(V(IN))\n.ENDS helpers'
   const warnings = analyzeLtspiceModelDialect(source, {

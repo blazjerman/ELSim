@@ -4779,11 +4779,25 @@ test('native behavioral sqr() compatibility alias simulates through the browser 
 
 test('imported model B-source and helper compatibility warnings link to their source lines', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  const sharedFunctions = String.raw`.LIB active
+.FUNC square_helper(x) {sqr(x)}
+.FUNC truncate_helper(x) {x + \\
++ sqr(x)}
+.FUNC clamp_helper(x) {limit(x, 0, 1)}
+.FUNC select_helper(x) {if(x > 0, 1, 0)}
+.FUNC distribution_helper(x) {flat(x)}
+.FUNC punctuation#helper(x) {punctuation!nested(x)}
+.FUNC punctuation!nested(x) {sqr(x)}
+.ENDL active
+.LIB inactive
+.FUNC unused_helper(x) {sqr(x)}
+.FUNC unused#helper(x) {limit(x, 0, 1)}
+.ENDL inactive`
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'shared-functions.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.LIB active\n.FUNC square_helper(x) {sqr(x)}\n.FUNC truncate_helper(x) {int(x)}\n.FUNC clamp_helper(x) {limit(x, 0, 1)}\n.FUNC select_helper(x) {if(x > 0, 1, 0)}\n.FUNC distribution_helper(x) {flat(x)}\n.FUNC punctuation#helper(x) {punctuation!nested(x)}\n.FUNC punctuation!nested(x) {sqr(x)}\n.ENDL active\n.LIB inactive\n.FUNC unused_helper(x) {sqr(x)}\n.FUNC unused#helper(x) {limit(x, 0, 1)}\n.ENDL inactive\n'),
+    buffer: Buffer.from(sharedFunctions),
   })
   const sections = page.getByRole('dialog', { name: 'Choose model sections' })
   await expect(sections).toBeVisible()
@@ -4805,16 +4819,15 @@ test('imported model B-source and helper compatibility warnings link to their so
   await expect(warning).toContainText('Use sgn(x)*floor(abs(x))')
   await expect(warning).toContainText('Imported .FUNC uses B-source sqr()')
   await expect(warning).toContainText('shared-functions.lib:2')
-  await expect(warning).toContainText('Imported .FUNC uses B-source int()')
-  await expect(warning).toContainText('shared-functions.lib:3')
-  await expect(warning).toContainText('Imported .FUNC uses LTspice limit()')
   await expect(warning).toContainText('shared-functions.lib:4')
-  await expect(warning).toContainText('Imported .FUNC uses LTspice if()')
+  await expect(warning).toContainText('Imported .FUNC uses LTspice limit()')
   await expect(warning).toContainText('shared-functions.lib:5')
-  await expect(warning).toContainText('Imported .FUNC uses unavailable or incompatible B-source flat()')
+  await expect(warning).toContainText('Imported .FUNC uses LTspice if()')
   await expect(warning).toContainText('shared-functions.lib:6')
+  await expect(warning).toContainText('Imported .FUNC uses unavailable or incompatible B-source flat()')
+  await expect(warning).toContainText('shared-functions.lib:7')
   await expect(warning).toContainText('Imported .FUNC uses B-source sqr()')
-  await expect(warning).toContainText('shared-functions.lib:8')
+  await expect(warning).toContainText('shared-functions.lib:9')
   await expect(warning).toContainText('squared-model.lib:13')
   await expect(warning).not.toContainText('shared-functions.lib:12')
   await expect(warning).not.toContainText('shared-functions.lib:13')

@@ -656,6 +656,25 @@ function parseScopedLibraryFunctions(lines: readonly LogicalLine[]): Map<string,
   return new Map([...functionsByScope].map(([scope, functions]) => [scope, [...functions.values()]]))
 }
 
+/** Reassemble retained physical model records for analysis without changing the source kept for netlisting. */
+function logicalModelRecords(records: readonly { sourceLine: number; text: string }[]): { sourceLine: number; text: string }[] {
+  const logical: { sourceLine: number; text: string }[] = []
+  let backslashContinuation = false
+  for (const record of records) {
+    const text = withoutInlineComment(record.text).trimEnd()
+    const hasBackslashContinuation = hasNgspiceBackslashContinuation(text)
+    const continuationText = hasBackslashContinuation ? text.slice(0, -2) : text
+    if (/^\s*\+/.test(continuationText) || backslashContinuation) {
+      const previous = logical.at(-1)
+      if (previous) previous.text += ` ${continuationText.replace(/^\s*\+\s?/, '').trim()}`
+    } else {
+      logical.push({ sourceLine: record.sourceLine, text: continuationText })
+    }
+    backslashContinuation = hasBackslashContinuation
+  }
+  return logical
+}
+
 function functionAritiesForScopes(globalFunctions: ReadonlyMap<string, number>, scopes: readonly string[], localFunctions: ReadonlyMap<string, readonly ModelFunction[]>): Map<string, number> {
   const arities = new Map(globalFunctions)
   for (const scope of scopes) for (const definition of localFunctions.get(scope.toLowerCase()) ?? []) arities.set(definition.name.toLowerCase(), definition.arity)
@@ -1842,7 +1861,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
 
     let conditionalDepth = 0
     let subcircuitDepth = 0
-    for (const record of parsed.modelRecords) {
+    for (const record of logicalModelRecords(parsed.modelRecords)) {
       const directive = record.text.trim().split(/\s+/, 1)[0]?.toLowerCase()
       if (directive === '.if') { conditionalDepth += 1; continue }
       if (directive === '.endif') { conditionalDepth = Math.max(0, conditionalDepth - 1); continue }
