@@ -51,40 +51,110 @@ def descendants(parent, parents):
     return found
 
 
+def firefox_process_role(comm, arguments, is_root=False):
+    """Classify Firefox's browser and auxiliary processes from their launch args."""
+    comm = comm.lower()
+    arguments = arguments.lower()
+    if "web content" in comm:
+        return "content"
+    if "webextensions" in comm:
+        return "extensions"
+    if "socket process" in comm:
+        return "socket"
+    if "rdd process" in comm:
+        return "remote-data-decoder"
+    if "utility process" in comm:
+        return "utility"
+    if "gpu process" in comm:
+        return "gpu"
+    if comm == "forkserver":
+        return "playwright-helper"
+    if comm != "firefox" and "firefox" not in arguments.split(" ", 1)[0]:
+        return "other"
+    if "-contentproc" in arguments or "--contentproc" in arguments:
+        return "content"
+    if "-gpu" in arguments or "--gpu-process" in arguments:
+        return "gpu"
+    if "-rdd" in arguments or "--rdd-process" in arguments:
+        return "remote-data-decoder"
+    if "-socket" in arguments or "--socket-process" in arguments:
+        return "socket"
+    if "-utility" in arguments or "--utility-process" in arguments:
+        return "utility"
+    return "browser-main" if is_root else "firefox-child"
+
+
 def firefox_memory(root_pid):
     parents = process_table()
     task_processes = descendants(root_pid, parents)
-    firefox_roots = set()
+    firefox_candidates = set()
     for pid in task_processes:
         base = Path("/proc") / str(pid)
         try:
             comm = (base / "comm").read_text().strip().lower()
             argv0 = (base / "cmdline").read_bytes().split(b"\0", 1)[0].decode(errors="ignore").lower()
             if comm == "firefox" or "firefox" in argv0:
-                firefox_roots.add(pid)
+                firefox_candidates.add(pid)
         except OSError:
             continue
 
+    firefox_roots = {
+        pid for pid in firefox_candidates
+        if parents.get(pid) not in firefox_candidates
+    }
     browser_processes = set()
     for pid in firefox_roots:
         browser_processes.add(pid)
         browser_processes.update(descendants(pid, parents))
 
     pss_kib = rss_kib = 0
+    roles = {}
+    largest_processes = []
     for pid in browser_processes:
+        base = Path("/proc") / str(pid)
         try:
-            rollup = (Path("/proc") / str(pid) / "smaps_rollup").read_text()
+            comm = (base / "comm").read_text().strip()
+            arguments = (base / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="ignore").strip()
+            rollup = (base / "smaps_rollup").read_text()
         except OSError:
             continue
+        process_pss_kib = process_rss_kib = 0
         for line in rollup.splitlines():
             if line.startswith("Pss:"):
-                pss_kib += int(line.split()[1])
+                process_pss_kib = int(line.split()[1])
             elif line.startswith("Rss:"):
-                rss_kib += int(line.split()[1])
+                process_rss_kib = int(line.split()[1])
+        pss_kib += process_pss_kib
+        rss_kib += process_rss_kib
+        role = firefox_process_role(comm, arguments, is_root=pid in firefox_roots)
+        group = roles.setdefault(role, {"pssKiB": 0, "rssKiB": 0, "processCount": 0})
+        group["pssKiB"] += process_pss_kib
+        group["rssKiB"] += process_rss_kib
+        group["processCount"] += 1
+        largest_processes.append({
+            "pid": pid,
+            "role": role,
+            "comm": comm,
+            "pssKiB": process_pss_kib,
+            "rssKiB": process_rss_kib,
+        })
+    largest_processes.sort(key=lambda process: process["pssKiB"], reverse=True)
     return {
         "pssMiB": round(pss_kib / 1024, 1),
         "rssMiB": round(rss_kib / 1024, 1),
         "processCount": len(browser_processes),
+        "processRoles": {
+            role: {
+                "pssMiB": round(group["pssKiB"] / 1024, 1),
+                "rssMiB": round(group["rssKiB"] / 1024, 1),
+                "processCount": group["processCount"],
+            }
+            for role, group in roles.items()
+        },
+        "largestProcesses": [
+            {**process, "pssMiB": round(process["pssKiB"] / 1024, 1), "rssMiB": round(process["rssKiB"] / 1024, 1)}
+            for process in largest_processes[:5]
+        ],
     }
 
 
@@ -128,6 +198,18 @@ def run_once(plot_windows, interval_ms):
         for key in ("pssMiB", "rssMiB"):
             bucket[key] = max(bucket[key], memory[key])
             overall[key] = max(overall[key], memory[key])
+        role_peaks = bucket.setdefault("processRolePeaks", {})
+        for role, role_memory in memory["processRoles"].items():
+            peak = role_peaks.setdefault(role, {"pssMiB": 0.0, "rssMiB": 0.0, "processCount": 0})
+            for key in ("pssMiB", "rssMiB"):
+                peak[key] = max(peak[key], role_memory[key])
+            peak["processCount"] = max(peak["processCount"], role_memory["processCount"])
+        largest_peaks = bucket.setdefault("largestProcessPeaks", {})
+        for process_memory in memory["largestProcesses"]:
+            process_key = f"{process_memory['role']}:{process_memory['comm']}"
+            current = largest_peaks.get(process_key)
+            if current is None or process_memory["pssMiB"] > current["pssMiB"]:
+                largest_peaks[process_key] = process_memory
 
     while process.poll() is None or not output_closed:
         try:
@@ -178,7 +260,8 @@ def run_once(plot_windows, interval_ms):
         "observedPhaseMarkers": sorted(observed_markers),
         "missingPhaseMarkers": sorted(missing_markers),
         "limitations": [
-            "PSS/RSS sum Firefox and its descendants, not ELSim-only allocations.",
+            "Process roles are inferred from Firefox launch arguments and may vary by Firefox version.",
+            "PSS/RSS are Firefox-process measurements, not ELSim-only allocations; worker threads may share a content process.",
             "startup ends when the benchmark page is ready immediately before simulation.",
             "solverAndResultTransfer ends at the worker's post-solve profile marker.",
             "resultValidationAndTransfer starts at that marker and ends when the result reaches the page.",
@@ -194,6 +277,19 @@ def run_once(plot_windows, interval_ms):
 
 def summarize_peak(reports, phase, key):
     values = [report["phasePeaks"][phase][key] for report in reports]
+    return {
+        "median": round(statistics.median(values), 1),
+        "min": min(values),
+        "max": max(values),
+        "runs": len(values),
+    }
+
+
+def summarize_process_role_peak(reports, phase, role, key):
+    values = [
+        report["phasePeaks"][phase].get("processRolePeaks", {}).get(role, {}).get(key, 0.0)
+        for report in reports
+    ]
     return {
         "median": round(statistics.median(values), 1),
         "min": min(values),
@@ -224,6 +320,12 @@ def main():
 
     if args.repeats > 1:
         phases = ["startup", "solverAndResultTransfer", "resultValidationAndTransfer", "plotValidationAndInteraction"]
+        roles = sorted({
+            role
+            for report in reports
+            for phase in phases
+            for role in report["phasePeaks"][phase].get("processRolePeaks", {})
+        })
         summary = {
             "benchmark": "firefox-million-sample-process-memory-repeat-v1",
             "plotWindows": args.plot_windows,
@@ -233,6 +335,13 @@ def main():
             "wasmLinearMemoryBytes": sorted(report["wasmLinearMemoryBytes"] for report in reports),
             "phasePeakMiB": {
                 phase: {key: summarize_peak(reports, phase, key) for key in ("pssMiB", "rssMiB")}
+                for phase in phases
+            },
+            "phaseProcessRolePeakMiB": {
+                phase: {
+                    role: {key: summarize_process_role_peak(reports, phase, role, key) for key in ("pssMiB", "rssMiB")}
+                    for role in roles
+                }
                 for phase in phases
             },
             "overallPeakMiB": {
@@ -247,7 +356,8 @@ def main():
             "allPhaseMarkersObserved": all(not report["missingPhaseMarkers"] for report in reports),
             "limitations": [
                 "Each run starts a fresh Playwright/Firefox process tree but shares the same host and runtime.",
-                "PSS/RSS sum Firefox and its descendants, not ELSim-only allocations.",
+                "Process roles are inferred from Firefox launch arguments and may vary by Firefox version.",
+                "PSS/RSS are Firefox-process measurements, not ELSim-only allocations; worker threads may share a content process.",
                 "WASM linear-memory capacity is not the same as peak process memory.",
                 "Same-host repeats do not provide a second-hardware baseline.",
             ],
