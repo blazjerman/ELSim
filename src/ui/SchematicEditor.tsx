@@ -11,7 +11,7 @@ import { componentPins, createPartNavigationIndex, createPointViewportIndex, cre
 import { componentCurrentVector, resolveProbeTarget, transformerWindingCurrentVector, transmissionLinePortCurrentVector, urcLineCurrentSenseReference } from '../domain/probe'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
-import { useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
+import { getSimulationCursor, subscribeSimulationCursorAnimation, useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
 import { componentDefaultValue, componentDefinitionFor, deviceModelTypeMatches } from '../domain/componentDefinitions'
 import { translateVoltageSwitchModel } from '../domain/voltageSwitchModel'
 import type { ComponentSymbolPrimitive } from '../domain/componentDefinitions'
@@ -207,7 +207,7 @@ function isDynamicComponentSymbolPrimitive(primitive: ComponentSymbolPrimitive):
 }
 
 function isCurrentPolarityPrimitive(primitive: ComponentSymbolPrimitive): boolean {
-  return primitive.kind === 'text' && (primitive.className === 'capacitor-current-polarity' || primitive.className === 'inductor-current-polarity' || primitive.className === 'component-current-polarity')
+  return primitive.kind === 'text' && primitive.className?.split(/\s+/).some((name) => name === 'capacitor-current-polarity' || name === 'inductor-current-polarity' || name === 'component-current-polarity' || name === 'resistor-current-polarity-live') === true
 }
 
 const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView({ primitive, stroke, animation, rotation = 0 }: {
@@ -229,11 +229,12 @@ const ComponentSymbolPrimitiveView = memo(function ComponentSymbolPrimitiveView(
     const lampGlow = primitive.className === 'lamp-glow-fill'
     const resistorPowerGlow = primitive.className === 'resistor-power-glow'
     const ledGlow = primitive.className === 'led-glow'
-    return <circle className={primitive.className} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={lampGlow ? '#ffd36d' : resistorPowerGlow ? '#ff9b55' : ledGlow ? '#ff766d' : primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={lampGlow || resistorPowerGlow || ledGlow ? 'none' : common.stroke} strokeWidth={common.strokeWidth} opacity={lampGlow ? sample.lampGlow * .82 : resistorPowerGlow ? sample.resistorPowerGlow * .34 : ledGlow ? Math.min(.3, sample.ledBrightness * .3) : undefined} pointerEvents={lampGlow || resistorPowerGlow || primitive.className === 'lamp-glow-outline' || ledGlow ? 'none' : undefined}/>
+    return <circle className={primitive.className} data-resistor-power-glow={resistorPowerGlow ? true : undefined} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={lampGlow ? '#ffd36d' : resistorPowerGlow ? '#ff9b55' : ledGlow ? '#ff766d' : primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={lampGlow || resistorPowerGlow || ledGlow ? 'none' : common.stroke} strokeWidth={common.strokeWidth} opacity={lampGlow ? sample.lampGlow * .82 : resistorPowerGlow ? sample.resistorPowerGlow * .34 : ledGlow ? Math.min(.3, sample.ledBrightness * .3) : undefined} pointerEvents={lampGlow || resistorPowerGlow || primitive.className === 'lamp-glow-outline' || ledGlow ? 'none' : undefined}/>
   }
   if (primitive.kind === 'text') {
     const currentPolarity = isCurrentPolarityPrimitive(primitive)
-    return <text className={primitive.className} x={primitive.x} y={primitive.y} transform={currentPolarity && rotation ? `rotate(${-rotation} ${primitive.x} ${primitive.y})` : undefined} data-pin={primitive.pin} data-polarity={currentPolarity ? primitive.text : undefined} fill={common.stroke} stroke="none" pointerEvents="none">{primitive.text}{currentPolarity && primitive.pin !== undefined && <title>{`Pin ${primitive.pin}: conventional current ${primitive.text === '+' ? 'flows out' : 'flows in'}`}</title>}</text>
+    const liveResistorPolarity = primitive.className?.split(/\s+/).includes('resistor-current-polarity-live') ?? false
+    return <text className={primitive.className} x={primitive.x} y={primitive.y} transform={currentPolarity && rotation ? `rotate(${-rotation} ${primitive.x} ${primitive.y})` : undefined} data-pin={primitive.pin} data-polarity={currentPolarity ? primitive.text : undefined} data-live-current-polarity={currentPolarity && primitive.pin !== undefined ? true : undefined} opacity={liveResistorPolarity ? 0 : undefined} aria-hidden={liveResistorPolarity ? true : undefined} fill={common.stroke} stroke="none" pointerEvents="none">{primitive.text}{currentPolarity && primitive.pin !== undefined && <title>{liveResistorPolarity ? `Pin ${primitive.pin}: polarity follows current through this resistor` : `Pin ${primitive.pin}: conventional current ${primitive.text === '+' ? 'flows out' : 'flows in'}`}</title>}</text>
   }
   const transistorCurrent = primitive.className === 'transistor-current-indicator'
   const ledRay = primitive.className === 'led-light-rays'
@@ -279,7 +280,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   // simulation cursor, but hundreds of off-focus SVG <title> nodes no longer
   // need their text replaced on every scrub/playback frame.
   const showSampleTitle = selected || focusable || hovered
-  const sampleRequested = animate && (RESULT_ANIMATED_PART_KINDS.has(part.kind) || selected || hovered)
+  const sampleRequested = animate && (part.kind === 'resistor' ? selected || hovered : RESULT_ANIMATED_PART_KINDS.has(part.kind) || selected || hovered)
   const animationSample = useSimulationCursorWhen(sampleRequested)
   const { voltage, current, secondaryCurrent, switchClosed, logicOutput } = useMemo(() => sampleRequested ? componentSample(part, animationSample) : {}, [sampleRequested, animationSample, componentSample, part])
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
@@ -319,6 +320,13 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const potentiometerWiperY = -24 + potentiometerPosition * 48
   const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'currentSwitch' ? switchClosed ? 'on' : 'off' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : part.kind === 'currentSource' && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : (part.kind === 'capacitor' || part.kind === 'inductor') && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS.has(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
   const currentPolarityGeometry = useMemo<readonly ComponentSymbolPrimitive[]>(() => {
+    if (part.kind === 'resistor' && animate) {
+      const pin1X = part.flipX ? 31 : -31
+      return [
+        { kind: 'text', className: 'component-current-polarity resistor-current-polarity-live', x: pin1X, y: -18, text: '−', pin: 1 },
+        { kind: 'text', className: 'component-current-polarity resistor-current-polarity-live', x: -pin1X, y: -18, text: '+', pin: 2 },
+      ]
+    }
     if (!CURRENT_POLARITY_MARKER_PART_KINDS.has(part.kind) || !hasCurrentDirection) return EMPTY_SYMBOL_GEOMETRY
     // SPICE branch current is positive into pin 1 and out of pin 2. The
     // markers follow the requested visual convention: + marks where current
@@ -331,7 +339,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
       { kind: 'text', className: 'component-current-polarity', x: pin1X, y: -18, text: pin1Polarity, pin: 1 },
       { kind: 'text', className: 'component-current-polarity', x: pin2X, y: -18, text: pin2Polarity, pin: 2 },
     ]
-  }, [part.kind, part.flipX, currentNegative, hasCurrentDirection])
+  }, [part.kind, part.flipX, currentNegative, hasCurrentDirection, animate])
   const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
   const powerGlowGeometry = (lampGlow > 0 || resistorPowerGlow > 0) ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
@@ -421,7 +429,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     ? `${part.ref}, ${kindNames[part.kind]}, switch ${part.value.toLowerCase()}${selected ? ', selected' : ''}`
     : `${part.ref}, ${kindNames[part.kind]}, ${part.value || 'no value'}${part.kind === 'potentiometer' ? `, wiper at ${Math.round(Number(part.wiperPosition ?? '0.5') * 100)}% from upper terminal` : ''}${selected ? ', selected' : ''}`
   const showDetails = detailed || Boolean(symbol)
-  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-polarized={part.polarized ? 'true' : undefined} data-logic-state={logicState} data-current-direction={part.kind === 'currentSource' && hasCurrentDirection ? current! < 0 ? 'last-to-first' : 'first-to-last' : undefined} data-gate-shape={logicGateShape} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={`${accessibilityLabel}${accessiblePortSummary ? `, pins: ${accessiblePortSummary}` : ''}${part.kind === 'capacitor' && part.polarized ? ', polarized, pin 1 positive' : ''}${logicState ? `, output ${logicState}` : ''}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space ContextMenu Shift+F10" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} onKeyDown={(event) => {
+  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-animation-kind={animate && part.kind === 'resistor' ? 'resistor-power' : undefined} data-polarized={part.polarized ? 'true' : undefined} data-logic-state={logicState} data-current-direction={part.kind === 'currentSource' && hasCurrentDirection ? current! < 0 ? 'last-to-first' : 'first-to-last' : undefined} data-gate-shape={logicGateShape} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={`${accessibilityLabel}${accessiblePortSummary ? `, pins: ${accessiblePortSummary}` : ''}${part.kind === 'capacitor' && part.polarized ? ', polarized, pin 1 positive' : ''}${logicState ? `, output ${logicState}` : ''}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space ContextMenu Shift+F10" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} onKeyDown={(event) => {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); onNavigate(part.id, event.key); return }
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
@@ -463,6 +471,45 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
   viewportBottom: number
 }) {
   const focusedPartId = document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId
+  const partsById = useMemo(() => new Map(parts.map((part) => [part.id, part])), [parts])
+  useEffect(() => {
+    if (!animationEnabled) return
+    // Hundreds of non-inspected resistors otherwise each subscribe and
+    // reconcile their full SVG subtree on every cursor frame. Keep their
+    // nodes in React, but apply only the changing power/polarity attributes
+    // from one shared frame listener using the same exact sampled values.
+    const updateResistorAnimation = () => {
+      const sampleIndex = getSimulationCursor()
+      const groups = document.querySelectorAll<SVGGElement>('svg.schematic .circuit-part[data-animation-kind="resistor-power"]')
+      for (const group of groups) {
+        const part = partsById.get(group.dataset.partId ?? '')
+        if (!part) continue
+        const { voltage, current } = componentSample(part, sampleIndex)
+        const power = Math.abs((voltage ?? 0) * (current ?? 0))
+        const glowOpacity = Math.min(1, Math.sqrt(power / (part.animationNominalPower ?? 0.25))) * 0.34
+        const glow = group.querySelector<SVGCircleElement>('[data-resistor-power-glow]')
+        if (glow && glow.getAttribute('opacity') !== String(glowOpacity)) glow.setAttribute('opacity', String(glowOpacity))
+        const hasCurrent = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
+        const pin1Polarity = current !== undefined && current < 0 ? '+' : '−'
+        const pin2Polarity = pin1Polarity === '+' ? '−' : '+'
+        for (const marker of group.querySelectorAll<SVGTextElement>('[data-live-current-polarity]')) {
+          const pin1 = marker.getAttribute('data-pin') === '1'
+          const polarity = pin1 ? pin1Polarity : pin2Polarity
+          if (marker.getAttribute('data-polarity') !== polarity) marker.setAttribute('data-polarity', polarity)
+          if (marker.firstChild?.nodeType === Node.TEXT_NODE && marker.firstChild.nodeValue !== polarity) marker.firstChild.nodeValue = polarity
+          const opacity = hasCurrent ? '1' : '0'
+          if (marker.getAttribute('opacity') !== opacity) marker.setAttribute('opacity', opacity)
+          const ariaHidden = hasCurrent ? null : 'true'
+          if (marker.getAttribute('aria-hidden') !== ariaHidden) {
+            if (ariaHidden === null) marker.removeAttribute('aria-hidden')
+            else marker.setAttribute('aria-hidden', ariaHidden)
+          }
+        }
+      }
+    }
+    updateResistorAnimation()
+    return subscribeSimulationCursorAnimation(updateResistorAnimation)
+  }, [animationEnabled, componentSample, partsById, viewportLeft, viewportTop, viewportRight, viewportBottom])
   const symbolMarginCache = useMemo(() => new WeakMap<ImportedSymbol, number>(), [symbolsById])
   const marginForPart = useCallback((part: Part) => {
     const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
