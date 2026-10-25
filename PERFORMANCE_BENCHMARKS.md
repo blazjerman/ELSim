@@ -1,5 +1,9 @@
 # ELSim performance benchmarks
 
+## Cached animation marker metadata (2026-10-25)
+
+Mounted animated parts now cache the `data-pin` identity for each live polarity marker and the positive/negative role of each capacitor plate. In the 501-part R/L/transformer fixture, this avoids 950 repeated marker-pin attribute reads per sample. The focused capacitor workflow passes, and the benchmark verifies every expected glow plus the checked inductor marker polarities. One run measured a 2 ms shared callback, 467.05 ms full-canvas Playwright scrub, and 638 DOM mutations. The callback measurement remains in the previous 2–3 ms range and full scrub time overlaps earlier runs, so no timing gain is established. No WASM rebuild or Pages workflow ran.
+
 ## Animation-only result sampling (2026-10-25)
 
 The shared animation listener now requests only values used by the visible result animation: logic output for gates, current for current-flow indicators, both winding currents for transformers, voltage for resistor/lamp power and capacitor charge, charge when a solved behavioral-Q trace exists, and control state for controlled switches. Interactive hovered/selected readouts retain the full sample. Five Firefox engine regressions for capacitor, logic, transformer, resistor, and lamp animation plus six current-source, switch, and transistor workflows pass. Three repeats of the 501-part mixed R/L/transformer benchmark updated all expected glows and measured shared callback times of 2, 2, and 3 ms, the same rounded range as the preceding run; full-canvas scrub times were 460.05, 463.43, and 457.38 ms with 638 DOM mutation records each. This removes irrelevant trace-reader/state-helper calls by component kind but does not show a measured timing improvement. The callback's millisecond-scale readings are coarse and Playwright scrub time includes browser queries and automation. Existing local runtime reused; no WASM rebuild or Pages workflow ran.

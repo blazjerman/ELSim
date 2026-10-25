@@ -513,10 +513,16 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         inductorGlow: group.querySelector<SVGPathElement>('[data-inductor-current-glow]'),
         transformerPrimaryGlow: group.querySelector<SVGPathElement>('[data-transformer-primary-current-glow]'),
         transformerSecondaryGlow: group.querySelector<SVGPathElement>('[data-transformer-secondary-current-glow]'),
-        capacitorPlates: Array.from(group.querySelectorAll<SVGLineElement>('[data-charge-level]')),
+        capacitorPlates: Array.from(group.querySelectorAll<SVGLineElement>('[data-charge-level]'), (plate) => ({
+          plate,
+          positive: plate.classList.contains('capacitor-charge-positive-plate'),
+        })),
         capacitance: part?.kind === 'capacitor' ? componentMagnitude(part.value, 'capacitor') ?? Number.NaN : Number.NaN,
         seriesResistance: part?.kind === 'capacitor' ? componentMagnitude(part.seriesResistance ?? '0 Ω', 'resistor') ?? Number.NaN : 0,
-        markers: Array.from(group.querySelectorAll<SVGTextElement>('[data-live-current-polarity]')),
+        markers: Array.from(group.querySelectorAll<SVGTextElement>('[data-live-current-polarity]'), (marker) => ({
+          marker,
+          pin1: marker.getAttribute('data-pin') === '1',
+        })),
       }
     }).filter((entry): entry is typeof entry & { part: Part } => entry.part !== undefined)
     const updateSharedComponentAnimation = () => {
@@ -602,8 +608,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
           const charge = capacitorCharge ?? capacitance * capacitorVoltage
           const chargeLevel = Number.isFinite(charge) ? Math.min(1, Math.sqrt(Math.abs(charge) / 1e-4)) : 0
           const negativeVoltage = capacitorVoltage < 0
-          for (const plate of capacitorPlates) {
-            const positivePlate = plate.classList.contains('capacitor-charge-positive-plate')
+          for (const { plate, positive: positivePlate } of capacitorPlates) {
             const attributes: Array<[string, string]> = [
               ['y1', String(-16 - 7 * chargeLevel)],
               ['y2', String(16 + 7 * chargeLevel)],
@@ -619,8 +624,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         const hasCurrent = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
         const pin1Polarity = current !== undefined && current < 0 ? '+' : '−'
         const pin2Polarity = pin1Polarity === '+' ? '−' : '+'
-        for (const marker of markers) {
-          const pin1 = marker.getAttribute('data-pin') === '1'
+        for (const { marker, pin1 } of markers) {
           const polarity = pin1 ? pin1Polarity : pin2Polarity
           if (marker.getAttribute('data-polarity') !== polarity) marker.setAttribute('data-polarity', polarity)
           if (marker.firstChild?.nodeType === Node.TEXT_NODE && marker.firstChild.nodeValue !== polarity) marker.firstChild.nodeValue = polarity
