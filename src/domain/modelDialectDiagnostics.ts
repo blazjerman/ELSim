@@ -72,10 +72,10 @@ function selectedLibraryLines(source: string, selectedSections?: string[]): Logi
   return result
 }
 
-type BehavioralHelper = { name: string; body: string; sourceLine: number; excerpt: string; assetId?: string; scope: string }
-function parseBehavioralHelperDefinition(line: string): { name: string; body: string } | null {
+type BehavioralHelper = { name: string; body: string; bodyOffset: number; segments: LogicalSourceLine['segments']; sourceLine: number; excerpt: string; assetId?: string; scope: string }
+function parseBehavioralHelperDefinition(line: string): { name: string; body: string; bodyOffset: number } | null {
   const match = line.match(/^\s*\.func\s+([A-Za-z_][A-Za-z0-9_.$!#%\[\]]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
-  return match ? { name: match[1], body: match[2] } : null
+  return match ? { name: match[1], body: match[2], bodyOffset: match.index! + match[0].indexOf(match[2]) } : null
 }
 
 const selectedLinesCache = new WeakMap<ModelDialectLibrarySource, LogicalSourceLine[]>()
@@ -95,7 +95,7 @@ function globalFunctionsForLibraries(libraries: readonly ModelDialectLibrarySour
   const functions = new Map<string, BehavioralHelper[]>()
   for (const library of libraries) {
     const scopes: string[] = []
-    for (const { sourceLine, text } of selectedLinesForLibrary(library)) {
+    for (const { sourceLine, text, segments } of selectedLinesForLibrary(library)) {
       const line = withoutInlineComment(text).trim()
       if (!line || line.startsWith('*')) continue
       const tokens = line.split(/\s+/)
@@ -105,7 +105,7 @@ function globalFunctionsForLibraries(libraries: readonly ModelDialectLibrarySour
       if (scopes.length) continue
       const definition = parseBehavioralHelperDefinition(line)
       if (!definition) continue
-      const helper: BehavioralHelper = { name: definition.name, body: definition.body, sourceLine, excerpt: line.slice(0, 160), assetId: library.assetId, scope: '' }
+      const helper: BehavioralHelper = { name: definition.name, body: definition.body, bodyOffset: definition.bodyOffset, segments, sourceLine, excerpt: line.slice(0, 160), assetId: library.assetId, scope: '' }
       const key = helper.name.toLowerCase()
       functions.set(key, [...(functions.get(key) ?? []), helper])
     }
@@ -230,7 +230,7 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
     globalHelpers.set(key, [...(globalHelpers.get(key) ?? []), helper])
   }
   const sourceScopes: string[] = []
-  for (const { sourceLine, text } of logical) {
+  for (const { sourceLine, text, segments } of logical) {
     const line = withoutInlineComment(text).trim()
     if (!line || line.startsWith('*')) continue
     const tokens = line.split(/\s+/)
@@ -240,7 +240,7 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
     const scope = sourceScopes.join('.')
     const definition = parseBehavioralHelperDefinition(line)
     if (definition) {
-      const helper: BehavioralHelper = { name: definition.name, body: definition.body, sourceLine, excerpt: line.slice(0, 160), assetId: options.sourceAssetId, scope }
+      const helper: BehavioralHelper = { name: definition.name, body: definition.body, bodyOffset: definition.bodyOffset, segments, sourceLine, excerpt: line.slice(0, 160), assetId: options.sourceAssetId, scope }
       if (scope) {
         const helpers = helpersByScope.get(scope) ?? new Map<string, BehavioralHelper>()
         if (!helpers.has(helper.name.toLowerCase())) helpers.set(helper.name.toLowerCase(), helper)
@@ -282,7 +282,9 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
             : rule.feature
           const warningKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${feature}`
           if (helperWarnings.has(warningKey)) continue
-          helperWarnings.set(warningKey, { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature, excerpt: candidate.excerpt, impact: rule.impact, suggestion: rule.suggestion })
+          const featureOffset = candidate.bodyOffset + match.index
+          const featureLine = candidate.segments.find(({ start, end }) => featureOffset >= start && featureOffset < end)?.physicalLine ?? candidate.sourceLine
+          helperWarnings.set(warningKey, { sourceLine: featureLine, sourceAssetId: candidate.assetId, feature, excerpt: candidate.excerpt, impact: rule.impact, suggestion: rule.suggestion })
         }
       }
     }

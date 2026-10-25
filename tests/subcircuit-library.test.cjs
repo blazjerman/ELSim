@@ -1697,6 +1697,17 @@ B1 OUT 0 V=V(IN) \\
   assert.match(warning.excerpt, /V\(IN\).*sqr\(V\(IN\)\)/)
 })
 
+test('reached .FUNC compatibility warnings identify a continued physical source line', () => {
+  const source = String.raw`.SUBCKT compat IN OUT
+.FUNC continued_helper(x) {x + \\
++ sqr(x)}
+B1 OUT 0 V=continued_helper(V(IN))
+.ENDS compat`
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.equal(warning.feature, 'Imported .FUNC uses B-source sqr()')
+  assert.equal(warning.sourceLine, 3)
+})
+
 test('flags raw LTspice table() expressions in imported model libraries that ELSim does not rewrite', () => {
   const source = '.SUBCKT lookup IN OUT\nB1 OUT 0 V=table(V(IN),0,0,1,5)\n.ENDS lookup'
   const [warning] = analyzeLtspiceModelDialect(source)
