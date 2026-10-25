@@ -165,7 +165,6 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     if (!source) add('pzSource', 'Choose an independent voltage or current input source.')
     else for (const pin of [0, 1]) if (resolved.pinNets.get(`${source.id}:${pin}`) === undefined) add('pzSource', `${source.ref} must have both input terminals connected for pole-zero analysis.`, source.id)
     if (!['poles', 'zeros', 'both'].includes(settings.roots)) add('pzRoots', 'Choose poles, zeros, or both.')
-    if ((project.simulation.parameterSweeps?.length ?? 0) > 0) add('pzRoots', 'Parameter stepping is not available for pole-zero analysis.')
   } else if (project.simulation.analysis === 'sens') {
     const settings = project.simulation.sensitivity ?? { outputNode: '', mode: 'dc' as const }
     const resolved = connectivity ?? analyzeConnectivity(project)

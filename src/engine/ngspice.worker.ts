@@ -66,14 +66,17 @@ function isEmptyPoleZeroRaw(rawData: string | Uint8Array): boolean {
 
 function labelPoleZeroTraces(rawTraces: Trace[]): Trace[] {
   return rawTraces.flatMap((trace) => {
-    const match = trace.id.match(/^v\((pole|zero)\((\d+)\)\)$/i)
+    const sourceId = trace.baseId ?? trace.id
+    const match = sourceId.match(/^v\((pole|zero)\((\d+)\)\)$/i)
     if (!match) return [] // ngspice's aggregate v(all) vector duplicates the roots.
     const kind = match[1].toLowerCase() as 'pole' | 'zero'
     const index = Number(match[2])
+    const baseId = `pz:${kind}:${index}`
     return [{
       ...trace,
-      id: `pz:${kind}:${index}`,
-      label: `${kind === 'pole' ? 'Pole' : 'Zero'} ${index}`,
+      id: trace.sweep ? `${baseId}::sweep-${trace.sweep.index}` : baseId,
+      baseId,
+      label: `${kind === 'pole' ? 'Pole' : 'Zero'} ${index}${trace.sweep ? ` · ${trace.sweep.label}` : ''}`,
       unit: 's⁻¹',
       axisLabel: 'Root index',
       axisUnit: '',

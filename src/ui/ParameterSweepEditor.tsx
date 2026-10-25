@@ -89,7 +89,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, modelAsset
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : analysis === 'op' ? 'Compare up to 10 DC operating points while varying supported circuit or model parameters.' : analysis === 'ac' ? 'Compare up to 10 AC response curves while varying supported circuit or model parameters.' : analysis === 'noise' ? 'Compare up to 10 noise spectra while varying supported circuit or model parameters.' : 'Compare up to 10 transient cases while changing passive values, source waveform or TRNOISE fields, PWL amplitudes, or numeric parameters from imported device models, ICs, and reusable blocks.'}</p>
+    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : analysis === 'tf' ? 'Compare up to 10 transfer-function results while varying supported circuit or model parameters.' : analysis === 'pz' ? 'Compare up to 10 pole-zero maps while varying supported circuit or model parameters.' : analysis === 'op' ? 'Compare up to 10 DC operating points while varying supported circuit or model parameters.' : analysis === 'ac' ? 'Compare up to 10 AC response curves while varying supported circuit or model parameters.' : analysis === 'noise' ? 'Compare up to 10 noise spectra while varying supported circuit or model parameters.' : 'Compare up to 10 transient cases while changing passive values, source waveform or TRNOISE fields, PWL amplitudes, or numeric parameters from imported device models, ICs, and reusable blocks.'}</p>
     {sweeps.map((sweep, index) => {
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
@@ -179,7 +179,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, modelAsset
         {!sweep.listValues && !sweep.globalParameter && <button type="button" className="secondary-button" onClick={() => onChange(index, { listValues: [sweep.start, sweep.stop], points: 2 })}>Use discrete values</button>}
       </div>
     })}
-    {analysis !== 'tf' && !(analysis === 'dc' && sweeps.length > 0) && <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= (analysis === 'dc' ? 1 : 3) || targetCount === 0 || combinations * 2 > 10}>{analysis === 'dc' ? 'Add secondary DC source' : sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>}
+    {!(analysis === 'dc' && sweeps.length > 0) && <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= (analysis === 'dc' ? 1 : 3) || targetCount === 0 || combinations * 2 > 10}>{analysis === 'dc' ? 'Add secondary DC source' : sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>}
     <div className="field-hint">{combinations} simulation case{combinations === 1 ? '' : 's'} selected · maximum 10 · each result is shown separately.</div>
   </div>
 }
