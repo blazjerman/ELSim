@@ -8900,7 +8900,7 @@ test('selects the .LIB section requested by an imported LTspice schematic', { ta
 test('model section import restores keyboard focus when cancelled', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const importButton = page.getByRole('button', { name: 'Import SPICE model library' })
-  const library = ['.LIB typical', '.MODEL D_TYP D(IS=1n)', '.ENDL typical', '.LIB power', '.MODEL D_PWR D(IS=2n)', '.ENDL power'].join('\n')
+  const library = ['.LIB typical', '.MODEL D_TYP D(IS=1n)', '.ENDL OTHER_TYPICAL', '.LIB power', '.MODEL D_PWR D(IS=2n)', '.ENDL OTHER_POWER'].join('\n')
   await importButton.click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'choices.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
   const dialog = page.getByRole('dialog', { name: 'Choose model sections' })

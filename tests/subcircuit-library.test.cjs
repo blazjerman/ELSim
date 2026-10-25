@@ -2044,9 +2044,13 @@ test('reports a loaded library when its requested .LIB section is not selected',
   assert.deepEqual(analyzeLtspiceSchematicCompatibility(schematic, [{ ...library, selectedSections: ['typical'] }]), [])
 })
 
-test('rejects ambiguous or malformed model-library section wrappers explicitly', () => {
+test('uses .LIB section names and ignores optional .ENDL labels like ngspice', () => {
   assert.throws(() => parseSubcircuitLibrary('.LIB fast\n.MODEL D1 D\n.ENDL fast\n.LIB slow\n.MODEL D2 D\n.ENDL slow'), /multiple \.LIB sections.*Select the section/i)
-  assert.throws(() => parseSubcircuitLibrary('.LIB typical\n.MODEL D1 D\n.ENDL other'), /does not match/)
+  const mismatchedEndLabel = '.LIB typical\n.MODEL D1 D\n.ENDL other'
+  assert.deepEqual(listModelLibrarySections(mismatchedEndLabel), ['typical'])
+  const selected = parseSubcircuitLibrary(mismatchedEndLabel, ['typical'])
+  assert.deepEqual(selected.models.map(({ name }) => name), ['D1'])
+  assert.equal(selected.modelText, '.MODEL D1 D')
   assert.throws(() => parseSubcircuitLibrary('.MODEL D1 D\n.ENDL typical'), /no matching \.LIB/)
   const external = parseSubcircuitLibrary('.LIB models.lib typical')
   assert.deepEqual(external.includes, [{ reference: 'models.lib', filename: 'models.lib', section: 'typical', sourceLine: 1 }])

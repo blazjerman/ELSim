@@ -341,10 +341,10 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
       continue
     }
     if (directive === '.endl') {
-      const closingSection = tokens[1]
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .ENDL directives are not allowed inside a .SUBCKT.`)
       if (!activeSection) throw new Error(`Line ${line.start}: .ENDL has no matching .LIB section.`)
-      if (closingSection && closingSection.toLowerCase() !== activeSection.toLowerCase()) throw new Error(`Line ${line.start}: .ENDL ${closingSection} does not match .LIB ${activeSection}.`)
+      // ngspice closes the current library section at .ENDL and ignores its
+      // optional label, so section scanning must not validate that label.
       activeSection = null
       continue
     }
@@ -1465,9 +1465,9 @@ function parseSubcircuitLibraryFromInspection(
       continue
     }
     if (directive === '.endl') {
-      const closingSection = tokens[1]
       if (!activeLibrarySection) throw new Error(`Line ${line.start}: .ENDL has no matching .LIB section.`)
-      if (closingSection && closingSection.toLowerCase() !== activeLibrarySection.toLowerCase()) throw new Error(`Line ${line.start}: .ENDL ${closingSection} does not match .LIB ${activeLibrarySection}.`)
+      // ngspice closes the current library section at .ENDL and ignores its
+      // optional label; keep stack validation while matching that behavior.
       activeLibrarySection = null
       continue
     }
