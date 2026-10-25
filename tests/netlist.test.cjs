@@ -3200,6 +3200,9 @@ test('BJT substrate nodes use an explicitly labeled net and default to ngspice g
   const nonBjt = project.parts.find((part) => part.kind === 'resistor')
   nonBjt.substrateNode = 'valid_node'
   assert.throws(() => validateProject(project), /invalid BJT substrate node/i)
+  nonBjt.substrateNode = undefined
+  nonBjt.thermalNode = 'valid_node'
+  assert.throws(() => validateProject(project), /invalid BJT thermal node/i)
 })
 
 test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin order', () => {

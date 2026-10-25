@@ -100,6 +100,15 @@ test('project ZIP archive is deterministic and round-trips the complete v11 proj
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
 })
 
+test('BJT thermal-node settings survive project archive round-trip', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-q-thermal', kind: 'npn', ref: 'QTHERM', value: '100', x: 700, y: 300, rotation: 0, thermalNode: 'junction_temp' })
+  project.sheets[0].parts = project.parts
+  const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
+  assert.equal(restored.parts.find((part) => part.ref === 'QTHERM')?.thermalNode, 'junction_temp')
+  assert.equal(restored.sheets[0].parts.find((part) => part.ref === 'QTHERM')?.thermalNode, 'junction_temp')
+})
+
 test('harmonic distortion settings round-trip in native project archives', async () => {
   const project = createStarterProject()
   project.simulation = { ...project.simulation, analysis: 'disto', distortion: { outputNode: 'vout', inputSource: 'V1', harmonic: 3 }, acSweep: { scale: 'oct', points: 8, startFrequency: '100 Hz', stopFrequency: '10 kHz' } }
