@@ -7698,6 +7698,32 @@ test('imports a hyphenated native ngspice device-model name', { tag: '@ui-smoke'
   await expect(netlist).toContainText('.MODEL D-FAST D(IS=1e-14)')
 })
 
+test('imports and simulates native ngspice model names with punctuation', { tag: '@ngspice' }, async ({ page }) => {
+  const project = createDiodePolarityExampleProject()
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'punctuated-diode-models.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(['D!TEST', 'D#TEST', 'D$TEST', 'D%TEST', 'D[1]'].map((name) => `.MODEL ${name} D(IS=1e-14 N=1)`).join('\n')),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 5 device models from punctuated-diode-models\.lib/)).toBeVisible()
+  await page.locator('.circuit-part[data-part-id="diode-polarity-d1"]').click()
+  const modelPicker = page.getByLabel('Device model for D1')
+  for (const name of ['D!TEST', 'D#TEST', 'D$TEST', 'D%TEST', 'D[1]']) {
+    await expect(modelPicker.locator('option', { hasText: `${name} (D)` })).toHaveCount(1)
+  }
+  await modelPicker.selectOption('D[1]')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText(/^D1 .* D\[1\]$/m)
+  await expect(netlist).toContainText('.MODEL D[1] D(IS=1e-14 N=1)')
+})
+
 test('ngspice .GLOBAL inside an imported subcircuit is preserved and warns about shared nodes', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
