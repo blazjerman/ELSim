@@ -3691,6 +3691,27 @@ test('native ngspice punctuation-rich subcircuit pins import and remain ordered 
   await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* PUNCTUATED/)
 })
 
+test('imports native ngspice subcircuit names with punctuation and adds the selected IC', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const names = ['AMP!CORE', 'AMP#CORE', 'AMP$CORE', 'AMP%CORE', 'AMP[1]']
+  const modelLibrary = names.map((name) => `.SUBCKT ${name} IN OUT\nE1 OUT 0 IN 0 1\n.ENDS ${name}`).join('\n')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'punctuated-ics.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 5 subcircuits and 0 device models from punctuated-ics\.lib/)).toBeVisible()
+  for (const name of names) await expect(page.locator('.imported-model').filter({ hasText: name })).toBeVisible()
+  const selectedModel = page.locator('.imported-model').filter({ hasText: 'AMP[1]' })
+  await selectedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelName)).toBe('AMP[1]')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText('.SUBCKT AMP[1] IN OUT')
+  await expect(netlist).toContainText(/X1 .* AMP\[1\]/)
+})
+
 test('native ngspice numeric-leading IC names and pins import and generate a valid instance', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const modelLibrary = '.SUBCKT 74HC00m 1A 1B 1Y\nE1 1Y 0 1A 1B 2\n.ENDS 74HC00m\n'
