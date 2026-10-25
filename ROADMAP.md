@@ -757,7 +757,7 @@ Suggested agent ownership once M0 contracts are agreed: engine/WASM; document/ne
 | Transient measurements | Named `.meas` scalar operations and delay, optional FROM/TO windows, parameter-sweep labels, source-current raw-sample calculations, and validated native ngspice scalar expressions | Add broader qualifiers only with fixtures; expression measurements are not exported to LTspice yet |
 | Initial conditions | Support labeled-node voltage, capacitor-voltage, and inductor-current conditions. Element conditions emit device `IC=` values and automatically enable `uic` on `.tran`; node conditions emit `.ic` directives. | Existing netlist tests, browser flows, and pinned-WASM transient fixtures verify capacitor voltage and inductor current initialization. Add broader startup-condition cases when expanding analysis support. |
 | Server backend | No required server for MVP | Revisit only if measured workloads require it |
-| Desktop wrapper | Defer choice | M4.2 platform prototype |
+| Desktop wrapper | Tauri 2 is the current prototype around the shared web UI and WASM worker; the PWA remains primary and Electron remains a fallback if native webview compatibility requires it. | M4.2 compile, launch, verify file dialogs, measure packaging/startup on Windows, macOS, and Linux before deciding whether to ship desktop packages. |
 | Plot renderer | Canvas first, internal trace API | Performance/accessibility benchmark |
 | LTspice export | Implemented for a tested subset, including hierarchy, measurements, and capacitor voltage / inductor current initial conditions | Native LTspice open/simulate verification, broader format parity, and additional device mappings |
 
