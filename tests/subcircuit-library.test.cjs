@@ -30,6 +30,7 @@ test('replacement keeps provenance only for byte-identical model contents', () =
 test('inline comments do not begin inside escaped ngspice string literals', () => {
   const source = 'LABEL="escaped \\" $ remains inside the string" ; actual comment'
   assert.equal(withoutInlineComment(source), 'LABEL="escaped \\" $ remains inside the string"')
+  assert.equal(withoutInlineComment('U1 AND(2) $G_DPWR $G_DGND A B Y TM IO $ trailing comment'), 'U1 AND(2) $G_DPWR $G_DGND A B Y TM IO')
 })
 
 test('accepts bounded ngspice parameter operators and expression functions', () => {
@@ -2323,6 +2324,33 @@ Z1 A B C ZFAST OFF
     ['D1', 'DFAST'], ['Q1', 'QFAST'], ['J1', 'JFAST'], ['M1', 'MFAST'], ['S1', 'SWFAST'], ['W1', 'CSWFAST'], ['Z1', 'ZFAST'],
   ])
   assert.deepEqual(analyzeModelDependencies([{ id: 'devices', filename: 'devices.lib', content: parsed.modelText }]).missing, [])
+})
+
+test('tracks both ngspice digital U-device model dependencies without confusing URC cards', () => {
+  const assets = [
+    { id: 'digital-ic', filename: 'digital-ic.lib', content: [
+      '.SUBCKT DIGITAL A B Y',
+      'U1 AND(2) $G_DPWR $G_DGND A B Y TM IO IO_LEVEL=0 MNTYMXDLY=2',
+      'U2 INV $G_DPWR $G_DGND Y Z TM IO',
+      'U3 IN OUT 0 URCMOD L=50u',
+      '.ENDS DIGITAL',
+    ].join('\n') },
+    { id: 'models', filename: 'digital-models.lib', content: '.MODEL TM UGATE()\n.MODEL IO UIO()\n.MODEL URCMOD URC(CPERL=1p RPERL=1k)' },
+  ]
+  const analysis = analyzeModelLibraries(assets)
+  assert.deepEqual(analysis.assets[0].parsed.dependencies.map(({ reference, modelName }) => [reference, modelName]), [
+    ['U1', 'TM'], ['U1', 'IO'], ['U2', 'TM'], ['U2', 'IO'], ['U3', 'URCMOD'],
+  ])
+  assert.deepEqual(analysis.dependencies.missing, [])
+  assert.deepEqual(analysis.dependencies.resolved.filter(({ reference }) => reference.startsWith('U')).map(({ reference, modelName, targetAssetId }) => [reference, modelName, targetAssetId]), [
+    ['U1', 'TM', 'models'], ['U1', 'IO', 'models'], ['U2', 'TM', 'models'], ['U2', 'IO', 'models'], ['U3', 'URCMOD', 'models'],
+  ])
+  assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'DIGITAL' }])].sort(), ['digital-ic', 'models'])
+
+  const missing = analyzeModelLibraries([{ id: 'broken-digital', filename: 'broken-digital.lib', content: '.SUBCKT BROKEN A B Y\nU1 AND(2) $G_DPWR $G_DGND A B Y MISSING_TIMING MISSING_IO\n.ENDS BROKEN' }])
+  assert.deepEqual(missing.dependencies.missing.map(({ reference, modelName }) => [reference, modelName]), [
+    ['U1', 'MISSING_TIMING'], ['U1', 'MISSING_IO'],
+  ])
 })
 
 test('resolves ngspice BJT model names after optional substrate and junction-temperature nodes', () => {

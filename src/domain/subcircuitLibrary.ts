@@ -400,11 +400,16 @@ export function withoutInlineComment(line: string): string {
       // treated as an unconditional delimiter.
       const tokenBoundary = index === 0 || /\s/.test(line[index - 1])
       const startsComment = tokenBoundary
-        && (char === '$' && !isLibrarySectionDollar(line, index) || char === ';' || line.startsWith('//', index))
+        && (char === '$' && !isLibrarySectionDollar(line, index) && !isNgspiceDigitalPowerNode(line, index) || char === ';' || line.startsWith('//', index))
       if (startsComment) return line.slice(0, index).trim()
     }
   }
   return line.trim()
+}
+
+/** Preserve ngspice's built-in global digital supply node names. */
+function isNgspiceDigitalPowerNode(line: string, dollarIndex: number): boolean {
+  return /^\$G_(?:DPWR|DGND)(?=$|\s)/i.test(line.slice(dollarIndex))
 }
 
 /** `$` is both an ngspice inline-comment marker and a valid .LIB token prefix. */
@@ -950,6 +955,33 @@ function isValidNgspiceParameterName(name: string): boolean {
   return /^[A-Za-z][A-Za-z0-9!#$%_\[\]]*$/.test(name)
 }
 
+const ngspiceDigitalUPrimitive = /^(?:BUF|INV|AND|NAND|OR|NOR|XOR|NXOR)(?:3)?A?(?:\s*\(\s*\d+\s*\))?$|^(?:AOI?|OAI?|DFF|JKFF|DLTCH|SRFF|DLYLINE|LOGICEXP|PINDLY)$/i
+
+function isNgspiceDigitalUDevice(tokens: string[]): boolean {
+  return /^u\S*$/i.test(tokens[0] ?? '') && ngspiceDigitalUPrimitive.test(tokens[1] ?? '')
+}
+
+function digitalUModelDependencies(tokens: string[], owner: string, sourceLine: number): ModelDependency[] {
+  if (!isNgspiceDigitalUDevice(tokens)) return []
+  const primitive = tokens[1].replace(/\s+/g, '').toUpperCase()
+  const declaredInputs = primitive.match(/^(?:AND|NAND|OR|NOR|XOR|NXOR)\((\d+)\)$/)?.[1]
+  const signalPinCount = /^(?:BUF|INV)$/.test(primitive)
+    ? 2
+    : declaredInputs ? Number(declaredInputs) + 1 : undefined
+  // Complex gates, state elements, and function-backed U devices have
+  // primitive-specific pin lists; do not guess at their model field offsets.
+  if (!signalPinCount || !Number.isInteger(signalPinCount) || signalPinCount < 2 || signalPinCount > 64) return []
+  const optionAt = tokens.findIndex((token, index) => index >= 2 && (
+    /^(?:MNTYMXDLY|IO_LEVEL)\s*=/i.test(token)
+    || (/^(?:MNTYMXDLY|IO_LEVEL)$/i.test(token) && tokens[index + 1] === '=')
+  ))
+  const positionalEnd = optionAt < 0 ? tokens.length : optionAt
+  const firstModelAt = 4 + signalPinCount // U name, primitive, power, ground, signal pins.
+  const modelNames = tokens.slice(firstModelAt, positionalEnd)
+  if (modelNames.length !== 2 || !modelNames.every((token) => isValidSpiceModelName(token, true))) return []
+  return modelNames.map((modelName) => ({ owner, reference: tokens[0], modelName, kind: 'device', sourceLine }))
+}
+
 function dependencyOnLine(text: string, owner: string, sourceLine: number): ModelDependency | null {
   const tokens = spiceFields(text)
   const reference = tokens[0] ?? ''
@@ -989,7 +1021,12 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
   } else if (prefix === 'j' || prefix === 'w' || prefix === 'z') index = 4
   else if (prefix === 'm' || prefix === 's') index = 5
   else if (prefix === 'o') index = 5 // O transmission lines use an LTRA model after four nodes.
-  else if (prefix === 'u') index = 4 // U distributed RC lines use a URC model after three nodes.
+  else if (prefix === 'u') {
+    // Native digital U cards have two trailing model references; they are
+    // tracked separately so they cannot be mistaken for URC node names.
+    if (isNgspiceDigitalUDevice(tokens)) return null
+    index = 4 // U distributed RC lines use a URC model after three nodes.
+  }
   else if (prefix === 'y') index = 5 // Y single-lossy lines use a TXL model after four port nodes.
   else if (prefix === 'p') {
     // P coupled lines have a variable number of conductor pins. The model is
@@ -1405,6 +1442,7 @@ function parseSubcircuitLibraryFromInspection(
       }
       if (!directive.startsWith('.')) {
         const active = activeSubcircuits.at(-1)!
+        active.dependencies.push(...digitalUModelDependencies(spiceFields(text), active.name, line.start))
         const dependency = dependencyOnLine(text, active.name, line.start)
         if (dependency) active.dependencies.push(dependency)
       }
