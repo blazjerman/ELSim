@@ -426,6 +426,7 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [autosaveStatus, setAutosaveStatus] = useState<'saving' | 'saved' | 'recovered' | 'error'>('saving')
   const [projectRecoveryReady, setProjectRecoveryReady] = useState(false)
+  const [projectDropActive, setProjectDropActive] = useState(false)
   const [importWarnings, setImportWarnings] = useState<string[]>([])
   const [modelDialectWarningState, setModelDialectWarningState] = useState<{ revision: string; warnings: (ModelDialectWarning & { filename: string; assetId: string })[] }>({ revision: '', warnings: [] })
   const [compatibilityDiagnostic, setCompatibilityDiagnostic] = useState<SimulationDiagnostic | null>(null)
@@ -1716,11 +1717,18 @@ export default function App() {
   const loadProject = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    await openProjectFile(file)
+    event.target.value = ''
+  }
+  const openProjectFile = async (file: File) => {
     try {
+      if (!/\.(?:elsim|json)$/i.test(file.name)) {
+        setNotice('Open a .elsim project or project .json file.')
+        return
+      }
       const bytes = new Uint8Array(await file.arrayBuffer())
       await applyProjectBytes(bytes)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not open this project') }
-    event.target.value = ''
   }
   const updateAssetProvenance = (kind: 'modelAssets' | 'symbolAssets', assetId: string, field: 'sourceUrl' | 'licenseReference' | 'rightsNotes', value: string) => {
     setProject((current) => ({ ...current, [kind]: (current[kind] ?? []).map((asset) => asset.id === assetId ? { ...asset, [field]: value || undefined } : asset) }))
@@ -3264,7 +3272,27 @@ export default function App() {
   const schematicProbeVoltage = useCallback((id: string, positivePin?: number, negativePin?: number) => schematicActionsRef.current.addComponentVoltageProbe(id, positivePin, negativePin), [])
   const schematicSwitchChanged = useCallback(() => schematicActionsRef.current.requestSwitchSolve(), [])
 
-  return <div className="app-shell" onPointerDownCapture={(event) => {
+  return <div className={`app-shell${projectDropActive ? ' project-drop-active' : ''}`} onDragEnter={(event) => {
+    if (Array.from(event.dataTransfer.types).includes('Files')) setProjectDropActive(true)
+  }} onDragOver={(event) => {
+    if (!Array.from(event.dataTransfer.types).includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setProjectDropActive(true)
+  }} onDragLeave={(event) => {
+    const nextTarget = event.relatedTarget
+    if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) setProjectDropActive(false)
+  }} onDrop={(event) => {
+    if (!Array.from(event.dataTransfer.types).includes('Files')) return
+    event.preventDefault()
+    setProjectDropActive(false)
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length !== 1) {
+      setNotice(files.length ? 'Drop one project file at a time.' : 'No project file was dropped.')
+      return
+    }
+    void openProjectFile(files[0])
+  }} onPointerDownCapture={(event) => {
     const target = event.target instanceof Element ? event.target : null
     if (sheetTabMenu && !target?.closest('.sheet-tab-menu')) setSheetTabMenu(null)
     const animationTuning = animationTuningRef.current
@@ -3276,6 +3304,7 @@ export default function App() {
       window.history.replaceState(null, '', '#schematic-workspace')
       window.requestAnimationFrame(() => workspaceMainRef.current?.focus())
     }}>Skip to schematic workspace</a>
+    {projectDropActive && <div className="project-drop-overlay" role="status" aria-live="polite"><strong>Drop a project to open it</strong><span>ELSim checks the file before replacing this circuit.</span></div>}
     <header className="topbar">
       <div className="brand"><div className="brand-mark"><Zap size={18} fill="currentColor"/></div><span>elsim</span><span className="brand-beta">PREVIEW</span></div>
       <div className="topbar-divider"/>

@@ -14945,6 +14945,42 @@ test('opening a project asks before replacing the current circuit', async ({ pag
   await expect(page.getByText('Opened Imported round-trip design')).toBeVisible()
 })
 
+test('dropping a project file opens it through the validated replacement flow', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  const droppedProject = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.name = 'Dropped project design'
+    return JSON.stringify(project)
+  })
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.locator('.app-shell').evaluate((element, contents) => {
+    const file = new File([contents], 'dropped-design.elsim.json', { type: 'application/json' })
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(file)
+    element.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer }))
+  }, droppedProject)
+  await expect(page.getByText('Drop a project to open it')).toBeVisible()
+  await page.locator('.app-shell').evaluate((element, contents) => {
+    const file = new File([contents], 'dropped-design.elsim.json', { type: 'application/json' })
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(file)
+    element.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }))
+    element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }))
+  }, droppedProject)
+  await expect(page.getByText('Opened Dropped project design')).toBeVisible()
+  await expect(page.locator('.project-title')).toContainText('Dropped project design')
+
+  await page.locator('.app-shell').evaluate((element) => {
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(new File(['not a project'], 'notes.txt', { type: 'text/plain' }))
+    element.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }))
+    element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }))
+  })
+  await expect(page.locator('.toast')).toContainText('Open a .elsim project or project .json file')
+  await expect(page.locator('.project-title')).toContainText('Dropped project design')
+})
+
 test('opening a project explains unsupported native block parameter names and preserves the current circuit', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
