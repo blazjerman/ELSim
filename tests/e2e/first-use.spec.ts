@@ -10313,6 +10313,23 @@ test('logic gate lesson simulates the four input truth-table states', { tag: '@n
   await expect(page.locator('.circuit-part[data-part-id="logic-and"] .logic-output-lead')).toHaveAttribute('style', /drop-shadow/)
   await expect(page.locator('.circuit-part[data-part-id="logic-xor"] .logic-output-lead')).not.toHaveAttribute('style', /drop-shadow/)
   await expectState(0.015, [5, 0, 0, 5, 5, 0, 5, 0, 0])
+  await page.evaluate(() => {
+    const state = window as Window & { __logicAnimationMutationCount?: number; __logicAnimationObserver?: MutationObserver }
+    state.__logicAnimationMutationCount = 0
+    state.__logicAnimationObserver = new MutationObserver((records) => { state.__logicAnimationMutationCount = (state.__logicAnimationMutationCount ?? 0) + records.length })
+    for (const gate of document.querySelectorAll('.circuit-part[data-gate-shape]')) {
+      state.__logicAnimationObserver.observe(gate, { attributes: true })
+      const output = gate.querySelector('.logic-output-lead')
+      if (output) state.__logicAnimationObserver.observe(output, { attributes: true })
+    }
+  })
+  await slider.fill(String(Number(await slider.inputValue()) + 1))
+  const logicAnimationMutations = await page.evaluate(() => new Promise<number>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+    const state = window as Window & { __logicAnimationMutationCount?: number }
+    resolve(state.__logicAnimationMutationCount ?? 0)
+  }))))
+  expect(logicAnimationMutations).toBe(0)
+  await page.evaluate(() => (window as Window & { __logicAnimationObserver?: MutationObserver }).__logicAnimationObserver?.disconnect())
   await expectState(0.025, [0, 5, 0, 5, 5, 5, 5, 0, 0])
   await expectState(0.035, [0, 0, 0, 0, 0, 5, 5, 5, 5])
   await page.locator('.additional-plot-window').getByRole('button', { name: /Close/ }).click()

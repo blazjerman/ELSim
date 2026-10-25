@@ -557,12 +557,16 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, co
         }
         if (logicOutputLead) {
           const logicState = logicOutput === undefined ? undefined : logicOutput >= (logicLow + logicHigh) / 2 ? 'high' : 'low'
-          if (logicState) group.dataset.logicState = logicState
-          else delete group.dataset.logicState
+          if (logicState) {
+            if (group.dataset.logicState !== logicState) group.dataset.logicState = logicState
+          } else if (group.hasAttribute('data-logic-state')) group.removeAttribute('data-logic-state')
           const selected = (partUiState(part.id) & 1) !== 0
-          group.setAttribute('aria-label', `${part.ref}, ${kindNames[part.kind]}, ${part.value || 'no value'}${logicState ? `, output ${logicState}` : ''}${selected ? ', selected' : ''}`)
-          logicOutputLead.setAttribute('stroke', logicState === 'high' ? '#83e6ad' : logicState === 'low' ? '#78847c' : selected ? '#86e3b7' : '#c6cec7')
-          logicOutputLead.style.filter = logicState === 'high' ? 'drop-shadow(0 0 5px #83e6ad)' : ''
+          const accessibleName = `${part.ref}, ${kindNames[part.kind]}, ${part.value || 'no value'}${selected ? ', selected' : ''}${logicState ? `, output ${logicState}` : ''}`
+          if (group.getAttribute('aria-label') !== accessibleName) group.setAttribute('aria-label', accessibleName)
+          const leadStroke = logicState === 'high' ? '#83e6ad' : logicState === 'low' ? '#78847c' : selected ? '#86e3b7' : '#c6cec7'
+          if (logicOutputLead.getAttribute('stroke') !== leadStroke) logicOutputLead.setAttribute('stroke', leadStroke)
+          const leadFilter = logicState === 'high' ? 'drop-shadow(0 0 5px #83e6ad)' : ''
+          if (logicOutputLead.style.filter !== leadFilter) logicOutputLead.style.filter = leadFilter
         }
         if (kind === 'lamp-result') {
           const power = Math.abs((voltage ?? 0) * (current ?? 0))
