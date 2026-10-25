@@ -24,6 +24,7 @@ fixtures.push('imported-library-global-node-op')
 fixtures.push('bracketed-subckt-parameter-op')
 fixtures.push('bsim3-bin-family-sweep')
 fixtures.push('transfer-function-analysis', 'pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac', 'disto-diode-harmonics', 'disto-diode-intermod', 'behavioral-resistor-op')
+fixtures.push('behavioral-component-current-op')
 const fixturesWithRawResults = new Set(['pole-zero-rc', 'sensitivity-divider-dc', 'sensitivity-divider-ac'])
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
@@ -116,6 +117,16 @@ for (const fixture of selectedFixtures) {
     assert.match(wasmResult.stdout, /0\s+2\.000000e\+00\s+1\.666667e\+00\s+1\.333333e\+00\s+-1\.66667e-03/i, 'the voltage/parameter and source-current expressions should select 2 kΩ and produce the expected divider voltages')
     assert.match(wasmResult.stdout, /Index\s+vctrl#branch[\s\S]*?0\s+-1\.00000e-03/i, 'the separate current-vector table should confirm the control-source branch current')
     process.stdout.write('PASS behavioral-resistor-op: node-voltage, parameter, and voltage-source-current dependencies solve their expected operating points\n')
+    continue
+  }
+  if (fixture === 'behavioral-component-current-op') {
+    assert.match(wasmResult.stdout, /v\(out_r\) = 5\.000000e\+00/i, 'I(R1) should expose the resistor branch current')
+    assert.match(wasmResult.stdout, /v\(out_c\) = 0\.000000e\+00/i, 'I(C1) should expose the capacitor operating-point current')
+    assert.match(wasmResult.stdout, /v\(out_l\) = 5\.000000e\+00/i, 'I(L1) should expose the inductor branch current')
+    assert.match(wasmResult.stdout, /v\(out_i\) = 1\.000000e\+00/i, 'I(I1) should expose the independent current-source current')
+    const diodeCurrent = Number(wasmResult.stdout.match(/v\(out_d\) = ([\d.e+-]+)/i)?.[1])
+    assert.ok(diodeCurrent > 0.1 && diodeCurrent < 1, `I(D1) should expose the conducting diode current, got ${diodeCurrent}`)
+    process.stdout.write('PASS behavioral-component-current-op: ngspice evaluates resistor, capacitor, inductor, current-source, and diode currents in B-source expressions\n')
     continue
   }
   if (fixture === 'pole-zero-rc') {

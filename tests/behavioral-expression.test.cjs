@@ -4,7 +4,19 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { expandBehavioralFunctions, parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } = require(path.join(build, 'domain/behavioralExpression.js'))
+const { expandBehavioralFunctions, ngspiceCurrentReferences, parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } = require(path.join(build, 'domain/behavioralExpression.js'))
+
+test('ngspice current references cover direct devices but exclude composite components', () => {
+  const parts = [
+    { kind: 'resistor', ref: 'R1' }, { kind: 'capacitor', ref: 'C1' }, { kind: 'inductor', ref: 'L1' },
+    { kind: 'diode', ref: 'D1' }, { kind: 'currentSource', ref: 'I1' }, { kind: 'npn', ref: 'Q1' },
+    { kind: 'behavioral', ref: 'B1', behavioralOutput: 'voltage' }, { kind: 'ground', ref: 'GND1' }, { kind: 'transformer', ref: 'T1' },
+    { kind: 'potentiometer', ref: 'R2' }, { kind: 'subcircuit', ref: 'X1' },
+  ]
+  assert.deepEqual(ngspiceCurrentReferences(parts), ['R1', 'C1', 'L1', 'D1', 'I1', 'Q1', 'B1'])
+  assert.deepEqual(ngspiceCurrentReferences(parts, true), ['B1'])
+  assert.deepEqual(ngspiceCurrentReferences([{ kind: 'source', ref: 'V1' }, { kind: 'resistor', ref: 'R1' }], true), ['V1'])
+})
 
 test('behavioral expression parser collects node and component references', () => {
   const parsed = parseBehavioralExpression('V(in) > 2.5 ? max(I(V1), 1m) : sin(pi / 2)')

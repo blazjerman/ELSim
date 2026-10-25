@@ -2,7 +2,7 @@ import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit, translateNgspiceExpressionOperators, withoutInlineComment } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
-import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
+import { behavioralCurrentReferenceError, ngspiceCurrentReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, spiceSignedScalarMagnitude, timeMagnitude } from '../domain/componentValue'
 import { deviceModelTypeMatches, supportsDeviceTemperatureDelta, supportsInitialOff } from '../domain/componentDefinitions'
@@ -960,7 +960,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         if (!part.behavioralResistance?.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
         const parsed = parseBehavioralExpression(part.behavioralResistance)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceVoltageBranchReferences(project.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         behavioralResistanceValue = `R={${translateBehavioralExpression(part.behavioralResistance)}}`
       } catch (error) {
@@ -978,7 +978,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         if (!expression.trim() || expression.length > 256 || part.deviceModel || part.seriesResistance !== undefined || part.instanceMultiplier !== undefined) throw new Error('Behavioral capacitance requires one C= or Q= expression and cannot be combined with an imported model, series resistance, or multiplier.')
         const parsed = parseBehavioralExpression(expression)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(project.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         behavioralCapacitorValue = `${part.behavioralCharge !== undefined ? 'Q' : 'C'}={${translateBehavioralExpression(expression)}}`
       } catch (error) {
@@ -995,7 +995,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         if (!expression.trim() || expression.length > 256 || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
         const parsed = parseBehavioralExpression(expression)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(project.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         behavioralInductorValue = `L={${translateBehavioralExpression(expression)}}`
       } catch (error) {
@@ -1798,7 +1798,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         if (part.behavioralDialect !== 'ltspice') {
-          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceVoltageBranchReferences(project.parts))
+          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceCurrentReferences(project.parts))
           if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         }
         append(`${part.ref} ${positive} ${negative} ${part.behavioralOutput === 'current' ? 'I' : 'V'}={${translateBehavioralExpression(part.value.replace(/[\r\n]/g, ' '), part.behavioralDialect)}}`, part.id, 'component')
@@ -2200,8 +2200,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       try {
         const parsed = parseBehavioralExpression(measurement.expression)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((part) => part.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(measurement.expression, ngspiceVoltageBranchReferences(project.parts))
-        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(measurement.expression, ngspiceCurrentReferences(project.parts, true))
+        if (unsupportedCurrent) throw new Error(`I(${unsupportedCurrent}) is not supported in transient measurement expressions; use I() with a voltage-source reference.`)
         validExpression = true
       } catch { validExpression = false }
     }

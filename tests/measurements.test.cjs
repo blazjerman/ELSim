@@ -274,7 +274,7 @@ test('expression measurements validate references and generate native ngspice me
   const controlled = addResultControl(deck, [], reloaded.simulation.transientMeasurements)
   assert.match(controlled, /let ELSIM_EXPR_PeakPower = abs\(V\(vin\) \* I\(V1\)\)\nmeas tran ELSIM_PeakPower max ELSIM_EXPR_PeakPower FROM=1m TO=40m/i)
   assert.throws(() => validateProject({ ...reloaded, simulation: { ...reloaded.simulation, transientMeasurements: [{ id: 'Bad', operation: 'max', expression: 'V(missing)' }] } }), /unknown node/i)
-  assert.throws(() => validateProject({ ...reloaded, simulation: { ...reloaded.simulation, transientMeasurements: [{ id: 'Bad', operation: 'max', expression: 'V(vin) * I(R1)' }] } }), /I\(R1\).*voltage-source reference/i)
+  assert.throws(() => validateProject({ ...reloaded, simulation: { ...reloaded.simulation, transientMeasurements: [{ id: 'Bad', operation: 'max', expression: 'V(vin) * I(R1)' }] } }), /I\(R1\).*transient measurement expressions/i)
   assert.throws(() => validateProject({ ...reloaded, simulation: { ...reloaded.simulation, transientMeasurements: [{ id: 'Bad', operation: 'max', expression: 'V(vin); quit' }] } }), /expression is invalid/i)
 })
 

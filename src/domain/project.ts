@@ -2,7 +2,7 @@ import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isSupportedBrowserSubcircuitParameterName, isValidNgspiceSubcircuitParameterName, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
-import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
+import { behavioralCurrentReferenceError, ngspiceCurrentReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, deviceModelTypeMatches, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId, supportsDeviceTemperatureDelta, supportsInitialOff } from './componentDefinitions'
 import { componentMagnitude, spiceSignedScalarMagnitude, timeMagnitude } from './componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from './measurementSettings'
@@ -461,7 +461,7 @@ export function validateProject(input: unknown): Project {
       const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
       const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
       validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
-      const unsupportedCurrent = unsupportedBehavioralCurrentReference(candidate.behavioralResistance, ngspiceVoltageBranchReferences(data.parts as Part[]))
+      const unsupportedCurrent = unsupportedBehavioralCurrentReference(candidate.behavioralResistance, ngspiceCurrentReferences(data.parts as Part[]))
       if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
     }
     if (candidate.behavioralCapacitance !== undefined || candidate.behavioralCharge !== undefined) {
@@ -473,7 +473,7 @@ export function validateProject(input: unknown): Project {
       const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
       const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
       validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
-      const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(data.parts as Part[]))
+      const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(data.parts as Part[]))
       if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
     }
     if (candidate.behavioralInductance !== undefined) {
@@ -482,7 +482,7 @@ export function validateProject(input: unknown): Project {
       const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
       const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
       validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
-      const unsupportedCurrent = unsupportedBehavioralCurrentReference(candidate.behavioralInductance, ngspiceVoltageBranchReferences(data.parts as Part[]))
+      const unsupportedCurrent = unsupportedBehavioralCurrentReference(candidate.behavioralInductance, ngspiceCurrentReferences(data.parts as Part[]))
       if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
     }
     for (const key of ['tc1', 'tc2', 'tce'] as const) {
@@ -944,8 +944,8 @@ export function validateProject(input: unknown): Project {
           const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
           const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
           validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
-          const unsupportedCurrent = unsupportedBehavioralCurrentReference(measurement.expression, ngspiceVoltageBranchReferences(data.parts as Part[]))
-          if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+          const unsupportedCurrent = unsupportedBehavioralCurrentReference(measurement.expression, ngspiceCurrentReferences(data.parts as Part[], true))
+          if (unsupportedCurrent) throw new Error(`I(${unsupportedCurrent}) is not supported in transient measurement expressions; use I() with a voltage-source reference.`)
           validExpression = true
         } catch (error) {
           throw new Error(`Transient measurement ${measurement.id} expression is invalid: ${error instanceof Error ? error.message : 'unsupported expression.'}`)

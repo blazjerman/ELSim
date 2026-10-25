@@ -1,0 +1,31 @@
+ELSim direct-device current references in ngspice B-source expressions
+VRES RES 0 5
+R1 RES 0 1k
+BRES OUT_R 0 V=I(R1)*1k
+RR OUT_R 0 1k
+VCIN CIN 0 1
+C1 CIN 0 1u
+BCAP OUT_C 0 V=I(C1)*1k
+RC OUT_C 0 1k
+VIND NLI 0 5
+R2 NLI NLR 1k
+L1 NLR 0 1m
+BIND OUT_L 0 V=I(L1)*1k
+RL OUT_L 0 1k
+I1 NI 0 1m
+R3 NI 0 1k
+BI OUT_I 0 V=I(I1)*1k
+RI OUT_I 0 1k
+VDD NDI 0 1
+R4 NDI ND 1k
+D1 ND 0 DCLAMP
+.model DCLAMP D(Is=1e-14)
+BD OUT_D 0 V=I(D1)*1k
+RD OUT_D 0 1k
+.op
+.control
+op
+print v(out_r) v(out_c) v(out_l) v(out_i) v(out_d)
+quit
+.endc
+.end

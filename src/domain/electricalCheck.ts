@@ -4,7 +4,7 @@ import { componentPins } from './geometry'
 import type { Part, Project } from './project'
 import { componentMagnitude, spiceDimensionMagnitude } from './componentValue'
 import { analyzeModelDependencies, coupledLineConductorCount, inspectCoupledLineMatrices, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
-import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
+import { behavioralCurrentReferenceError, ngspiceCurrentReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionFor, compatibleDeviceModelType, deviceModelTypeMatches } from './componentDefinitions'
 import { expandNgspiceAkoModels } from './ngspiceAko'
 
@@ -287,7 +287,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         if (!expression.trim() || part.behavioralCapacitance !== undefined && part.behavioralCharge !== undefined || part.deviceModel || part.seriesResistance !== undefined || part.instanceMultiplier !== undefined) throw new Error('Behavioral capacitance requires one C= or Q= expression and cannot be combined with an imported model, series resistance, or multiplier.')
         const parsed = parseBehavioralExpression(expression)
         validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(sheet.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(sheet.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral capacitance or charge expression.'
@@ -299,7 +299,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         if (!part.behavioralResistance.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
         const parsed = parseBehavioralExpression(part.behavioralResistance)
         validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceVoltageBranchReferences(sheet.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceCurrentReferences(sheet.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral resistance expression.'
@@ -311,7 +311,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         if (!part.behavioralInductance.trim() || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
         const parsed = parseBehavioralExpression(part.behavioralInductance)
         validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name), [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralInductance, ngspiceVoltageBranchReferences(sheet.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralInductance, ngspiceCurrentReferences(sheet.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral inductance expression.'
@@ -368,7 +368,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
           [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()],
         )
         if (part.behavioralDialect !== 'ltspice') {
-          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceVoltageBranchReferences(sheet.parts))
+          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceCurrentReferences(sheet.parts))
           if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         }
       } catch (error) {
@@ -377,7 +377,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({
           id: `behavioral-reference:${sheet.id}:${part.id}`,
           severity: 'warning',
-          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter in ${sheet.name}` : isUnknownReference ? `${part.ref} references an unknown node or component in ${sheet.name}` : /not a supported ngspice expression current/i.test(detail) ? `${part.ref} uses an unsupported current reference in ${sheet.name}` : `${part.ref} has an invalid behavioral expression in ${sheet.name}`,
+          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter in ${sheet.name}` : isUnknownReference ? `${part.ref} references an unknown node or component in ${sheet.name}` : /does not map to one ngspice device current/i.test(detail) ? `${part.ref} uses an unsupported current reference in ${sheet.name}` : `${part.ref} has an invalid behavioral expression in ${sheet.name}`,
           detail,
           partId: topLevelInstanceId,
         })
@@ -492,7 +492,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         if (!part.behavioralResistance.trim() || part.deviceModel || part.acResistance !== undefined) throw new Error('Behavioral resistance cannot be combined with an imported device model or AC-only resistance.')
         const parsed = parseBehavioralExpression(part.behavioralResistance)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceVoltageBranchReferences(project.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralResistance, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral resistance expression.'
@@ -505,7 +505,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         if (!expression.trim() || part.behavioralCapacitance !== undefined && part.behavioralCharge !== undefined || part.deviceModel || part.seriesResistance !== undefined || part.instanceMultiplier !== undefined) throw new Error('Behavioral capacitance requires one C= or Q= expression and cannot be combined with an imported model, series resistance, or multiplier.')
         const parsed = parseBehavioralExpression(expression)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceVoltageBranchReferences(project.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(expression, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral capacitance or charge expression.'
@@ -517,7 +517,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         if (!part.behavioralInductance.trim() || part.deviceModel || part.instanceMultiplier !== undefined) throw new Error('Behavioral inductance cannot be combined with an imported device model or parallel-device multiplier.')
         const parsed = parseBehavioralExpression(part.behavioralInductance)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
-        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralInductance, ngspiceVoltageBranchReferences(project.parts))
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.behavioralInductance, ngspiceCurrentReferences(project.parts))
         if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Enter a valid ngspice behavioral inductance expression.'
@@ -544,7 +544,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         if (part.behavioralDialect !== 'ltspice') {
-          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceVoltageBranchReferences(project.parts))
+          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceCurrentReferences(project.parts))
           if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         }
       } catch (error) {
@@ -553,7 +553,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({
           id: `behavioral-reference:${part.id}`,
           severity: 'warning',
-          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter` : isUnknownReference ? `${part.ref} references an unknown node or component` : /not a supported ngspice expression current/i.test(detail) ? `${part.ref} uses an unsupported current reference` : `${part.ref} has an invalid behavioral expression`,
+          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter` : isUnknownReference ? `${part.ref} references an unknown node or component` : /does not map to one ngspice device current/i.test(detail) ? `${part.ref} uses an unsupported current reference` : `${part.ref} has an invalid behavioral expression`,
           detail,
           partId: part.id,
         })
