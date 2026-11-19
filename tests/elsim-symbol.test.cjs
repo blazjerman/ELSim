@@ -41,6 +41,16 @@ test('native symbol parser preserves ordered pins and supported vector geometry'
   assert.deepEqual(symbol.primitives[1], { kind: 'text', x: -5, y: 5, alignment: 'Center', size: 3, text: '+' })
 })
 
+test('native symbol pins snap to the shared editor grid and report the adjustment', () => {
+  const offGridSymbol = {
+    ...symbolDocument,
+    pins: symbolDocument.pins.map((pin, index) => index === 0 ? { ...pin, x: -63, y: -17 } : pin),
+  }
+  const symbol = parseElsimSymbol(JSON.stringify(offGridSymbol), 'off-grid.elsym')
+  assert.deepEqual([symbol.pins[0].x, symbol.pins[0].y], [-60, -20])
+  assert.match(symbol.warnings[0], /Pins snapped to grid/)
+})
+
 test('reused imported symbols share one cached drawing-bounds result', () => {
   const symbol = parseElsimSymbol(JSON.stringify(symbolDocument), 'amp.elsym')
   const bounds = importedSymbolBounds(symbol)
@@ -173,6 +183,13 @@ test('native symbol assets validate and persist on a placed imported subcircuit'
   assert.equal(restored.parts.at(-1).symbolAssetId, 'symbol-amp')
   assert.deepEqual(restored.parts.at(-1).symbolPinOffsets, symbol.pins.map(({ x, y }) => [x, y]))
   assert.equal(restored.symbolAssets[0].content, symbolText)
+
+  const handEdited = structuredClone(project)
+  handEdited.parts.at(-1).symbolPinOffsets[0][0] = -57
+  handEdited.parts.at(-1).symbolPinOffsets[1][1] = 23
+  handEdited.sheets[0].parts = handEdited.parts
+  const normalized = validateProject(handEdited)
+  assert.deepEqual(normalized.parts.at(-1).symbolPinOffsets.slice(0, 2), [[-60, -20], [-60, 20]])
 })
 
 test('generated native symbols preserve long ngspice pin identifiers', () => {

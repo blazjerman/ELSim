@@ -198,13 +198,19 @@ export type Project = {
   sheets: ProjectSheet[]
 }
 
-function snapSceneGeometryToGrid(scene: Record<string, unknown>): void {
+function snapSceneGeometryToGrid(scene: Record<string, unknown>, nativeSymbolIds: Set<unknown>, snapGeometry: boolean): void {
   if (Array.isArray(scene.parts)) for (const part of scene.parts) {
     if (!part || typeof part !== 'object' || Array.isArray(part)) continue
     const item = part as Record<string, unknown>
-    if (typeof item.x === 'number' && Number.isFinite(item.x)) item.x = snapToEditorGrid(item.x)
-    if (typeof item.y === 'number' && Number.isFinite(item.y)) item.y = snapToEditorGrid(item.y)
+    if (nativeSymbolIds.has(item.symbolAssetId) && Array.isArray(item.symbolPinOffsets)) for (const point of item.symbolPinOffsets) if (Array.isArray(point)) {
+      for (let axis = 0; axis < 2; axis++) if (Number.isFinite(point[axis])) point[axis] = snapToEditorGrid(point[axis])
+    }
+    if (snapGeometry) {
+      if (typeof item.x === 'number' && Number.isFinite(item.x)) item.x = snapToEditorGrid(item.x)
+      if (typeof item.y === 'number' && Number.isFinite(item.y)) item.y = snapToEditorGrid(item.y)
+    }
   }
+  if (!snapGeometry) return
   if (Array.isArray(scene.wires)) for (const wire of scene.wires) {
     if (!wire || typeof wire !== 'object' || Array.isArray(wire)) continue
     const points = (wire as Record<string, unknown>).points
@@ -223,12 +229,17 @@ function snapSceneGeometryToGrid(scene: Record<string, unknown>): void {
 }
 
 function snapProjectGeometryToGrid(project: Record<string, unknown>): void {
+  // Native .elsym pins define electrical connection locations, so normalize
+  // those offsets even when the project also retains imported source text.
+  // Keep third-party .asy coordinates intact for imported-source fidelity.
+  const nativeSymbolIds = new Set((Array.isArray(project.symbolAssets) ? project.symbolAssets : [])
+    .filter((asset) => /\.elsym$/i.test(asset?.filename)).map((asset) => asset?.id))
   // Imported schematics keep their source coordinate system. ELSim-authored
   // scenes, including hand-edited project JSON, always use the editor grid.
-  if (project.importedSchematicSource || Array.isArray(project.importedChildSchematicSources) && project.importedChildSchematicSources.length > 0) return
-  snapSceneGeometryToGrid(project)
+  const snapGeometry = !project.importedSchematicSource && !(project.importedChildSchematicSources as unknown[] | undefined)?.length
+  snapSceneGeometryToGrid(project, nativeSymbolIds, snapGeometry)
   if (Array.isArray(project.sheets)) for (const sheet of project.sheets) {
-    if (sheet && typeof sheet === 'object' && !Array.isArray(sheet)) snapSceneGeometryToGrid(sheet as Record<string, unknown>)
+    if (sheet && typeof sheet === 'object' && !Array.isArray(sheet)) snapSceneGeometryToGrid(sheet, nativeSymbolIds, snapGeometry)
   }
 }
 

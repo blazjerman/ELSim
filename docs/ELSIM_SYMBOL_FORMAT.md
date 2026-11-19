@@ -4,6 +4,8 @@ An `.elsym` file is a UTF-8 JSON document for a project-owned or user-created co
 
 Coordinates are in the symbol's local coordinate system, with the component origin at `(0, 0)`. Use `orientation` to describe the wire direction from a pin: `R`, `L`, `U`, or `D`. Pin orders must be unique and contiguous starting at 1. The symbol renderer draws each pin and its label; the listed primitives draw the body and internal marks.
 
+Electrical pin coordinates are snapped to the shared 10-unit editor grid when the symbol is imported or a project is opened. Use multiples of 10 for pin `x` and `y` values so the visible pin markers, placed component pins, and wire endpoints align exactly. Off-grid pins are adjusted automatically and the imported-symbol list shows a note. Drawing primitives can use any supported coordinate; the original `.elsym` text and hash remain unchanged in the project.
+
 ```json
 {
   "format": "elsim-symbol",
@@ -23,4 +25,4 @@ Coordinates are in the symbol's local coordinate system, with the component orig
 }
 ```
 
-Supported primitives are `line`, `polyline`, `rectangle`, `circle`, `text`, and a bounded SVG path using standard move/line/curve/arc/close commands. Files are limited to 1 MiB, 64 pins, 2,000 primitives, 256 points per polyline, and 4,096 characters per path. The matching runtime validator is `parseElsimSymbol`; [elsim-symbol-v1.schema.json](../schemas/elsim-symbol-v1.schema.json) describes the interchange shape. Projects store the original `.elsym` text and its content hash, so opening a project preserves the symbol source.
+Supported primitives are `line`, `polyline`, `rectangle`, `circle`, `text`, and a bounded SVG path using standard move/line/curve/arc/close commands. Files are limited to 1 MiB, 256 pins, 2,000 primitives, 256 points per polyline, and 4,096 characters per path. The matching runtime validator is `parseElsimSymbol`; [elsim-symbol-v1.schema.json](../schemas/elsim-symbol-v1.schema.json) describes the interchange shape. Projects store the original `.elsym` text and its content hash, so opening a project preserves the symbol source while the saved pin offsets remain grid-aligned.

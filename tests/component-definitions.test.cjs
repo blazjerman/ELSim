@@ -64,6 +64,16 @@ test('built-in component definitions have stable identities, ordered unique SPIC
       assert.equal(definition.pinOffsets.length, definition.pins.length, `${definition.kind} pin geometry count`)
       const part = { id: `geometry-${definition.kind}`, kind: definition.kind, ref: 'U1', value: '', x: 100, y: 100, rotation: 0 }
       assert.deepEqual(componentPins(part).map(({ x, y }) => [x - 100, y - 100]), definition.pinOffsets, `${definition.kind} pin geometry matches connectivity`)
+      const geometry = [
+        ...(definition.symbolGeometry ?? Object.values(definition.symbolVariants ?? {})[0] ?? []),
+        ...Object.values(definition.symbolAnimations ?? {}).flatMap((states) => Object.values(states).flat()),
+      ]
+      if (definition.kind === 'opamp') {
+        assert.ok(geometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M-80-20h55m-55 40h55M0-60v43m0 34v43M28 0h52'), 'op-amp leads meet all five pins')
+      } else {
+        const lineEndpoints = new Set(geometry.filter(({ kind }) => kind === 'line').flatMap(({ x1, y1, x2, y2 }) => [`${x1},${y1}`, `${x2},${y2}`]))
+        for (const [x, y] of definition.pinOffsets) assert.ok(lineEndpoints.has(`${x},${y}`), `${definition.kind} symbol has a lead ending at pin ${x},${y}`)
+      }
     }
   }
   assert.equal(componentPropertyDefault('resistor', 'missingProperty'), undefined)

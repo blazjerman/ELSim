@@ -6193,7 +6193,7 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
   const symbolSource = JSON.stringify({
     format: 'elsim-symbol', version: 1, name: 'Native teaching amplifier',
     pins: [
-      { name: 'IN+', spiceOrder: 1, x: -60, y: -20, orientation: 'R' },
+      { name: 'IN+', spiceOrder: 1, x: -63, y: -17, orientation: 'R' },
       { name: 'IN-', spiceOrder: 2, x: -60, y: 20, orientation: 'R' },
       { name: 'VCC', spiceOrder: 3, x: 0, y: -60, orientation: 'D' },
       { name: 'VEE', spiceOrder: 4, x: 0, y: 60, orientation: 'U' },
@@ -6211,7 +6211,8 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
   }, { modelAsset })
   await page.reload()
   await page.locator('input[accept*=".elsym"]').setInputFiles({ name: 'native-amp.elsym', mimeType: 'application/json', buffer: Buffer.from(symbolSource) })
-  await expect(page.getByText(/Imported Native teaching amplifier with 5 ordered pins/)).toBeVisible()
+  await expect(page.getByText('Imported Native teaching amplifier.', { exact: true })).toBeVisible()
+  await expect(page.locator('summary').getByText('Pins snapped to grid.', { exact: true })).toBeVisible()
   await expect(page.getByText('Native teaching amplifier', { exact: true })).toBeVisible()
   await expect(page.getByText('5 ordered pins · IN+, IN-, VCC, VEE, OUT')).toBeVisible()
   await page.getByRole('button', { name: 'Place USER_AMP with this symbol' }).click()
@@ -6223,6 +6224,11 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return project.parts.find((item: { ref: string }) => item.ref === 'X1')?.symbolPinOffsets
   })).toEqual([[-60, -20], [-60, 20], [0, -60], [0, 60], [60, 0]])
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = project.parts.find((item: { ref: string }) => item.ref === 'X1')
+    return [part.x, part.y, ...part.symbolPinOffsets.flatMap(([x, y]: [number, number]) => [part.x + x, part.y + y])].every((value: number) => value % 10 === 0)
+  })).toBe(true)
 
   await page.getByRole('button', { name: 'Create simple symbol & place' }).click()
   const generatedPart = page.locator('.circuit-part[aria-label^="X2,"]')
@@ -7157,6 +7163,13 @@ test('behavioral capacitor charge expression runs in ngspice and drives its char
   await expect.poll(async () => Number(await glow.getAttribute('data-charge-level'))).toBeGreaterThan(0.25)
   const level = Number(await glow.getAttribute('data-charge-level'))
   expect(level).toBeLessThan(0.45)
+  for (const [index, x] of [-8, 8].entries()) {
+    const plate = capacitor.locator('.capacitor-charge-glow').nth(index)
+    await expect(plate).toHaveAttribute('x1', String(x))
+    await expect(plate).toHaveAttribute('x2', String(x))
+    await expect(plate).toHaveAttribute('y1', /^-/)
+    await expect(plate).toHaveAttribute('y2', /^\d/)
+  }
   await capacitor.hover()
   await expect(capacitor.locator(':scope > title')).toContainText('charge follows the native Q= expression')
   await expect(capacitor.locator(':scope > title')).toContainText('Q =')
@@ -10645,11 +10658,13 @@ test('potentiometer static track renders from the component registry', { tag: '@
   await expect(potentiometer.locator('.potentiometer-track')).toHaveAttribute('d', 'M0 -24L-10 -18L10 -12L-10 -6L10 0L-10 6L10 12L-10 18L0 24')
   const wiper = potentiometer.locator('.potentiometer-wiper')
   await expect(wiper).toHaveAttribute('data-wiper-position', '0.5')
+  await expect(wiper).toHaveAttribute('x2', '16')
   await expect(wiper).toHaveAttribute('y2', '0')
   await expect(potentiometer).toHaveAccessibleName(/wiper at 50% from upper terminal/)
   await potentiometer.click()
   await page.getByLabel('Potentiometer wiper position').fill('25')
   await expect(wiper).toHaveAttribute('data-wiper-position', '0.25')
+  await expect(wiper).toHaveAttribute('x2', '16')
   await expect(wiper).toHaveAttribute('y2', '-12')
   await expect(potentiometer.locator('.potentiometer-wiper-arrow')).toHaveAttribute('transform', 'translate(0 -12)')
   await expect(potentiometer).toHaveAccessibleName(/wiper at 25% from upper terminal/)

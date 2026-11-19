@@ -83,6 +83,7 @@ export function parseElsimSymbol(source: string, filename = 'Custom symbol.elsym
   if (!Array.isArray(document.pins) || document.pins.length < 1 || document.pins.length > MAX_PINS) throw new Error(`${filename} needs 1–${MAX_PINS} ordered pins.`)
   const pinNames = new Set<string>()
   const pinOrders = new Set<number>()
+  let snappedPins = false
   const pins = document.pins.map((value, index): SymbolPin => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${filename}: pin ${index + 1} must be an object.`)
     const item = value as Record<string, unknown>
@@ -93,12 +94,23 @@ export function parseElsimSymbol(source: string, filename = 'Custom symbol.elsym
     if (item.orientation !== 'R' && item.orientation !== 'L' && item.orientation !== 'U' && item.orientation !== 'D') throw new Error(`${filename}: pin ${pinName} orientation must be R, L, U, or D.`)
     pinNames.add(pinName.toLowerCase())
     pinOrders.add(item.spiceOrder as number)
-    return { name: pinName, spiceOrder: item.spiceOrder as number, orientation: item.orientation, x: coordinate(item.x, filename, `pin ${pinName} x`), y: coordinate(item.y, filename, `pin ${pinName} y`) }
+    const x = coordinate(item.x, filename, `pin ${pinName} x`)
+    const y = coordinate(item.y, filename, `pin ${pinName} y`)
+    const gridX = Math.round(x / 10) * 10
+    const gridY = Math.round(y / 10) * 10
+    if (gridX !== x || gridY !== y) snappedPins = true
+    return { name: pinName, spiceOrder: item.spiceOrder as number, orientation: item.orientation, x: gridX, y: gridY }
   }).sort((left, right) => left.spiceOrder - right.spiceOrder)
   if (pins.some((pin, index) => pin.spiceOrder !== index + 1)) throw new Error(`${filename}: pin SpiceOrder values must be contiguous starting at 1.`)
   if (!Array.isArray(document.primitives) || document.primitives.length > MAX_PRIMITIVES) throw new Error(`${filename} may contain at most ${MAX_PRIMITIVES} drawing primitives.`)
   const primitives = document.primitives.map((primitive, index) => parsePrimitive(primitive, filename, index))
-  return { name, attributes: {}, primitives, pins, warnings: [] }
+  return {
+    name,
+    attributes: {},
+    primitives,
+    pins,
+    warnings: snappedPins ? ['Pins snapped to grid.'] : [],
+  }
 }
 
 /** Infer readable default sides without reordering the model's SPICE pins. */

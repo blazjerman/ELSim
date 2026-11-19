@@ -1893,7 +1893,7 @@ export default function App() {
       if (current.some((asset) => asset.filename.toLowerCase() === file.name.toLowerCase())) throw new Error(`${file.name} is already present in this project.`)
       const asset = { id: `symbol-${crypto.randomUUID()}`, filename: file.name, content, sha256: await sha256Text(content), licenseStatus: 'unknown' as const, importedAt: new Date().toISOString() }
       setProject((project) => ({ ...project, symbolAssets: [...(project.symbolAssets ?? []), asset] }))
-      setNotice(`Imported ${parsed.name} with ${parsed.pins.length} ordered pins${parsed.warnings.length ? ` and ${parsed.warnings.length} unsupported drawing records` : ''}. Redistribution rights remain unknown.`)
+      setNotice(`Imported ${parsed.name}.`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this symbol.') }
     event.target.value = ''
   }
@@ -3420,7 +3420,7 @@ export default function App() {
                 <span>{symbol.pins.length} ordered pins · {symbol.pins.map((pin) => pin.name).join(', ')}</span>
                 <small>{symbol.filename} · redistribution unknown</small>
                 {used && <small>This symbol is used by a placed IC. Remove the instance before deleting this symbol.</small>}
-                {symbol.warnings.length > 0 && <details className="field-hint"><summary>{symbol.warnings.length} unsupported drawing records</summary><ul>{symbol.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
+                {symbol.warnings.length > 0 && <details className="field-hint"><summary>{symbol.warnings[0]}</summary><ul>{symbol.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
                 {matches.map(({ model, mismatches }) => {
                   return <div className="imported-symbol-match" key={`${symbol.assetId}:${model.assetId}:${model.name}`}>
                     <button className="place-model" onClick={() => addSubcircuit(model, symbol)}>Place {model.name} with this symbol</button>
